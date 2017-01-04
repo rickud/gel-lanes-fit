@@ -38,9 +38,32 @@
  */
 
 
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.GridLayout;
 import java.awt.Rectangle;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
+import java.awt.event.MouseMotionListener;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
+import java.lang.Math;
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.swing.BorderFactory;
+import javax.swing.BoxLayout;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JPanel;
+import javax.swing.JSlider;
+import javax.swing.JTextField;
+import javax.swing.border.TitledBorder;
+import javax.swing.event.ChangeEvent;
+import javax.swing.event.ChangeListener;
 
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
@@ -76,6 +99,7 @@ import net.imglib2.img.display.imagej.ImageJFunctions;
 @Plugin(type = Command.class, headless = true,
 menuPath = "Plugins>Gauss Fit")
 public class GaussFitLanes implements Command, Previewable{
+	
 	@Parameter
 	private LogService log;
 
@@ -98,6 +122,7 @@ public class GaussFitLanes implements Command, Previewable{
 	private static OpService ops;
 	
 	// Default Parameters
+	private JFrame frame;
 	static int halfSizeDefault = 4;
 	static double pixelSizeDefault = 207.0; // "nm"
     // @param shape - fit circle (1) ellipse(2), or ellipse with varying angle (3)
@@ -125,44 +150,36 @@ public class GaussFitLanes implements Command, Previewable{
 	
 	private ImagePlus preprocess() {
 
-		imp = new Opener().openImage("/Users/Rick/Box Sync/Gels/01_05_16.tiff");
+		imp = new Opener().openImage("target//01_05_16.tiff");
 		// display it via ImageJ
 		imp.show();
 		// wrap it into an ImgLib image (no copying)
-		final Img image = ImagePlusAdapter.wrap( imp );
+		// final Img image = ImagePlusAdapter.wrap(imp);
 		// display it via ImgLib using ImageJ
-		ImageJFunctions.show( image );
+		// ImageJFunctions.show( image );
 
-		showMainDialog();
-		return null;
+		CustomDialog cd = new CustomDialog();
+		
+		cd.showMainDialog();
+		frame = new JFrame("Gel Lanes Gauss Fitting:" + imp.getTitle());
+		frame.addWindowListener(new WindowAdapter() {
+			public void windowClosing(WindowEvent e) {
+				//cd.cleanup();
+				frame.dispose();
+			}
+		});
+		frame.setLocation(0,0);
+		//frame.setJMenuBar(new Menu());
+		frame.getContentPane().add(cd);
+		frame.setResizable(false);
+		frame.validate();
+		frame.pack();
+		frame.setVisible(true);
+	
+		return imp;
 	}
 	
-    private boolean showMainDialog() {
-        String[] shapes = {"Circle", "Ellipse", "Ellipse with varying angle"};
-        String[] modes = {"NelderMead", "Levenberg Marquard"};
-        GenericDialog gd = new GenericDialog("GaussFitOnSpot Parameters");
-        gd.addChoice("Shape ", shapes, shapes[shapeDefault-1]);
-        gd.addChoice("FitMode ", modes, modes[fitModeDefault-1]);
-        gd.addNumericField("Rectangle HalfSize ", halfSizeDefault, 0, 6, "pixels");
-        gd.addNumericField("Pixel size ", pixelSizeDefault, 1, 6, "nm");
-        gd.addNumericField("Max iterations ", maxIterationsDefault, 0, 6, "");
-        gd.addNumericField("cPCF ", cPCFDefault, 1, 6, "(pixel correction)");
-        gd.addNumericField("Base level ", baseLevelDefault, 0, 6, "photons");
-        gd.showDialog();          //input by the user (or macro) happens here
-        
-        if (gd.wasCanceled())
-             return false;
-        shape = gd.getNextChoiceIndex() + 1;
-        fitMode = gd.getNextChoiceIndex() + 1;
-        halfSize = (int) gd.getNextNumber();
-    	  rectSize = 2 * halfSize + 1;
-        pixelSize = (int) gd.getNextNumber();
-        maxIterations = (int) gd.getNextNumber();
-        cPCF = (int) gd.getNextNumber();
-        baseLevel = (int) gd.getNextNumber();  
-        
-        return true;
-    }
+
 	private void doFit(ImagePlus impIn){
 		// Get list of Point ROIs
 		Roi roi = impIn.getRoi();
@@ -283,7 +300,7 @@ public class GaussFitLanes implements Command, Previewable{
         shape = gd.getNextChoiceIndex() + 1;
         fitMode = gd.getNextChoiceIndex() + 1;
         halfSize = (int) gd.getNextNumber();
-    	  rectSize = 2 * halfSize + 1;
+    	rectSize = 2 * halfSize + 1;
         pixelSize = (int) gd.getNextNumber();
         maxIterations = (int) gd.getNextNumber();
         cPCF = (int) gd.getNextNumber();
@@ -306,5 +323,189 @@ public class GaussFitLanes implements Command, Previewable{
 	public void preview() {
 		// TODO Auto-generated method stub
 		
+	}
+	
+	
+	class CustomDialog extends JPanel implements 
+			MouseListener, MouseMotionListener, ChangeListener, ActionListener/*, ItemListener */{
+		int IW = imp.getWidth();
+		int IH = imp.getWidth();
+		
+		// Default lane size/offset
+		int LW     = IW/10;
+		int LH     = (int) Math.round(IH*0.9);
+		int LSp    = IW/10;
+		int LHOff  = IW/10;
+		int LVOff  = IW/10;
+		int nLanes = 4;
+		
+		private JLabel labelNLanes = new JLabel("");
+		private JTextField textNLanes= new JTextField(); 
+		private JSlider sliderW;
+		private JSlider sliderH;
+		private JSlider sliderSp;
+		private JSlider sliderHOff;
+		private JSlider sliderVOff;
+		
+		private void showMainDialog() {			
+			setBackground(Color.lightGray);
+			setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+			
+			labelNLanes.setText("Number of Lanes");
+			add(labelNLanes);
+			
+			textNLanes.setText("" + nLanes);
+			textNLanes.setVisible(true);
+			add(textNLanes);
+			textNLanes.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					nLanes = (int) Integer.parseInt(textNLanes.getText());
+				}
+			});
+
+			sliderW  = makeTitledSlider("Width ( "+ LW +" px )",              Color.black, IW/100, IW/4, LW);
+			add(sliderW);
+			sliderH  = makeTitledSlider("Height ( "+ LH +" px )",             Color.black, IH/4,   IH,   LH);
+			add(sliderH);
+			sliderSp = makeTitledSlider("Space ( "+ LSp +" px )",              Color.black, IW/100, IW/4, LSp);
+			add(sliderSp);
+			sliderHOff = makeTitledSlider("Horizontal Offset ( "+ LHOff +" px )", Color.black, IW/100, IW/4, LHOff);
+			add(sliderHOff);
+			sliderVOff = makeTitledSlider("Vertical Offset ( "+ LVOff +" px )",   Color.black, IW/100, IW/4, LVOff);
+			add(sliderVOff);
+			validate();
+		}
+
+
+		private JSlider makeTitledSlider(String string, Color color, int minVal, int maxVal, int val) {
+			//Border empty = BorderFactory.createTitledBorder( BorderFactory.createEmptyBorder() );
+
+			JSlider slider = new JSlider(JSlider.HORIZONTAL, minVal, maxVal, val );
+			TitledBorder tb = new TitledBorder(BorderFactory.createEtchedBorder(), 
+					//empty,
+					"", TitledBorder.CENTER, TitledBorder.ABOVE_BOTTOM,
+					new Font("Sans", Font.PLAIN, 11));
+			tb.setTitle(string);
+			tb.setTitleJustification(TitledBorder.LEFT);
+			tb.setTitleColor(color);
+			slider.setBorder(tb);
+			slider.setMajorTickSpacing((maxVal - minVal)/6 );
+			//slider.setMajorTickSpacing((maxVal - minVal)/10 );
+			slider.setPaintTicks(true);
+			slider.addChangeListener( this );
+			slider.addChangeListener( this );
+			slider.addMouseListener(this);
+			return slider;
+		}
+		private void setSliderTitle(JSlider slider, Color color, String str) {
+			//Border empty = BorderFactory.createTitledBorder( BorderFactory.createEmptyBorder() );
+			TitledBorder tb = new TitledBorder(BorderFactory.createEtchedBorder(), //empty,
+					"", TitledBorder.CENTER, TitledBorder.ABOVE_BOTTOM,
+					new Font("Sans", Font.PLAIN, 11));
+			tb.setTitleJustification(TitledBorder.LEFT);
+			tb.setTitle(str);
+			tb.setTitleColor(color);
+			slider.setBorder(tb);
+		}
+
+		@Override
+		public void actionPerformed(ActionEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
+
+
+		@Override
+		public void stateChanged(ChangeEvent e) {
+			JSlider slider = (JSlider)e.getSource();
+
+			if (slider == sliderW ) {
+				LW = sliderW.getValue();
+				String str = "Width ( "+ LW +" px )"; 
+				setSliderTitle(sliderW, Color.black, str );
+			}
+			else if (slider == sliderH) {
+				LH = sliderH.getValue();
+				String str = "Height ( "+ LH +" px )"; 
+				setSliderTitle(sliderH, Color.black, str );
+			}
+			else if (slider == sliderSp) {
+				LSp = sliderSp.getValue();
+				String str = "Spacing ( "+ LSp +" px )"; 
+				setSliderTitle(sliderSp, Color.black, str );
+			}
+			else if (slider == sliderHOff) {
+				LHOff = sliderHOff.getValue();
+				String str = "Horizontal Offset ( "+ LHOff +" px )"; 
+				setSliderTitle(sliderHOff, Color.black, str );
+			}
+			else if (slider == sliderVOff) {
+				LVOff = sliderVOff.getValue();
+				String str = "Vertical Offset ( "+ LVOff +" px )"; 
+				setSliderTitle(sliderVOff, Color.black, str );
+			}
+			redrawROIs(LW,LH,LSp,LHOff,LVOff);
+		}
+
+
+		private void redrawROIs(int lw, int lh, int lsp, int lhoff, int lvoff) {
+			if (imp.getRoi() != null ) {
+				imp.deleteRoi();
+			}
+			for (int i=0;i<nLanes;i++) {
+				imp.setRoi(lhoff+lw*i+lsp*i, lvoff, lw, lh);
+			}
+
+
+		}
+
+
+		@Override
+		public void mouseDragged(MouseEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
+
+
+		@Override
+		public void mouseMoved(MouseEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
+
+
+		@Override
+		public void mouseClicked(MouseEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
+
+
+		@Override
+		public void mousePressed(MouseEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
+
+
+		@Override
+		public void mouseReleased(MouseEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
+
+
+		@Override
+		public void mouseEntered(MouseEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
+
+
+		@Override
+		public void mouseExited(MouseEvent e) {
+			// TODO Auto-generated method stub
+			
+		}
 	}
 }
