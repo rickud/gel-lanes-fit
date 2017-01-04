@@ -363,15 +363,15 @@ public class GaussFitLanes implements Command, Previewable{
 				}
 			});
 
-			sliderW  = makeTitledSlider("Width ( "+ LW +" px )",              Color.black, IW/100, IW/4, LW);
+			sliderW  = makeTitledSlider("Width ( "+ LW +" px )",                  Color.black, IW/100, IW/4, LW);
 			add(sliderW);
-			sliderH  = makeTitledSlider("Height ( "+ LH +" px )",             Color.black, IH/4,   IH,   LH);
+			sliderH  = makeTitledSlider("Height ( "+ LH +" px )",                 Color.black, IH/3,   IH,   LH);
 			add(sliderH);
-			sliderSp = makeTitledSlider("Space ( "+ LSp +" px )",              Color.black, IW/100, IW/4, LSp);
+			sliderSp = makeTitledSlider("Space ( "+ LSp +" px )",                 Color.black, IW/100, IW/4, LSp);
 			add(sliderSp);
-			sliderHOff = makeTitledSlider("Horizontal Offset ( "+ LHOff +" px )", Color.black, IW/100, IW/4, LHOff);
+			sliderHOff = makeTitledSlider("Horizontal Offset ( "+ LHOff +" px )", Color.black, IW/100, IW/2, LHOff);
 			add(sliderHOff);
-			sliderVOff = makeTitledSlider("Vertical Offset ( "+ LVOff +" px )",   Color.black, IW/100, IW/4, LVOff);
+			sliderVOff = makeTitledSlider("Vertical Offset ( "+ LVOff +" px )",   Color.black, IH/100, IH/2, LVOff);
 			add(sliderVOff);
 			validate();
 		}
@@ -453,7 +453,7 @@ public class GaussFitLanes implements Command, Previewable{
 				imp.deleteRoi();
 			}
 			for (int i=0;i<nLanes;i++) {
-				imp.setRoi(lhoff+lw*i+lsp*i, lvoff, lw, lh);
+				imp.setRoi(new Roi(lhoff+lw*i+lsp*i, lvoff, lw, lh));
 			}
 
 
