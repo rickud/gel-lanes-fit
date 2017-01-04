@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+		http://maven.apache.org/xsd/maven-4.0.0.xsd">
+	<modelVersion>4.0.0</modelVersion>
+
+	<parent>
+		<groupId>net.imagej</groupId>
+		<artifactId>pom-imagej</artifactId>
+		<version>14.4.1</version>
+		<relativePath />
+	</parent>
+	
+	<groupId>imagej-plugins</groupId>
+	<artifactId>GaussianFit</artifactId>
+	<version>1.0.0-SNAPSHOT</version>
+	
+	<name> </name>
+	<description>This plugin fits Gaussians around local maxima.</description>
+	
+ 	<properties>
+		<main-class>GaussFitLanes</main-class>
+		<scijava.jvm.version>1.8</scijava.jvm.version>
+  	</properties>
+
+	<repositories>
+		<repository>
+			<id>CurveFitPlugin</id>
+			<url>https://github.com/rickud/CurveFitPlugin.git</url>
+		</repository>
+		<repository>
+			<id>imagej.public</id>
+			<url>http://maven.imagej.net/content/groups/public</url>
+		</repository>
+	</repositories>
+	<dependencies>
+		<dependency>
+			<groupId>net.imagej</groupId>
+			<artifactId>imagej</artifactId>
+		</dependency>
+		<!-- https://mvnrepository.com/artifact/org.apache.commons/commons-math3 -->
+		<dependency>
+			<groupId>org.apache.commons</groupId>
+			<artifactId>commons-math</artifactId>
+			<version>2.2</version>
+		</dependency>
+	</dependencies>
+</project>
+
