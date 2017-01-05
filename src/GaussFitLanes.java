@@ -40,11 +40,14 @@
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.KeyEvent;
+import java.awt.event.KeyListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
@@ -56,6 +59,7 @@ import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -64,6 +68,8 @@ import javax.swing.JTextField;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
@@ -75,12 +81,15 @@ import org.scijava.plugin.Plugin;
 
 import gauss.GaussianFit;
 import gauss.GaussianSpotData;
+import ij.IJ;
 import ij.ImagePlus;
-import ij.gui.GenericDialog;
+import ij.gui.*;
 import ij.gui.PointRoi;
 import ij.gui.Roi;
+import ij.gui.RoiListener;
 import ij.io.Opener;
 import ij.measure.ResultsTable;
+import ij.plugin.frame.RoiManager;
 import ij.process.ImageProcessor;
 import io.scif.img.ImgIOException;
 import io.scif.img.ImgOpener;
@@ -144,24 +153,15 @@ public class GaussFitLanes implements Command, Previewable{
 	ImagePlus imp;
 
 	public void run() {
-		imp = preprocess();
+		imp = IJ.getImage();
+		preprocess(imp);
 		doFit(imp);
 	}
 	
-	private ImagePlus preprocess() {
-
-		imp = new Opener().openImage("target//01_05_16.tiff");
-		// display it via ImageJ
-		imp.show();
-		// wrap it into an ImgLib image (no copying)
-		// final Img image = ImagePlusAdapter.wrap(imp);
-		// display it via ImgLib using ImageJ
-		// ImageJFunctions.show( image );
-
-		CustomDialog cd = new CustomDialog();
-		
+	private void preprocess(ImagePlus impIn) {
+		CustomDialog cd = new CustomDialog();		
 		cd.showMainDialog();
-		frame = new JFrame("Gel Lanes Gauss Fitting:" + imp.getTitle());
+		frame = new JFrame("Gel Lanes Gauss Fitting:" + impIn.getTitle());
 		frame.addWindowListener(new WindowAdapter() {
 			public void windowClosing(WindowEvent e) {
 				//cd.cleanup();
@@ -171,12 +171,10 @@ public class GaussFitLanes implements Command, Previewable{
 		frame.setLocation(0,0);
 		//frame.setJMenuBar(new Menu());
 		frame.getContentPane().add(cd);
-		frame.setResizable(false);
+		frame.setResizable(true);
 		frame.validate();
 		frame.pack();
 		frame.setVisible(true);
-	
-		return imp;
 	}
 	
 
@@ -312,6 +310,13 @@ public class GaussFitLanes implements Command, Previewable{
     public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
+		ImagePlus imp = new Opener().openImage("target//01_05_16.tiff");
+		// display it via ImageJ
+		imp.show();
+		// wrap it into an ImgLib image (no copying)
+		// final Img image = ImagePlusAdapter.wrap(imp);
+		// display it via ImgLib using ImageJ
+		// ImageJFunctions.show( image );
 		
 	}
 
@@ -327,53 +332,70 @@ public class GaussFitLanes implements Command, Previewable{
 	
 	
 	class CustomDialog extends JPanel implements 
-			MouseListener, MouseMotionListener, ChangeListener, ActionListener/*, ItemListener */{
+			ChangeListener, DocumentListener, RoiListener{
+		RoiManager roiMan = new RoiManager();
 		int IW = imp.getWidth();
 		int IH = imp.getWidth();
 		
-		// Default lane size/offset
+		// Default lane size/offset (Just center 4 lanes in the image)
+		int nLanes = 4;
 		int LW     = IW/10;
 		int LH     = (int) Math.round(IH*0.9);
 		int LSp    = IW/10;
-		int LHOff  = IW/10;
-		int LVOff  = IW/10;
-		int nLanes = 4;
+		int LHOff  = (IW-(LW+LSp)*nLanes)/2;
+		int LVOff  = (IH-LH)/2;
 		
+		private JPanel textPanel;
 		private JLabel labelNLanes = new JLabel("");
-		private JTextField textNLanes= new JTextField(); 
+		private JTextField textNLanes= new JTextField(3); 
+		
+		private JPanel sliderPanel;
 		private JSlider sliderW;
 		private JSlider sliderH;
 		private JSlider sliderSp;
 		private JSlider sliderHOff;
 		private JSlider sliderVOff;
 		
+		private JPanel buttonPanel;
+		private JButton buttonProfile;
+		
 		private void showMainDialog() {			
 			setBackground(Color.lightGray);
-			setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
+			setLayout(new BorderLayout());
 			
-			labelNLanes.setText("Number of Lanes");
-			add(labelNLanes);
+			textPanel = new JPanel();
+			textPanel.setLayout(new FlowLayout(FlowLayout.LEADING));
 			
 			textNLanes.setText("" + nLanes);
 			textNLanes.setVisible(true);
-			add(textNLanes);
-			textNLanes.addActionListener(new ActionListener() {
-				public void actionPerformed(ActionEvent e) {
-					nLanes = (int) Integer.parseInt(textNLanes.getText());
-				}
-			});
+			textPanel.add(textNLanes);
+			textNLanes.getDocument().addDocumentListener(this);
 
-			sliderW  = makeTitledSlider("Width ( "+ LW +" px )",                  Color.black, IW/100, IW/4, LW);
-			add(sliderW);
-			sliderH  = makeTitledSlider("Height ( "+ LH +" px )",                 Color.black, IH/3,   IH,   LH);
-			add(sliderH);
-			sliderSp = makeTitledSlider("Space ( "+ LSp +" px )",                 Color.black, IW/100, IW/4, LSp);
-			add(sliderSp);
-			sliderHOff = makeTitledSlider("Horizontal Offset ( "+ LHOff +" px )", Color.black, IW/100, IW/2, LHOff);
-			add(sliderHOff);
-			sliderVOff = makeTitledSlider("Vertical Offset ( "+ LVOff +" px )",   Color.black, IH/100, IH/2, LVOff);
-			add(sliderVOff);
-			validate();
+			labelNLanes.setText("Number of Lanes");
+			textPanel.add(labelNLanes);
+			
+			sliderPanel = new JPanel();
+			sliderPanel.setLayout(new BoxLayout(sliderPanel, BoxLayout.Y_AXIS));
+			sliderW  = makeTitledSlider("Width ( "+ LW +" px )",                  Color.black, 1, IW/4, LW);
+			sliderPanel.add(sliderW);
+			sliderH  = makeTitledSlider("Height ( "+ LH +" px )",                 Color.black, IH/10, IH, LH);
+			sliderPanel.add(sliderH);
+			sliderSp = makeTitledSlider("Space ( "+ LSp +" px )",                 Color.black, 1, IW/nLanes, LSp);
+			sliderPanel.add(sliderSp);
+			sliderHOff = makeTitledSlider("Horizontal Offset ( "+ LHOff +" px )", Color.black, 0, (int) Math.round(IW*0.9), LHOff);
+			sliderPanel.add(sliderHOff);
+			sliderVOff = makeTitledSlider("Vertical Offset ( "+ LVOff +" px )",   Color.black, 0, (int) Math.round(IH*0.9), LVOff);
+			sliderPanel.add(sliderVOff);
+			
+			buttonPanel = new JPanel();
+			buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
+			buttonProfile = new JButton("Profile");
+			buttonPanel.add(buttonProfile);
+			
+			add(textPanel,   BorderLayout.NORTH);
+			add(sliderPanel, BorderLayout.CENTER);
+			add(buttonPanel, BorderLayout.SOUTH);
+			reDrawROIs(LW,LH,LSp,LHOff,LVOff);
 		}
 
 
@@ -389,12 +411,9 @@ public class GaussFitLanes implements Command, Previewable{
 			tb.setTitleJustification(TitledBorder.LEFT);
 			tb.setTitleColor(color);
 			slider.setBorder(tb);
-			slider.setMajorTickSpacing((maxVal - minVal)/6 );
-			//slider.setMajorTickSpacing((maxVal - minVal)/10 );
+			slider.setMajorTickSpacing((maxVal - minVal)/10 );
 			slider.setPaintTicks(true);
-			slider.addChangeListener( this );
-			slider.addChangeListener( this );
-			slider.addMouseListener(this);
+			slider.addChangeListener(this);
 			return slider;
 		}
 		private void setSliderTitle(JSlider slider, Color color, String str) {
@@ -408,17 +427,9 @@ public class GaussFitLanes implements Command, Previewable{
 			slider.setBorder(tb);
 		}
 
-		@Override
-		public void actionPerformed(ActionEvent e) {
-			// TODO Auto-generated method stub
-			
-		}
 
-
-		@Override
 		public void stateChanged(ChangeEvent e) {
-			JSlider slider = (JSlider)e.getSource();
-
+			JSlider slider = (JSlider) e.getSource();
 			if (slider == sliderW ) {
 				LW = sliderW.getValue();
 				String str = "Width ( "+ LW +" px )"; 
@@ -444,66 +455,42 @@ public class GaussFitLanes implements Command, Previewable{
 				String str = "Vertical Offset ( "+ LVOff +" px )"; 
 				setSliderTitle(sliderVOff, Color.black, str );
 			}
-			redrawROIs(LW,LH,LSp,LHOff,LVOff);
+			reDrawROIs(LW,LH,LSp,LHOff,LVOff);
 		}
 
 
-		private void redrawROIs(int lw, int lh, int lsp, int lhoff, int lvoff) {
+		private void reDrawROIs(int lw, int lh, int lsp, int lhoff, int lvoff) {
 			if (imp.getRoi() != null ) {
+				roiMan.reset();
 				imp.deleteRoi();
 			}
+			
 			for (int i=0;i<nLanes;i++) {
-				imp.setRoi(new Roi(lhoff+lw*i+lsp*i, lvoff, lw, lh));
+				Roi roi = new Roi(lhoff+lw*i+lsp*i, lvoff, lw, lh);
+				roiMan.addRoi(roi);
+			}
+			for (int i=0;i<roiMan.getCount();i++) {
+				roiMan.select(i, true, false);
+				//roiMan.
 			}
 
-
 		}
-
-
 		@Override
-		public void mouseDragged(MouseEvent e) {
-			// TODO Auto-generated method stub
-			
+	    public void changedUpdate(DocumentEvent e) {readNLanes();}
+		@Override
+		public void removeUpdate(DocumentEvent e)  {readNLanes();}
+		@Override
+	    public void insertUpdate(DocumentEvent e)  {readNLanes();}
+		private void readNLanes(){
+			try {
+				nLanes = (int) Integer.parseInt(textNLanes.getText().trim());
+				reDrawROIs(LW,LH,LSp,LHOff,LVOff);
+			} catch (NumberFormatException e1) {
+				log.error("Cannot parse Number of Lanes: \""+textNLanes.getText().trim()+ "\"");
+			}
 		}
-
-
 		@Override
-		public void mouseMoved(MouseEvent e) {
-			// TODO Auto-generated method stub
-			
-		}
-
-
-		@Override
-		public void mouseClicked(MouseEvent e) {
-			// TODO Auto-generated method stub
-			
-		}
-
-
-		@Override
-		public void mousePressed(MouseEvent e) {
-			// TODO Auto-generated method stub
-			
-		}
-
-
-		@Override
-		public void mouseReleased(MouseEvent e) {
-			// TODO Auto-generated method stub
-			
-		}
-
-
-		@Override
-		public void mouseEntered(MouseEvent e) {
-			// TODO Auto-generated method stub
-			
-		}
-
-
-		@Override
-		public void mouseExited(MouseEvent e) {
+		public void roiModified(ImagePlus arg0, int arg1) {
 			// TODO Auto-generated method stub
 			
 		}
