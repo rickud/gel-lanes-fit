@@ -22,14 +22,14 @@ import java.util.*;
  * Version 2009-Jun-09: obeys 'fixed y axis scale' in Edit>Options>Profile Plot Options
  */
 public class Dynamic_Profiler
-        implements MouseListener, MouseMotionListener, KeyListener, ImageListener, Runnable {
+        implements PlugIn, MouseListener, MouseMotionListener, KeyListener, ImageListener, Runnable {
     //MouseListener, MouseMotionListener, KeyListener: to detect changes to the selection of an ImagePlus
     //ImageListener: listens to changes (updateAndDraw) and closing of an image
     //Runnable: for background thread
     private ImagePlus imp;                  //the ImagePlus that we listen to and the last one
     private ImagePlus plotImage;            //where we plot the profile
-    private Thread    bgThread;             //thread for plotting (in the background)
-    private boolean   doUpdate;             //tells the background thread to update
+    private Thread bgThread;                //thread for plotting (in the background)
+    private boolean doUpdate;               //tells the background thread to update
 
     /* Initialization and plot for the first time. Later on, updates are triggered by the listeners **/
     public void run(String arg) {
@@ -40,16 +40,16 @@ public class Dynamic_Profiler
         if (!isSelection()) {
             IJ.error("Dynamic Profiler","Line or Rectangular Selection Required"); return;
         }
-        ImageProcessor ip = getProfilePlot();// get a profile
-        if (ip==null) {  // no profile?
+        ImageProcessor ip = getProfilePlot();  // get a profile
+        if (ip==null) {                     // no profile?
             IJ.error("Dynamic Profiler","No Profile Obtained"); return;
         }
-        // new plot window
+                                            // new plot window
         plotImage = new ImagePlus("Profile of "+imp.getShortTitle(), ip);
         plotImage.show();
         IJ.wait(50);
         positionPlotWindow();
-        // thread for plotting in the background
+                                            // thread for plotting in the background
         bgThread = new Thread(this, "Dynamic Profiler Plot");
         bgThread.setPriority(Math.max(bgThread.getPriority()-3, Thread.MIN_PRIORITY));
         bgThread.start();
@@ -60,15 +60,15 @@ public class Dynamic_Profiler
     public synchronized void mousePressed(MouseEvent e) { doUpdate = true; notify(); }   
     public synchronized void mouseDragged(MouseEvent e) { doUpdate = true; notify(); }
     public synchronized void mouseClicked(MouseEvent e) { doUpdate = true; notify(); }
-    public synchronized void keyPressed(KeyEvent e)     { doUpdate = true; notify(); }
+    public synchronized void keyPressed(KeyEvent e) { doUpdate = true; notify(); }
     // unused listeners concering actions in the corresponding ImagePlus
     public void mouseReleased(MouseEvent e) {}
-    public void mouseExited(MouseEvent e)   {}
-    public void mouseEntered(MouseEvent e)  {}
-    public void mouseMoved(MouseEvent e)    {}
-    public void keyTyped(KeyEvent e)        {}
-    public void keyReleased(KeyEvent e)     {}
-    public void imageOpened(ImagePlus imp)  {}
+    public void mouseExited(MouseEvent e) {}
+    public void mouseEntered(MouseEvent e) {}
+    public void mouseMoved(MouseEvent e) {}
+    public void keyTyped(KeyEvent e) {}
+    public void keyReleased(KeyEvent e) {}
+    public void imageOpened(ImagePlus imp) {}
 
     // this listener is activated if the image content is changed (by imp.updateAndDraw)
     public synchronized void imageUpdated(ImagePlus imp) {
@@ -113,7 +113,7 @@ public class Dynamic_Profiler
     }
 
     private void createListeners() {
-        ImageWindow win    = imp.getWindow();
+        ImageWindow win = imp.getWindow();
         ImageCanvas canvas = win.getCanvas();
         canvas.addMouseListener(this);
         canvas.addMouseMotionListener(this);
