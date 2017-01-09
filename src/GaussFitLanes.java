@@ -43,22 +43,12 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.GridLayout;
 import java.awt.Point;
-import java.awt.Rectangle;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.event.KeyEvent;
-import java.awt.event.KeyListener;
-import java.awt.event.MouseEvent;
-import java.awt.event.MouseListener;
-import java.awt.event.MouseMotionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.lang.Math;
-import java.util.ArrayList;
-import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -82,36 +72,31 @@ import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
 
-import gauss.GaussianFit;
-import gauss.GaussianSpotData;
 import ij.IJ;
-import ij.ImageListener;
 import ij.ImagePlus;
 import ij.Prefs;
-import ij.gui.*;
+import ij.gui.ImageCanvas;
+import ij.gui.ImageWindow;
+import ij.gui.Line;
+import ij.gui.Plot;
+import ij.gui.PlotWindow;
+import ij.gui.ProfilePlot;
+import ij.gui.Roi;
 import ij.io.Opener;
 import ij.measure.Calibration;
-import ij.measure.ResultsTable;
 import ij.plugin.frame.RoiManager;
 import ij.process.ImageProcessor;
 import ij.util.Tools;
-import io.scif.img.ImgIOException;
-import io.scif.img.ImgOpener;
 import io.scif.services.DatasetIOService;
 import net.imagej.DatasetService;
 import net.imagej.ImageJ;
 import net.imagej.display.ImageDisplayService;
 import net.imagej.ops.OpService;
-import net.imglib2.img.ImagePlusAdapter;
-import net.imglib2.img.Img;
-import net.imglib2.img.display.imagej.ImageJFunctions;
-
-//import net.imglib2.type.Type;
-
 
 @Plugin(type = Command.class, headless = true,
 menuPath = "Plugins>Gauss Fit")
-public class GaussFitLanes implements Command, Previewable{
+public class GaussFitLanes implements 
+				Command, Previewable, Runnable {
 	
 	@Parameter
 	private LogService log;
@@ -143,49 +128,75 @@ public class GaussFitLanes implements Command, Previewable{
 	private ImagePlus plotImage;
 	private RoiManager roiMan = new RoiManager();
 	
-
 	public void init() {
 		imp = IJ.getImage();
+		roiMan.runCommand("Show All");
+		roiMan.runCommand("Labels");
         
 		CustomDialog cd = new CustomDialog();		
 		cd.showMainDialog();
 
-		ImageProcessor ip = getProfilePlot();  // get a profile
-        if (ip==null) {                     // no profile?
+		ImageProcessor ip = getProfilePlot();  // get a profile for each ROI
+        if (ip == null) {                          // no profile?
             IJ.error("Dynamic Profiler","No Profile Obtained"); return;
         }
-
-        plotImage = new ImagePlus("Profile of "+imp.getShortTitle(), ip);
+ 
+        plotImage = new ImagePlus("Profile of "+imp.getShortTitle(),ip);
         plotImage.show();
+        
+        IJ.wait(50);
+        ImageWindow iwin = imp.getWindow();
+        ImageWindow pwin = plotImage.getWindow();
+        
+        if (iwin == null || pwin==null) return;
+        Dimension screen     = Toolkit.getDefaultToolkit().getScreenSize();
+        Dimension imageSize  = iwin.getSize();
+        Dimension dialogSize = pwin.getSize();
+        Point imageLoc = iwin.getLocation();
+        int x = imageLoc.x-(imageSize.width+10);
+        if (x+dialogSize.width>screen.width)
+            x = screen.width+dialogSize.width;
+        pwin.setLocation(x, imageLoc.y);
+        ImageCanvas canvas = iwin.getCanvas();
+        canvas.requestFocus();
+        pwin.setVisible(true);
+        
+        // thread for plotting in the background
+        bgThread = new Thread(this, "Dynamic Plots");
+        bgThread.setPriority(Math.max(bgThread.getPriority()-3, Thread.MIN_PRIORITY));
+        bgThread.start();
 	}
 	
     // the background thread for plotting.
 	public void run() {
 		if (setup) { init(); setup = false;}
 		while (true) {
-			IJ.wait(50);                            //delay to make sure the roi has been updated
-			for (int i=0; i<roiMan.getCount(); i++) {
-				ImageProcessor ip = getProfilePlot();
-				if (ip != null) plotImage.setProcessor(null, ip);
-				synchronized(this) {
-					if (doUpdate) {
-						doUpdate = false;               //and loop again
-					} else {
-						try {wait();}                   //notify wakes up the thread
-						catch(InterruptedException e) { //interrupted tells the thread to exit
-							return;
-						}
+			IJ.wait(50);
+			//delay to make sure the roi has been update
+			ImageProcessor ip = getProfilePlot();
+			if (ip == null) plotImage.setProcessor(null, ip);
+			if (plotImage.getRoi()!=null) plotImage.updateAndDraw();
+			imp.getCanvas().requestFocus();
+			synchronized(this) {
+				if (doUpdate) {
+					doUpdate = false;               //and loop again
+				} else {
+					try {wait();}                   //notify wakes up the thread
+					catch(InterruptedException e) { //interrupted tells the thread to exit
+						return;
 					}
 				}
 			}
 		}
 	}
-
 	
     /** get a profile, analyze it and return a plot (or null if not possible) */
 	ImageProcessor getProfilePlot() {
 		if (roiMan.getCount() == 0) return null;
 		ImageProcessor ip = imp.getProcessor();
+		ImageProcessor[] plots = new ImageProcessor[roiMan.getCount()];
+		ImageProcessor plotsMontage = ip;
+		
 		for (int p = 0; p<roiMan.getCount(); p++) {
 			roiMan.select(p);
 			Roi roi = roiMan.getRoi(p);
@@ -194,7 +205,7 @@ public class GaussFitLanes implements Command, Previewable{
 				ip.setInterpolate(PlotWindow.interpolate);
 			else
 				ip.setInterpolate(false);
-			ProfilePlot profileP = new ProfilePlot(imp, Prefs.verticalProfile);//get the profile
+			ProfilePlot profileP = new ProfilePlot(imp, true);//get the profile
 			if (profileP == null) return null;
 			double[] profile = profileP.getProfile();
 			if (profile==null || profile.length<2)
@@ -233,18 +244,24 @@ public class GaussFitLanes implements Command, Previewable{
 				double[] a = Tools.getMinMax(x);
 				plot.setLimits(a[0],a[1], fixedMin, fixedMax);
 			}
+			plots[p] = plot.getProcessor();
 		}
-		return ip;
+		int plotSpacing = 5;
+		int plotsWidth  = 2*plotSpacing + plots[1].getWidth();
+		int plotsHeight = plotSpacing + plots.length*(plots[1].getHeight()+plotSpacing);
+
+		plotsMontage = plots[1].createProcessor(plotsWidth, plotsHeight);
+		for (int i = 0; i<plots.length; i++) {
+			plotsMontage.insert(plots[i], plotSpacing, plotSpacing+i*(plotSpacing + plots[1].getHeight())); 
+		}
+		return plotsMontage;
 	}
     
 	private void doFit(ImagePlus imp2) {
 		// TODO Auto-generated method stub
 		
 	}
-
-
-
-    
+	
     public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
@@ -270,8 +287,7 @@ public class GaussFitLanes implements Command, Previewable{
 		
 	@SuppressWarnings("serial")
 	class CustomDialog extends JFrame implements
-			ActionListener, ChangeListener, DocumentListener, RoiListener, ImageListener{
-		
+			ActionListener, ChangeListener, DocumentListener {
 		int IW = imp.getWidth();
 		int IH = imp.getWidth();
 		
@@ -283,22 +299,22 @@ public class GaussFitLanes implements Command, Previewable{
 		int LHOff  = (IW-(LW+LSp)*nLanes)/2;
 		int LVOff  = (IH-LH)/2;
 		
-		private JPanel textPanel;
-		private JLabel labelNLanes = new JLabel("");
+		private ImagePlus  impCd = imp;
+		private JPanel     textPanel;
+		private JLabel     labelNLanes = new JLabel("");
 		private JTextField textNLanes= new JTextField(3); 
 		
-		private JPanel sliderPanel;
+		private JPanel  sliderPanel;
 		private JSlider sliderW;
 		private JSlider sliderH;
 		private JSlider sliderSp;
 		private JSlider sliderHOff;
 		private JSlider sliderVOff;
 		
-		private JPanel buttonPanel;
-		private JButton buttonPeaks;
-		private JPanel dialogPanel;
-		private JFrame frame = new JFrame("Gel Lanes Gauss Fitting:" + imp.getTitle());
-		
+		private JPanel  buttonPanel;
+		private JButton buttonMeasure;
+		private JPanel  dialogPanel;
+		private JFrame  frame = new JFrame("Gel Lanes Gauss Fitting:" + imp.getTitle());
 		
 		private void showMainDialog() {
 			textPanel = new JPanel();
@@ -327,9 +343,9 @@ public class GaussFitLanes implements Command, Previewable{
 			
 			buttonPanel = new JPanel();
 			buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
-			buttonPeaks = new JButton("Peaks");
-			buttonPeaks.addActionListener(this);
-			buttonPanel.add(buttonPeaks);
+			buttonMeasure = new JButton("Measure");
+			buttonMeasure.addActionListener(this);
+			buttonPanel.add(buttonMeasure);
 			
 			dialogPanel = new JPanel();
 			dialogPanel.setBackground(Color.lightGray);
@@ -344,7 +360,7 @@ public class GaussFitLanes implements Command, Previewable{
 					frame.dispose();
 				}
 			});
-			
+
 			frame.setLocation(0,0);
 			//frame.setJMenuBar(new Menu());
 			frame.getContentPane().add(dialogPanel);
@@ -365,9 +381,7 @@ public class GaussFitLanes implements Command, Previewable{
 	        ImageCanvas canvas = iwin.getCanvas();
 	        canvas.requestFocus();
 			frame.setVisible(true);
-
 			reDrawROIs(LW,LH,LSp,LHOff,LVOff);
-			imp.addImageListener(this);
 		}
 
 
@@ -405,9 +419,9 @@ public class GaussFitLanes implements Command, Previewable{
 			tb.setTitleColor(color);
 			slider.setBorder(tb);
 		}
-
+	
 		@Override
-		public void stateChanged(ChangeEvent e) {
+		public synchronized void stateChanged(ChangeEvent e) {
 			JSlider slider = (JSlider) e.getSource();
 			if (slider == sliderW ) {
 				LW = sliderW.getValue();
@@ -434,34 +448,38 @@ public class GaussFitLanes implements Command, Previewable{
 				String str = "Vertical Offset ( "+ LVOff +" px )"; 
 				setSliderTitle(sliderVOff, Color.black, str );
 			}
+			imp.getCanvas().requestFocus();
 			reDrawROIs(LW,LH,LSp,LHOff,LVOff);
+			//IJ.wait(50);
+			//delay to make sure the roi has been update
+			ImageProcessor ip = getProfilePlot();
+			if (ip != null) plotImage.setProcessor(ip);
+			if (plotImage.getRoi()!=null) plotImage.updateAndDraw();
+			imp.getCanvas().requestFocus();
 		}
 
 		private void reDrawROIs(int lw, int lh, int lsp, int lhoff, int lvoff) {
-			if (imp.getRoi() != null ) {
+			if (imp.getRoi() != null || roiMan.getCount() !=0) {
 				roiMan.reset();
 				imp.deleteRoi();
 			}
-			
 			for (int i=0;i<nLanes;i++) {
 				Roi roi = new Roi(lhoff+lw*i+lsp*i, lvoff, lw, lh);
 				roiMan.addRoi(roi);
 			}
-			for (int i=0;i<roiMan.getCount();i++) {
-				roiMan.select(i, true, false);
-				//roiMan.
-			}
-
+//			for (int i=0;i<roiMan.getCount();i++) {
+//				//roiMan.select(i, true, false);
+//				roiMan.add(imp,roiMan.getRoi(i),i);
+//			}
 		}
-
-
 
 		private void readNLanes(){
 			try {
 				nLanes = (int) Integer.parseInt(textNLanes.getText().trim());
+				imp.getCanvas().requestFocus();
 				reDrawROIs(LW,LH,LSp,LHOff,LVOff);
 			} catch (NumberFormatException e1) {
-				log.error("Cannot parse Number of Lanes: \""+textNLanes.getText().trim()+ "\"");
+				//log.error("Cannot parse Number of Lanes: \""+textNLanes.getText().trim()+ "\"");
 			}
 		}
 	    boolean isRoi() {
@@ -472,40 +490,21 @@ public class GaussFitLanes implements Command, Previewable{
 	            return false;
 	        return roi.getType()==Roi.LINE || roi.getType()==Roi.RECTANGLE;
 	    }
+		
+		
+	    // TextField Listeners
+		@Override
+	    public void changedUpdate(DocumentEvent e) {readNLanes();}
+		@Override
+		public void removeUpdate (DocumentEvent e) {readNLanes();}
+		@Override
+	    public void insertUpdate (DocumentEvent e) {readNLanes();}
+
+		// Measure Button
 		@Override
 		public void actionPerformed(ActionEvent e) {
 			// TODO Auto-generated method stub
 			
 		}
-	    public void changedUpdate(DocumentEvent e) {readNLanes();}
-		@Override
-		public void removeUpdate(DocumentEvent e)  {readNLanes();}
-		@Override
-	    public void insertUpdate(DocumentEvent e)  {readNLanes();}
-		@Override
-		public void roiModified(ImagePlus arg0, int arg1) {log.info("" + arg0 + " " + arg1);}
-
-
-		@Override
-		public void imageClosed(ImagePlus impl) {
-			// if any image we are listening to is closed, exit
-			//if (impl == this.imp || imp == plotImage) {
-	            //removeListeners();
-	            //closePlotImage(); //also terminates the background thread
-	        //}
-		}
-
-		@Override
-		public void imageOpened(ImagePlus arg0) {
-			// TODO Auto-generated method stub
-			
-		}
-
-		@Override
-		public synchronized void imageUpdated(ImagePlus arg0) {
-			// TODO Auto-generated method stub
-			
-		}
 	}
-
 }
