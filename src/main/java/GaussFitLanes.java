@@ -94,6 +94,7 @@ import net.imagej.DatasetService;
 import net.imagej.ImageJ;
 import net.imagej.display.ImageDisplayService;
 import net.imagej.ops.OpService;
+//import fityk.Fityk;
 
 @Plugin(type = Command.class, headless = true,
 menuPath = "Plugins>Gauss Fit")
@@ -143,7 +144,7 @@ public class GaussFitLanes implements
 
 		ImageProcessor ip = getProfilePlot(rows);  // get a profile for each ROI
         if (ip == null) {                          // no profile?
-            IJ.error("Dynamic Profiler","No Profile Obtained"); return;
+            IJ.error("Gauss Fit","No Profile Obtained"); return;
         }
         plotImage = new ImagePlus("Profile of "+imp.getShortTitle(),ip);
         plotImage.show();
@@ -285,7 +286,7 @@ public class GaussFitLanes implements
 	}
     
 	private void doFit(ImagePlus imp2) {
-		// TODO Auto-generated method stub
+		//Fityk.all_parameters();
 		
 	}
 	
