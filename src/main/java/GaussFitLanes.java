@@ -94,7 +94,7 @@ import net.imagej.DatasetService;
 import net.imagej.ImageJ;
 import net.imagej.display.ImageDisplayService;
 import net.imagej.ops.OpService;
-//import fityk.Fityk;
+
 
 @Plugin(type = Command.class, headless = true,
 menuPath = "Plugins>Gauss Fit")
@@ -142,7 +142,7 @@ public class GaussFitLanes implements
 		cd = new CustomDialog();		
 		cd.showMainDialog();
 
-		ImageProcessor ip = getProfilePlot(rows);  // get a profile for each ROI
+		ImageProcessor ip = makePlotsMontage(getProfilePlots(),rows);  // get a profile for each ROI
         if (ip == null) {                          // no profile?
             IJ.error("Gauss Fit","No Profile Obtained"); return;
         }
@@ -178,7 +178,8 @@ public class GaussFitLanes implements
 		while (true) {
 			IJ.wait(50);
 			//delay to make sure the roi has been update
-			ImageProcessor ip = getProfilePlot(rows);
+			ImageProcessor ip = makePlotsMontage(getProfilePlots(),rows);
+			doFit(getProfilePlots());
 			if (ip == null) plotImage.setProcessor(null, ip);
 			if (plotImage.getRoi()!=null) plotImage.updateAndDraw();
 			imp.getCanvas().requestFocus();
@@ -196,11 +197,10 @@ public class GaussFitLanes implements
 	}
 	
     /** get a profile, analyze it and return a plot (or null if not possible) */
-	ImageProcessor getProfilePlot(int rows) {
+	private Plot[] getProfilePlots() {
 		if (roiMan.getCount() == 0) return null;
 		ImageProcessor ip = imp.getProcessor();
 		Plot[] plots = new Plot[roiMan.getCount()];
-		ImageProcessor plotsMontage = ip;
 		
 		for (int p = 0; p<roiMan.getCount(); p++) {
 			roiMan.select(p);
@@ -211,7 +211,6 @@ public class GaussFitLanes implements
 			else
 				ip.setInterpolate(false);
 			ProfilePlot profileP = new ProfilePlot(imp, true);//get the profile
-			if (profileP == null) return null;
 			double[] profile = profileP.getProfile();
 			if (profile==null || profile.length<2)
 				return null;
@@ -252,6 +251,13 @@ public class GaussFitLanes implements
 			}
 			plots[p] = plot;
 		}
+		return plots;
+	}
+		
+	private ImageProcessor makePlotsMontage(Plot[]plots, int rows){
+		ImageProcessor ip = imp.getProcessor();
+		ImageProcessor plotsMontage = ip.duplicate();	
+		
 		int cols = Math.floorDiv(plots.length, rows);
 		if (Math.floorMod(plots.length, rows)!=0) cols++;
 		
@@ -285,9 +291,12 @@ public class GaussFitLanes implements
 		return plotsMontage;
 	}
     
-	private void doFit(ImagePlus imp2) {
-		//Fityk.all_parameters();
-		
+	private void doFit(Plot[] plots) {
+		for (int i = 0; i<plots.length; i++){
+			
+			FitFityk f = new FitFityk(plots[i].getYValues());
+			System.out.println(f.all_functions());
+		}
 	}
 	
     public static void main(final String... args) throws Exception {
@@ -479,7 +488,7 @@ public class GaussFitLanes implements
 			reDrawROIs(imp,LW,LH,LSp,LHOff,LVOff);
 			//IJ.wait(50);
 			//delay to make sure the roi has been update
-			ImageProcessor ip = getProfilePlot(rows);
+			ImageProcessor ip = makePlotsMontage(getProfilePlots(),rows);
 			if (ip != null) plotImage.setProcessor(ip);
 		}
 
