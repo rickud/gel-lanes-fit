@@ -294,7 +294,7 @@ public class GaussFitLanes implements
 	private void doFit(Plot[] plots) {
 		for (int i = 0; i<plots.length; i++){
 			
-			FitFityk f = new FitFityk(plots[i].getYValues());
+			FitFityk f = new FitFityk(plots[i].getXValues(), plots[i].getYValues());
 			System.out.println(f.all_functions());
 		}
 	}

@@ -17,26 +17,33 @@
 //   $ java hello
 
 import fityk.Fityk;
+import fityk.Point;
+import fityk.PointVector;
+import fityk.RealVector;
 
 public class FitFityk extends Fityk {
     static {
         System.load("/Users/Rick/fityk-1.3.1/fityk/swig/java/libfitykJ.so");
     }
 
-    public static void doFit() {
+    public FitFityk(float x, float y) {
         Fityk f = new Fityk();
-        System.out.println(f.get_info("version"));
+        f.load_data(0, new RealVector((long) x), new RealVector((long) y), null);
+        PointVector points = f.get_data();
+        for (int i = 0; i<points.size(); i++){
+        	Point p = points.get(i);
+        	if (p.getIs_active()) {
+        		System.out.println(""+i+": [" + p.getX() + "" + p.getY() + "]");
+        	}
+        }
     }
 
-    // Actual class content starts here.
-    // It's named `hello' and kept in the same file as main because
-    // we like each sample to be in a single file.
+    public FitFityk(float[] xValues, float[] yValues) {
+        Fityk f = new Fityk();
+        
+	}
 
-    public FitFityk (float[] fs) {
-        System.out.println("Data info:" + get_info("data", 0));
-    }
-
-    public void run() {
+	public void run() {
         execute("guess %gauss = Gaussian");
         System.out.println("Fitting ...");
         execute("fit");
