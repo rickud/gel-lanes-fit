@@ -19,39 +19,51 @@
 import fityk.Fityk;
 import fityk.Point;
 import fityk.PointVector;
-import fityk.RealVector;
 
 public class FitFityk extends Fityk {
+    double[] xout;
+    double[] yout;
     static {
         System.load("/Users/Rick/fityk-1.3.1/fityk/swig/java/libfitykJ.so");
     }
 
-    public FitFityk(float x, float y) {
+    public FitFityk(float[] x, float[] y) {
         Fityk f = new Fityk();
-        f.load_data(0, new RealVector((long) x), new RealVector((long) y), null);
-        PointVector points = f.get_data();
-        for (int i = 0; i<points.size(); i++){
-        	Point p = points.get(i);
-        	if (p.getIs_active()) {
-        		System.out.println(""+i+": [" + p.getX() + "" + p.getY() + "]");
-        	}
+        for (int i = 0; i<x.length; i++){
+        	f.add_point(x[i], y[i], 0.0);
         }
-    }
-
-    public FitFityk(float[] xValues, float[] yValues) {
-        Fityk f = new Fityk();
         
 	}
 
-	public void run() {
-        execute("guess %gauss = Gaussian");
-        System.out.println("Fitting ...");
-        execute("fit");
-        System.out.println("WSSR=" + get_wssr());
-        System.out.println("Gaussian center: " +
-                           calculate_expr("%gauss.center"));
+	public void runLaneFit() {
+		System.out.println("Fitting ...");
+		execute("guess %q0 = Quadratic");
+		execute("fit");
+		for (int i = 0; i < 10; i++) {
+			execute("guess %g" +i+ " = Gaussian");
+            execute("fit");
+            System.out.println("WSSR ["+ i +"] =" + get_wssr());
+            System.out.println("Center ["+ i +"]: " +
+            				calculate_expr("%g" + i + ".center"));
+		}
     }
-
+	
+	public double[] getXdata() { 
+		PointVector points = get_data();
+		xout = new double[(int) points.size()];
+		for (int p=0; p<xout.length; p++)
+			xout[p]=points.get(p).getX();
+		return xout;
+	}
+	
+	public double[] getYdata() { 
+		PointVector points = get_data();
+		yout = new double[(int) points.size()];
+		for (int p=0; p<yout.length; p++)
+			yout[p]=points.get(p).getX();
+		return yout;
+	}
+	
     public void save_session(String sessionFilename) {
         execute(String.format("info state >'%s'", sessionFilename));
     }

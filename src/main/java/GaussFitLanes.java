@@ -291,18 +291,24 @@ public class GaussFitLanes implements
 		return plotsMontage;
 	}
     
-	private void doFit(Plot[] plots) {
+	private Plot[] doFit(Plot[] plots) {
+		Plot[] output = new Plot[plots.length];
 		for (int i = 0; i<plots.length; i++){
-			
 			FitFityk f = new FitFityk(plots[i].getXValues(), plots[i].getYValues());
-			System.out.println(f.all_functions());
+
+			//f.execute("guess %gauss = Gaussian");
+			f.runLaneFit();
+			double[] xvals = f.getXdata();
+			double[] yvals = f.getYdata();
+			output[i].addPoints(xvals, yvals, i);;
 		}
+		return output;
 	}
 	
     public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
-		ImagePlus imp = new Opener().openImage("src//main//resources//SampleImages//11_12_15b1.tif");
+		ImagePlus imp = new Opener().openImage("src//main//resources//SampleImages//All[01-17-2017].tif");
 		// display it via ImageJ
 		imp.show();
 		// wrap it into an ImgLib image (no copying)
