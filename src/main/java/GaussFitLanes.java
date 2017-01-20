@@ -85,6 +85,7 @@ import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 import ij.io.Opener;
 import ij.measure.Calibration;
+import ij.measure.CurveFitter;
 import ij.plugin.frame.RoiManager;
 import ij.process.ByteProcessor;
 import ij.process.ImageProcessor;
@@ -291,24 +292,18 @@ public class GaussFitLanes implements
 		return plotsMontage;
 	}
     
-	private Plot[] doFit(Plot[] plots) {
-		Plot[] output = new Plot[plots.length];
+	private void doFit(Plot[] plots) {
 		for (int i = 0; i<plots.length; i++){
-			FitFityk f = new FitFityk(plots[i].getXValues(), plots[i].getYValues());
-
-			//f.execute("guess %gauss = Gaussian");
-			f.runLaneFit();
-			double[] xvals = f.getXdata();
-			double[] yvals = f.getYdata();
-			output[i].addPoints(xvals, yvals, i);;
+			
+			CurveFitter  f = new CurveFitter((double[]) plots[i].getXValues(), (double[]) plots[i].getYValues());
+			System.out.println(plots[i].getTitle());
 		}
-		return output;
 	}
 	
     public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
-		ImagePlus imp = new Opener().openImage("src//main//resources//SampleImages//All[01-17-2017].tif");
+		ImagePlus imp = new Opener().openImage("src//main//resources//SampleImages//11_12_15b1.tif");
 		// display it via ImageJ
 		imp.show();
 		// wrap it into an ImgLib image (no copying)
