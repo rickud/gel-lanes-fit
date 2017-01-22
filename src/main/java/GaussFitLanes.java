@@ -292,12 +292,24 @@ public class GaussFitLanes implements
 		return plotsMontage;
 	}
     
-	private void doFit(Plot[] plots) {
+	private Plot[] doFit(Plot[] plots) {
+		Plot[] output = new Plot[plots.length];
 		for (int i = 0; i<plots.length; i++){
-			
-			CurveFitter  f = new CurveFitter((double[]) plots[i].getXValues(), (double[]) plots[i].getYValues());
+			double[] xvals = new double[plots[i].getXValues().length];
+			double[] yvals = new double[plots[i].getXValues().length];
+			for (int v = 0 ; v<xvals.length; v++) {
+				xvals[i] = (double) plots[i].getXValues()[v];
+				xvals[i] = (double) plots[i].getXValues()[v];
+			}
+			CurveFitter f = new CurveFitter(xvals, yvals);
+			f.doFit(CurveFitter.POLY2);
+			double p[] = f.getParams();
+			plots[i].setColor(Color.blue);
+			plots[i].addPoints(xvals, p[0] + xvals*(p[1] + xvals*p[2]), PlotWindow.LINE);
+			;
 			System.out.println(plots[i].getTitle());
 		}
+		return output;
 	}
 	
     public static void main(final String... args) throws Exception {
