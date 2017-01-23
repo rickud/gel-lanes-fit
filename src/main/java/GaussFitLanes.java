@@ -49,6 +49,7 @@ import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.util.Arrays;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -64,6 +65,22 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
+import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.commons.math4.analysis.MultivariateVectorFunction;
+import org.apache.commons.math4.analysis.function.Gaussian;
+import org.apache.commons.math4.fitting.GaussianCurveFitter;
+import org.apache.commons.math4.fitting.WeightedObservedPoints;
+import org.apache.commons.math4.fitting.leastsquares.LeastSquaresBuilder;
+import org.apache.commons.math4.fitting.leastsquares.LeastSquaresOptimizer;
+import org.apache.commons.math4.fitting.leastsquares.LeastSquaresProblem;
+import org.apache.commons.math4.fitting.leastsquares.LevenbergMarquardtOptimizer;
+import org.apache.commons.math4.fitting.leastsquares.MultivariateJacobianFunction;
+import org.apache.commons.math4.geometry.euclidean.twod.Vector2D;
+import org.apache.commons.math4.linear.Array2DRowRealMatrix;
+import org.apache.commons.math4.linear.ArrayRealVector;
+import org.apache.commons.math4.linear.RealMatrix;
+import org.apache.commons.math4.linear.RealVector;
+import org.apache.commons.math4.util.Pair;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.command.Previewable;
@@ -135,6 +152,7 @@ public class GaussFitLanes implements
 	private CustomDialog cd;
 	private int rows = 4; // Number of plot Rows in display
 	private Plot[] plots;
+
 	public void init() {
 		imp = IJ.getImage();
 		roiMan.runCommand("Show All");
@@ -309,7 +327,7 @@ public class GaussFitLanes implements
 			}
 			CurveFitter f = new CurveFitter(xvals, yvals);
 			// fit x^2 poly
-			
+			f.doFit(CurveFitter.POLY2);
 			double p[] = f.getParams();
 			output[i].setColor(Color.blue);
 			double[] bg = new double[xvals.length];
@@ -321,16 +339,37 @@ public class GaussFitLanes implements
 				yvals[b] +=bg[b]; 
 			}
 			 
-			int[] maxima = findMaxima(yvals, 0.01*getMaxValue(yvals), true);
-			for (int m=0; m<maxima.length; m++) {
+			int[] maximaIdx = findMaxima(yvals, 0.01*NumberUtils.max(yvals), true);
+
+			// Define a Gaussian at each peak
+			double[] means = new double[maximaIdx.length];
+			double[] stds  = new double[maximaIdx.length];
+			double[] norms = new double[maximaIdx.length];
+			
+			
+			for (int m=0; m<maximaIdx.length; m++) {
+				norms[m] = yvals[maximaIdx[m]];
+				means[m] = xvals[maximaIdx[m]];
+				stds [m] = 0.5;
+			}
+			WeightedObservedPoints obs = new WeightedObservedPoints();
+			for (int o=0;o<yvals.length; o++){
+				obs.add(xvals[o], yvals[o]);
+			}
+			double[] pars = GaussianArrayCurveFitter.create().fit(obs.toList());
+			
+			for (int b=0; b<maximaIdx.length; b++) {
+				double[] gauss = new double[xvals.length];
+				for (int c=0; c<xvals.length; c++) {
+					gauss[c] = new Gaussian.Parametric().value(xvals[c],pars[0+b*maximaIdx.length],pars[1+b*maximaIdx.length],pars[2+b*maximaIdx.length]);
+				}
 				
 			}
 			
-			
-			
-			System.out.println(plots[i].getTitle());
-		}
-		
+			System.out.println(parameters);
+		}	
+
+
 		return output;
 	}
 	/**
