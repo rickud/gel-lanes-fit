@@ -127,14 +127,14 @@ public class GaussFitLanes implements
     private Thread mainThread;                //thread for plotting (in the background)
     private Thread plotThread;                //thread for plotting (in the background)
     private boolean setup = true;
-    private boolean doUpdate;               //tells the background thread to update
+    private boolean doFit;               //tells the background thread to update
 	ImagePlus imp;
 
 	private ImagePlus plotImage;
 	private RoiManager roiMan = new RoiManager();
 	private CustomDialog cd;
 	private int rows = 4; // Number of plot Rows in display
-	
+	private Plot[] plots;
 	public void init() {
 		imp = IJ.getImage();
 		roiMan.runCommand("Show All");
@@ -176,24 +176,23 @@ public class GaussFitLanes implements
     // the background thread for plotting.
 	public void run() {
 		if (setup) { init(); setup = false;}
-		while (true) {
-			IJ.wait(50);
-			//delay to make sure the roi has been update
-			ImageProcessor ip = makePlotsMontage(getProfilePlots(),rows);
-			doFit(getProfilePlots());
-			if (ip == null) plotImage.setProcessor(null, ip);
-			if (plotImage.getRoi()!=null) plotImage.updateAndDraw();
-			imp.getCanvas().requestFocus();
-			synchronized(this) {
-				if (doUpdate) {
-					doUpdate = false;               //and loop again
-				} else {
-					try {wait();}                   //notify wakes up the thread
-					catch(InterruptedException e) { //interrupted tells the thread to exit
-						return;
-					}
-				}
-			}
+		
+		IJ.wait(50);
+		//delay to make sure the roi has been update
+		ImageProcessor ip = makePlotsMontage(getProfilePlots(),rows); //here
+		//doFit(getProfilePlots());
+		if (ip != null) plotImage.setProcessor(null, ip);
+		if (plotImage.getRoi()!=null) plotImage.deleteRoi();
+		imp.getCanvas().requestFocus();
+		synchronized(this) {
+//				if (doUpdate) {
+//					doUpdate = false;               //and loop again
+//				} else {
+//					try {wait();}                   //notify wakes up the thread
+//					catch(InterruptedException e) { //interrupted tells the thread to exit
+//						return;
+//					}
+//				}
 		}
 	}
 	
@@ -201,7 +200,7 @@ public class GaussFitLanes implements
 	private Plot[] getProfilePlots() {
 		if (roiMan.getCount() == 0) return null;
 		ImageProcessor ip = imp.getProcessor();
-		Plot[] plots = new Plot[roiMan.getCount()];
+		plots = new Plot[roiMan.getCount()];
 		
 		for (int p = 0; p<roiMan.getCount(); p++) {
 			roiMan.select(p);
@@ -217,7 +216,7 @@ public class GaussFitLanes implements
 				return null;
 			String xUnit = "pixels";                    //the following code is mainly for x calibration
 			double xInc = 1;
-			Calibration cal = imp.getCalibration();
+			Calibration cal = imp.getCalibration(); 
 			if (roi.getType() == Roi.LINE) {
 				Line line = (Line)roi;
 				if (cal != null) {
@@ -263,7 +262,7 @@ public class GaussFitLanes implements
 		if (Math.floorMod(plots.length, rows)!=0) cols++;
 		
 		int plotSpacing = 5; // black border
-		ImageProcessor plotIpAll = plots[0].getProcessor().duplicate();
+		ImageProcessor plotIpAll = plots[0].getProcessor().duplicate(); // here OOB
 		int plotW = plotIpAll.getWidth(); int plotH = plotIpAll.getHeight();
 		int plotsWidth  = plotSpacing + cols*( plotW + plotSpacing );
 		int plotsHeight = plotSpacing + rows*( plotH + plotSpacing );
@@ -275,7 +274,7 @@ public class GaussFitLanes implements
 		for (int c = 0; c<cols; c++) {
 			for (int r = 0; r<rows; r++) {
 				if (c*rows+r<plots.length){
-					plotsMontage.insert(plots[c*rows+r].getProcessor(), 
+					plotsMontage.insert(plots[c*rows+r].getProcessor(), //here NP
 										plotSpacing+c*(plotSpacing + plotW), 
 										plotSpacing+r*(plotSpacing + plotH));
 					plotsMontage.drawString(plots[c*rows+r].getTitle(),
@@ -295,27 +294,127 @@ public class GaussFitLanes implements
 	private Plot[] doFit(Plot[] plots) {
 		Plot[] output = new Plot[plots.length];
 		for (int i = 0; i<plots.length; i++){
-			double[] xvals = new double[plots[i].getXValues().length];
-			double[] yvals = new double[plots[i].getXValues().length];
+			output[i] = plots[i];
+			float[] xvalsf = plots[i].getXValues();
+			float[] yvalsf = plots[i].getYValues();
+			double[] xvals = new double[xvalsf.length];
+			double[] yvals = new double[yvalsf.length];
+
+			output[i].setColor(Color.black);
+			output[i].addPoints(xvals, yvals, PlotWindow.LINE);
+			
 			for (int v = 0 ; v<xvals.length; v++) {
-				xvals[i] = (double) plots[i].getXValues()[v];
-				xvals[i] = (double) plots[i].getXValues()[v];
+				xvals[v] = (double) xvalsf[v];
+				yvals[v] = (double) yvalsf[v];
 			}
 			CurveFitter f = new CurveFitter(xvals, yvals);
-			f.doFit(CurveFitter.POLY2);
+			// fit x^2 poly
+			
 			double p[] = f.getParams();
-			plots[i].setColor(Color.blue);
-			plots[i].addPoints(xvals, p[0] + xvals*(p[1] + xvals*p[2]), PlotWindow.LINE);
-			;
+			output[i].setColor(Color.blue);
+			double[] bg = new double[xvals.length];
+			for (int b=0; b<xvals.length; b++) {
+				bg[b] = p[0] + xvals[b]*(p[1] + xvals[b]*p[2]);
+			}
+			output[i].addPoints(xvals, bg, PlotWindow.LINE);
+			for (int b=0; b<xvals.length; b++) {
+				yvals[b] +=bg[b]; 
+			}
+			 
+			int[] maxima = findMaxima(yvals, 0.01*getMaxValue(yvals), true);
+			for (int m=0; m<maxima.length; m++) {
+				
+			}
+			
+			
+			
 			System.out.println(plots[i].getTitle());
 		}
+		
 		return output;
 	}
+	/**
+	 * Adapted From:
+	 * Calculates peak positions of 1D array N.Vischer, 13-sep-2013
+	 *
+	 * @param x Array containing peaks.
+	 * @param tolerance Depth of a qualified valley must exceed tolerance.
+	 * Tolerance must be >= 0. Flat tops are marked at their centers.
+	 * @param  excludeOnEdges If 'true', a peak is only
+	 * accepted if it is separated by two qualified valleys. If 'false', a peak
+	 * is also accepted if separated by one qualified valley and by a border.
+	 * @return Positions of peaks, sorted with decreasing amplitude
+	 */
+	public static int[] findMaxima(double[] x, double tolerance, boolean includeEnds) {
+		int len = x.length;
+		if (len<2)
+			return new int[0];
+		if (tolerance < 0)
+			tolerance = 0;
+		int[] maxPositions = new int[len];
+		double max = x[0];
+		double min = x[0];
+		int maxPos = 0;
+		int lastMaxPos = -1;
+		boolean leftValleyFound = includeEnds;
+		int maxCount = 0;
+		for (int j = 1; j < len; j++) {
+			double val = x[j];
+			if (val > min + tolerance)
+				leftValleyFound = true;
+			if (val > max && leftValleyFound) {
+				max = val;
+				maxPos = j;
+			}
+			if (leftValleyFound)
+				lastMaxPos = maxPos;
+			if (val < max - tolerance && leftValleyFound) {
+				maxPositions[maxCount] = maxPos;
+				maxCount++;
+				leftValleyFound = false;
+				min = val;
+				max = val;
+			}
+			if (val < min) {
+				min = val;
+				if (!leftValleyFound)
+					max = val;
+			}
+		}
+		if (includeEnds) {
+			if (maxCount > 0 && maxPositions[maxCount - 1] != lastMaxPos)
+				maxPositions[maxCount++] = lastMaxPos;
+			if (maxCount == 0 && max - min >= tolerance)
+				maxPositions[maxCount++] = lastMaxPos;
+		}
+		int[] cropped = new int[maxCount];
+		System.arraycopy(maxPositions, 0, cropped, 0, maxCount);
+		maxPositions = cropped;
+		double[] maxValues = new double[maxCount];
+		for (int m = 0; m < maxCount; m++) {
+			int pos = maxPositions[m];
+			double midPos = pos;
+			while (pos < len - 1 && x[pos] == x[pos + 1]) {
+				midPos += 0.5;
+				pos++;
+			}
+			maxPositions[m] = (int) midPos;
+			maxValues[m] = x[maxPositions[m]];
+		}
+		int[] rankPositions = Tools.rank(maxValues);
+		int[] returnArr = new int[maxCount];
+		for (int n = 0; n < maxCount; n++) {
+			int pos = maxPositions[rankPositions[n]];
+			returnArr[maxCount - n - 1] = pos; //in descending order
+		}
+		return returnArr;
+	}
+	
 	
     public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
-		ImagePlus imp = new Opener().openImage("src//main//resources//SampleImages//11_12_15b1.tif");
+		ImagePlus imp = new Opener().openImage("src//main//resources//SampleImages//All[01-17-2017].tif");
 		// display it via ImageJ
 		imp.show();
 		// wrap it into an ImgLib image (no copying)
@@ -555,7 +654,8 @@ public class GaussFitLanes implements
 		@Override
 		public void actionPerformed(ActionEvent e) {
 			// TODO Auto-generated method stub
-			
+			Plot[] fitted = doFit(plots);
+			plotImage.setProcessor(null, makePlotsMontage(fitted, rows));
 		}
 	}
 }
