@@ -24,6 +24,8 @@ import org.apache.commons.math4.linear.DiagonalMatrix;
 import org.apache.commons.math4.linear.RealVector;
 import org.apache.commons.math4.util.FastMath;
 
+
+
 public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	/** Parametric function to be fitted. */
 	private static final GaussianArray.Parametric FUNCTION = new GaussianArray.Parametric() {
@@ -124,11 +126,11 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 		final AbstractCurveFitter.TheoreticalValuesFunction model =
 				new AbstractCurveFitter.TheoreticalValuesFunction(FUNCTION, observations);
-
+		
 		final double[] startPoint = initialGuess != null ?
 				initialGuess :
 					// Compute estimation.
-					new ParameterGuesser(observations).guess();
+					new ParameterGuesser(observations, initialGuess.length/3).guess();
 
 		// Return a new least squares problem set up to fit a Gaussian curve to the
 		// observed points.
@@ -145,16 +147,16 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 	/**
 	 * Guesses the parameters {@code norm}, {@code mean}, and {@code sigma}
-	 * of a {@link org.apache.commons.math4.analysis.function.Gaussian.Parametric}
+	 * of a {@link org.apache.commons.math4.analysis.function.GaussianArray.Parametric}
 	 * based on the specified observed points.
 	 */
 	public static class ParameterGuesser {
 		/** Normalization factor. */
-		private final double norm;
+		private final double[] norm;
 		/** Mean. */
-		private final double mean;
+		private final double[] mean;
 		/** Standard deviation. */
-		private final double sigma;
+		private final double[] sigma;
 
 		/**
 		 * Constructs instance with the specified observed points.
@@ -166,7 +168,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * @throws NumberIsTooSmallException if there are less than 3
 		 * observations.
 		 */
-		public ParameterGuesser(Collection<WeightedObservedPoint> observations) {
+		public ParameterGuesser(Collection<WeightedObservedPoint> observations, int gaussN) {
 			if (observations == null) {
 				throw new NullArgumentException(LocalizedFormats.INPUT_ARRAY);
 			}
@@ -176,10 +178,14 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 			final List<WeightedObservedPoint> sorted = sortObservations(observations);
 			final double[] params = basicGuess(sorted.toArray(new WeightedObservedPoint[0]));
-
-			norm = params[0];
-			mean = params[1];
-			sigma = params[2];
+			norm = new double[gaussN];
+			mean = new double[gaussN];
+			sigma= new double[gaussN];
+			for (int p=0; p<params.length; p++ ){
+				norm [p/3] = params[p];
+				mean [p/3] = params[p+1];
+				sigma[p/3] = params[p+2];
+			}
 		}
 
 		/**
@@ -193,7 +199,9 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * </ul>
 		 */
 		public double[] guess() {
-			return new double[] { norm, mean, sigma };
+			// TODO:
+			return null;
+			//return new double[] { norm, mean, sigma };
 		}
 
 		/**
@@ -387,8 +395,8 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 	private double[] stds;
 	private double[] norms;
 	
-	private double[] is;
-	private double[] i2s2;
+	private double[] is;  // 1*std
+	private double[] i2s2;// 1/(2*std^2)
 	
 	public GaussianArray(double[] means,
 					double[] stds,
@@ -398,8 +406,8 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 		this.means = means;
 		this.norms = norms;
 		for (int q = 0; q< means.length; q++) {
-			this.is[q]   = 1 / stds[q];
-			this.i2s2[q] = 0.5 * is[q] * is[q];
+			this.is  [q] = 1 / stds[q];
+			this.i2s2[q] = 0.5*is[q]*is[q];
 		}
 	}
 	
@@ -408,7 +416,7 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 		return value(x, means, stds, norms);
 	}
 	
-	private static double value(double x, 
+	private static double value(double   x, 
 								double[] means, 
 								double[] i2s2, 
 								double[] norms) {
@@ -432,14 +440,14 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 				throws NullArgumentException,
 				DimensionMismatchException,
 				NotStrictlyPositiveException {
-			validateParameters(pars);
 			
+			validateParameters(pars);
 			for (int i=0;i<pars.length;i++){
-				
 				final double diff = x - pars[1];
 				final double i2s2 = 1 / (2 * pars[2] * pars[2]);
 			} 
-			return GaussianArray.value(diff, pars[0], i2s2);
+			return null;
+			//return GaussianArray.value(diff, pars[0], i2s2);
 		}
 
 		@Override

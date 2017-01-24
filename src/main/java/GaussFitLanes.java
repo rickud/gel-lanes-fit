@@ -78,6 +78,7 @@ import org.apache.commons.math4.fitting.leastsquares.MultivariateJacobianFunctio
 import org.apache.commons.math4.geometry.euclidean.twod.Vector2D;
 import org.apache.commons.math4.linear.Array2DRowRealMatrix;
 import org.apache.commons.math4.linear.ArrayRealVector;
+import org.apache.commons.math4.linear.MatrixUtils;
 import org.apache.commons.math4.linear.RealMatrix;
 import org.apache.commons.math4.linear.RealVector;
 import org.apache.commons.math4.util.Pair;
@@ -273,6 +274,8 @@ public class GaussFitLanes implements
 	}
 		
 	private ImageProcessor makePlotsMontage(Plot[]plots, int rows){
+		if (Arrays.asList(plots).contains(null)) 
+			return null;
 		ImageProcessor ip = imp.getProcessor();
 		ImageProcessor plotsMontage = ip.duplicate();	
 		
@@ -342,31 +345,41 @@ public class GaussFitLanes implements
 			int[] maximaIdx = findMaxima(yvals, 0.01*NumberUtils.max(yvals), true);
 
 			// Define a Gaussian at each peak
-			double[] means = new double[maximaIdx.length];
-			double[] stds  = new double[maximaIdx.length];
-			double[] norms = new double[maximaIdx.length];
-			
+			double[] means      = new double[maximaIdx.length];
+			double[] stds       = new double[maximaIdx.length];
+			double[] norms      = new double[maximaIdx.length];
+			double[] guessStart = new double[3*maximaIdx.length]; // Array of parameters for Fitter
 			
 			for (int m=0; m<maximaIdx.length; m++) {
 				norms[m] = yvals[maximaIdx[m]];
 				means[m] = xvals[maximaIdx[m]];
 				stds [m] = 0.5;
+				guessStart[3*m]   = norms[m];
+				guessStart[3*m+1] = means[m];
+				guessStart[3*m+2] = stds [m];
 			}
+
 			WeightedObservedPoints obs = new WeightedObservedPoints();
 			for (int o=0;o<yvals.length; o++){
 				obs.add(xvals[o], yvals[o]);
 			}
-			double[] pars = GaussianArrayCurveFitter.create().fit(obs.toList());
+			double[] pars = GaussianArrayCurveFitter.create().withStartPoint(guessStart).fit(obs.toList());
 			
 			for (int b=0; b<maximaIdx.length; b++) {
 				double[] gauss = new double[xvals.length];
 				for (int c=0; c<xvals.length; c++) {
-					gauss[c] = new Gaussian.Parametric().value(xvals[c],pars[0+b*maximaIdx.length],pars[1+b*maximaIdx.length],pars[2+b*maximaIdx.length]);
+					gauss[c] = new GaussianArray.Parametric().value( xvals[c],
+															new double[] {pars[0+b*maximaIdx.length],
+																pars[1+b*maximaIdx.length],
+																pars[2+b*maximaIdx.length]} );
 				}
 				
 			}
-			
-			System.out.println(parameters);
+			String parStr = "";
+			for (int pp = 0; pp<pars.length; pp++){
+				parStr = pars[pp] +", ";
+			}
+			System.out.println(parStr);
 		}	
 
 
