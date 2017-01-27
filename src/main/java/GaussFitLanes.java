@@ -51,9 +51,6 @@ import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.beans.PropertyChangeEvent;
-import java.beans.PropertyChangeListener;
-import java.util.Arrays;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -72,35 +69,20 @@ import javax.swing.event.DocumentListener;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.commons.math4.analysis.MultivariateVectorFunction;
 import org.apache.commons.math4.analysis.function.Gaussian;
-import org.apache.commons.math4.fitting.GaussianCurveFitter;
 import org.apache.commons.math4.fitting.PolynomialCurveFitter;
 import org.apache.commons.math4.fitting.WeightedObservedPoints;
-import org.apache.commons.math4.fitting.leastsquares.LeastSquaresBuilder;
-import org.apache.commons.math4.fitting.leastsquares.LeastSquaresOptimizer;
-import org.apache.commons.math4.fitting.leastsquares.LeastSquaresProblem;
-import org.apache.commons.math4.fitting.leastsquares.LevenbergMarquardtOptimizer;
-import org.apache.commons.math4.fitting.leastsquares.MultivariateJacobianFunction;
-import org.apache.commons.math4.geometry.euclidean.twod.Vector2D;
-import org.apache.commons.math4.linear.Array2DRowRealMatrix;
 import org.apache.commons.math4.linear.ArrayRealVector;
-import org.apache.commons.math4.linear.MatrixUtils;
-import org.apache.commons.math4.linear.RealMatrix;
-import org.apache.commons.math4.linear.RealVector;
-import org.apache.commons.math4.util.Pair;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.command.Previewable;
 import org.scijava.convert.ConvertService;
-import org.scijava.jython.shaded.jline.ArgumentCompletor.ArgumentList;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
 
 import ij.IJ;
 import ij.ImagePlus;
-import ij.Prefs;
 import ij.WindowManager;
 import ij.gui.ImageCanvas;
 import ij.gui.ImageWindow;
@@ -111,9 +93,8 @@ import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 import ij.io.Opener;
 import ij.measure.Calibration;
-import ij.measure.CurveFitter;
 import ij.plugin.frame.RoiManager;
-import ij.process.ByteProcessor;
+import ij.process.ColorProcessor;
 import ij.process.ImageProcessor;
 import ij.util.Tools;
 import io.scif.services.DatasetIOService;
@@ -164,16 +145,25 @@ public class GaussFitLanes implements
 
 	public void init() {
 		imp = IJ.getImage();
+		roiMan = RoiManager.getInstance(); 
+		if(roiMan==null) { 
+			roiMan = new RoiManager(true); 
+		} 
 		roiMan.runCommand("Show All");
 		roiMan.runCommand("Labels");
         
 		cd = new CustomDialog();		
 		cd.showMainDialog();
 		
+		IJ.wait(50); //delay to make sure ROIs have updated
 		getProfilePlots();
 		ImageProcessor ip = makePlotsMontage(rows);  
         plotImage = new ImagePlus("Profile of "+imp.getShortTitle(),ip);
-        plotImage.show();
+
+        if (ip != null) plotImage.setProcessor(null, ip);
+		if (plotImage.getRoi()!=null) plotImage.deleteRoi();
+		plotImage.show();
+		imp.getCanvas().requestFocus();
         
         IJ.wait(50);
         ImageWindow iwin = imp.getWindow();
@@ -200,15 +190,8 @@ public class GaussFitLanes implements
 	
     // the background thread for plotting.
 	public void run() {
-		if (setup) { init(); setup = false;}
-		
-		IJ.wait(50);
-		//delay to make sure the roi has been update
-		ImageProcessor ip = makePlotsMontage(rows); //here
-		//doFit(getProfilePlots());
-		if (ip != null) plotImage.setProcessor(null, ip);
-		if (plotImage.getRoi()!=null) plotImage.deleteRoi();
-		imp.getCanvas().requestFocus();
+		if (setup) { init(); setup = false;}		
+
 		synchronized(this) {
 //				if (doUpdate) {
 //					doUpdate = false;               //and loop again
@@ -280,26 +263,23 @@ public class GaussFitLanes implements
 	}
 		
 	private ImageProcessor makePlotsMontage(int rows){
-		// get a profile for each ROI
+		// Construct the plot image
         if (ArrayUtils.contains(plots,null)) {                          // no profile?
             IJ.error("Gauss Fit","No Profiles Obtained"); return null;
         }
-		ImageProcessor ip = imp.getProcessor();
-		ImageProcessor plotsMontage = ip.duplicate();	
 		
 		int cols = Math.floorDiv(plots.length, rows);
 		if (Math.floorMod(plots.length, rows)!=0) cols++;
 		
 		int plotSpacing = 5; // black border
-		ImageProcessor plotIpAll = plots[0].getProcessor().duplicate(); // here OOB
-		int plotW = plotIpAll.getWidth(); int plotH = plotIpAll.getHeight();
+		int plotW = plots[0].getProcessor().getWidth(); int plotH = plots[0].getProcessor().getHeight();
 		int plotsWidth  = plotSpacing + cols*( plotW + plotSpacing );
 		int plotsHeight = plotSpacing + rows*( plotH + plotSpacing );
 		ImageProcessor blank = plots[0].getProcessor().duplicate();
 		IJ.setForegroundColor(255,255,255);
 		blank.fill();
 
-		plotsMontage = plotIpAll.createProcessor(plotsWidth, plotsHeight);
+		ImageProcessor plotsMontage = new ColorProcessor(plotsWidth, plotsHeight);
 		for (int c = 0; c<cols; c++) {
 			for (int r = 0; r<rows; r++) {
 				if (c*rows+r<plots.length){
@@ -321,16 +301,16 @@ public class GaussFitLanes implements
 	}
     
 	private void doFit() {
-		for (int i = 0; i<plots.length; i++){
-			
+		//Reset the plots window
+		getProfilePlots();
+		makePlotsMontage(rows);
+		
+		for (int i = 0; i<plots.length; i++) {
 			float[] xvalsf   = plots[i].getXValues();
 			float[] yvalsf   = plots[i].getYValues();
 			double[] xvals   = new double[xvalsf.length];
 			double[] yvals   = new double[yvalsf.length];
-			
-			plots[i].setColor(Color.black);
-			plots[i].addPoints(xvals, yvals, PlotWindow.LINE);
-			
+					
 			WeightedObservedPoints obs   = new WeightedObservedPoints(); // All Y
 			WeightedObservedPoints obsbg = new WeightedObservedPoints(); // Only minima for BG
 			for (int o = 0 ; o<xvals.length; o++) {
@@ -338,7 +318,11 @@ public class GaussFitLanes implements
 				yvals[o] = (double) yvalsf[o];
 				obs.add(xvals[o], yvals[o]);
 			}
-			double tolbg = 0.9*(NumberUtils.max(yvals)-NumberUtils.min(yvals));
+			plots[i].setColor(Color.black);
+			plots[i].addPoints(xvals, yvals, PlotWindow.LINE);
+			double tolbg = cd.getTolBG()*(NumberUtils.max(yvals)-NumberUtils.min(yvals));
+			double tolpk = cd.getTolPK()*(NumberUtils.max(yvals)-NumberUtils.min(yvals));
+			
 			int[] minimaIdx = findMaxima(new ArrayRealVector(yvals).mapMultiplyToSelf(-1).toArray(), 
 											tolbg, true);
 			
@@ -351,22 +335,35 @@ public class GaussFitLanes implements
 				obsbg.add(xvalsbg[o], yvalsbg[o]);
 			}
 			
-			// fit background, x^2 poly
-			double[] pars_bg = PolynomialCurveFitter.create(3).fit(obsbg.toList());
+			// fit background poly
 			double[] bg = new double[xvals.length];
-			for (int b=0; b<xvals.length; b++) {
-				bg[b] = pars_bg[0] + xvals[b]*(pars_bg[1] + xvals[b]*(pars_bg[2] + xvals[b]*pars_bg[3]));
-			}
-			
-			for (int b=0; b<xvals.length; b++) {
-				if (yvals[b] > bg[b]) {
-					yvals[b] -= bg[b];
-				} else {
-					yvals[b] = 0;
+			if (minimaIdx.length>3) {
+				double[] pars_bg = PolynomialCurveFitter.create(3).fit(obsbg.toList());
+				for (int b=0; b<xvals.length; b++) {
+					bg[b] = pars_bg[0] + xvals[b]*(pars_bg[1] + xvals[b]*(pars_bg[2] + xvals[b]*pars_bg[3]));
+				}
+			} else if (minimaIdx.length>2) {
+				double[] pars_bg = PolynomialCurveFitter.create(2).fit(obsbg.toList());
+				for (int b=0; b<xvals.length; b++) {
+					bg[b] = pars_bg[0] + xvals[b]*(pars_bg[1] + xvals[b]*pars_bg[2]);
+				}
+			} else if (minimaIdx.length>1) {
+				double[] pars_bg = PolynomialCurveFitter.create(1).fit(obsbg.toList());
+				for (int b=0; b<xvals.length; b++) {
+					bg[b] = pars_bg[0] + xvals[b]*pars_bg[1];
+				}
+			} else {
+				for (int b=0; b<xvals.length; b++) {
+					bg[b] = NumberUtils.min(yvals);
 				}
 			}
-			 
-			int[] maximaIdx = findMaxima(yvals, 0.1*tolbg, true);
+
+			for (int b=0; b<xvals.length; b++) {
+				Math.max(yvals[b] -= bg[b], 0);
+			}
+
+			// Local maxima where the peaks are
+			int[] maximaIdx = findMaxima(yvals, tolpk, true);
 
 			// Define a Gaussian at each peak
 			double[] means      = new double[maximaIdx.length];
@@ -378,7 +375,7 @@ public class GaussFitLanes implements
 			for (int m=0; m<maximaIdx.length; m++) {
 				norms[m] = yvals[maximaIdx[m]];
 				means[m] = xvals[maximaIdx[m]];
-				stds [m] = 0.5;
+				stds [m] = 0.1;
 				guessStart[3*m]   = norms[m];
 				guessStart[3*m+1] = means[m];
 				guessStart[3*m+2] = stds [m];
@@ -404,14 +401,24 @@ public class GaussFitLanes implements
 			}
 			
 			plots[i].setColor(Color.blue);
-			plots[i].addPoints(xvals, bg, PlotWindow.LINE);
-			
+			plots[i].addPoints(xvals, bg, PlotWindow.LINE);		
 			plots[i].setLimitsToFit(true);
-			String parStr = "";
+			
+			String parStr = String.format("Lane %1$d-par: ", i);
+			String maxStr = String.format("Lane %1$d-max: ", i);;
+			String minStr = String.format("Lane %1$d-min: ", i);;
 			for (int pp = 0; pp<pars.length; pp++){
-				parStr += pars[pp] +", ";
+				parStr += String.format("%1$.2f, ", pars[pp]);
 			}
-			System.out.println(parStr.substring(0,parStr.length()-1));
+			for (int pp = 0; pp<maximaIdx.length; pp++){
+				maxStr += String.format("[%1$.2f, %2$.2f] ", xvals[maximaIdx[pp]], yvals[maximaIdx[pp]]);
+			}
+			for (int pp = 0; pp<minimaIdx.length; pp++){
+				minStr += String.format("[%1$.2f, %2$.2f] ", xvals[minimaIdx[pp]], yvals[minimaIdx[pp]]);
+			}
+			System.out.println(parStr.substring(0,parStr.length()-2));
+			System.out.println(maxStr.substring(0,maxStr.length()));
+			System.out.println(minStr.substring(0,minStr.length()));
 		}	
 	}
 	
@@ -496,7 +503,7 @@ public class GaussFitLanes implements
     public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
-		ImagePlus imp = new Opener().openImage("src//main//resources//SampleImages//All[01-17-2017].tif");
+		ImagePlus imp = new Opener().openImage("src//main//resources//sample//All[01-17-2017].tif");
 		// display it via ImageJ
 		imp.show();
 		// wrap it into an ImgLib image (no copying)
@@ -523,17 +530,19 @@ public class GaussFitLanes implements
 		int IH = imp.getWidth();
 		
 		// Default lane size/offset (Just center 4 lanes in the image)
-		int nLanes = 7;
+		int nLanes = 8;
 		int LW     = (int) Math.round(0.9*IW/nLanes);
 		int LH     = (int) Math.round(IH*0.9);
 		int LSp    = (int) Math.round((IW-LW*nLanes)/(nLanes+1));
 		int LHOff  = LSp;
 		int LVOff  = (IH-LH)/2;
 		
-		private ImagePlus  impCd = imp;
+		double tolBG = 0.5; 
+		double tolPK = 0.1;
+
 		private JPanel     textPanel;
-		private JLabel     labelNLanes = new JLabel("");
-		private JTextField textNLanes= new JTextField(3); 
+		private JLabel     labelNLanes;
+		private JTextField textNLanes; 
 		
 		private JPanel    sliderPanel;
 		private JSlider   sliderW;
@@ -545,6 +554,11 @@ public class GaussFitLanes implements
 		private JPanel    buttonPanel;
 		private JButton   buttonMeasure;
 		private JCheckBox chkBoxBands;
+		private JLabel     labelTolBG;
+		private JLabel     labelTolPK;
+		private JTextField textTolBG;
+		private JTextField textTolPK;
+		
 		private JPanel    dialogPanel;
 		private JFrame    frame = new JFrame("Gel Lanes Gauss Fitting:" + imp.getTitle());
 		
@@ -552,12 +566,13 @@ public class GaussFitLanes implements
 			textPanel = new JPanel();
 			textPanel.setLayout(new FlowLayout(FlowLayout.LEADING));
 			
+			textNLanes = new JTextField(3);
 			textNLanes.setText("" + nLanes);
 			textNLanes.setVisible(true);
-			textPanel.add(textNLanes);
 			textNLanes.getDocument().addDocumentListener(this);
+			textPanel.add(textNLanes);
 
-			labelNLanes.setText("Number of Lanes");
+			labelNLanes = new JLabel("Number of Lanes");
 			textPanel.add(labelNLanes);
 			
 			sliderPanel = new JPanel();
@@ -584,6 +599,14 @@ public class GaussFitLanes implements
 			//chkBoxBands.setVisible(false);
 			chkBoxBands.setEnabled(false);
 			buttonPanel.add(chkBoxBands);
+			labelTolBG = new JLabel("Tol BG");
+			labelTolPK = new JLabel("Tol PK");
+			textTolBG  = new JTextField(3); textTolBG.setText("" + tolBG);
+			textTolPK  = new JTextField(3); textTolPK.setText("" + tolPK);
+			buttonPanel.add(labelTolBG);
+			buttonPanel.add(textTolBG);
+			buttonPanel.add(textTolPK);
+			buttonPanel.add(labelTolPK);
 			
 			dialogPanel = new JPanel();
 			dialogPanel.setBackground(Color.lightGray);
@@ -702,6 +725,13 @@ public class GaussFitLanes implements
 				roiMan.reset();
 				imp.deleteRoi();
 			}
+
+			try {
+				//IJ.wait(50); //make sure the user has finished entering a number 
+				nLanes = (int) Integer.parseInt(textNLanes.getText().trim());
+			} catch (NumberFormatException e1) {
+				//log.error("Cannot parse Number of Lanes: \""+textNLanes.getText().trim()+ "\"");
+			}
 			for (int i=0;i<nLanes;i++) {
 				Roi roi = new Roi(lhoff+lw*i+lsp*i, lvoff, lw, lh);
 				//roi.setFillColor(new Color(r/255,g/255,b/255,alpha));
@@ -713,15 +743,29 @@ public class GaussFitLanes implements
 //			}
 		}
 
-		private void readNLanes(){
+		public int getNLanes(){
+			return nLanes;
+		}
+		
+		public double getTolBG(){
 			try {
-				IJ.wait(1000); //make sure the user has finished entering a number 
-				nLanes = (int) Integer.parseInt(textNLanes.getText().trim());
-				reDrawROIs(imp,LW,LH,LSp,LHOff,LVOff);
+				tolBG = (double) Double.parseDouble(textTolBG.getText().trim());
+				return tolBG;
 			} catch (NumberFormatException e1) {
-				//log.error("Cannot parse Number of Lanes: \""+textNLanes.getText().trim()+ "\"");
+				return 1.0;
 			}
 		}
+		
+		public double getTolPK(){
+			try {
+				tolPK = (double) Double.parseDouble(textTolPK.getText().trim());
+				return tolPK;
+			} catch (NumberFormatException e1) {
+				//log.error("Cannot parse Number of Lanes: \""+textNLanes.getText().trim()+ "\"");
+				return 1.0;
+			}
+		}
+		
 	    boolean isRoi() {
 	        if (imp==null)
 	            return false;
@@ -734,11 +778,11 @@ public class GaussFitLanes implements
 		
 	    // TextField Listeners
 		@Override
-	    public void changedUpdate(DocumentEvent e) {readNLanes();}
+	    public void changedUpdate(DocumentEvent e) {reDrawROIs(imp,LW,LH,LSp,LHOff,LVOff);}
 		@Override
-		public void removeUpdate (DocumentEvent e) {readNLanes();}
+		public void removeUpdate (DocumentEvent e) {reDrawROIs(imp,LW,LH,LSp,LHOff,LVOff);}
 		@Override
-	    public void insertUpdate (DocumentEvent e) {readNLanes();}
+	    public void insertUpdate (DocumentEvent e) {reDrawROIs(imp,LW,LH,LSp,LHOff,LVOff);}
 
 		// Measure Button
 		@Override
@@ -746,6 +790,7 @@ public class GaussFitLanes implements
 			if (e.getSource().equals(buttonMeasure)){
 				doFit();
 				plotImage.setProcessor(null, makePlotsMontage(rows));
+				if (plotImage.getRoi()!=null) plotImage.deleteRoi();
 				chkBoxBands.setEnabled(true);
 			}
 		}

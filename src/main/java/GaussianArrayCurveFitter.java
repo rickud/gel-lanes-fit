@@ -401,9 +401,9 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		
 		@Override
 		public RealVector validate(RealVector pars) {
-			for (int i = 0; i<pars.getDimension(); i+=3) {
-			    if (pars.getEntry(i) < 0)  
-			    	pars.setEntry(i, 0);;
+			for (int i = 0; i<pars.getDimension(); i++) {
+			    if ((i % 3 == 0 || i % 3 == 1) && pars.getEntry(i) < 0)  
+			    	pars.setEntry(i, 0);
 			}
 			return pars;
 		}

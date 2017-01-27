@@ -11,7 +11,7 @@
 					<folderInfo id="cdt.managedbuild.toolchain.gnu.cygwin.base.400875928.1450641272" name="/" resourcePath="">
 						<toolChain errorParsers="" id="cdt.managedbuild.toolchain.gnu.cygwin.base.614811662" name="Cygwin GCC" superClass="cdt.managedbuild.toolchain.gnu.cygwin.base">
 							<targetPlatform archList="all" binaryParser="" id="cdt.managedbuild.target.gnu.platform.cygwin.base.1634052382" name="Debug Platform" osList="win32" superClass="cdt.managedbuild.target.gnu.platform.cygwin.base"/>
-							<builder command="make" errorParsers="" id="cdt.managedbuild.target.gnu.builder.cygwin.base.561628909" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" superClass="cdt.managedbuild.target.gnu.builder.cygwin.base"/>
+							<builder command="make" enableCleanBuild="false" enabledIncrementalBuild="false" errorParsers="" id="cdt.managedbuild.target.gnu.builder.cygwin.base.561628909" keepEnvironmentInBuildfile="false" managedBuildOn="false" name="Gnu Make Builder" superClass="cdt.managedbuild.target.gnu.builder.cygwin.base"/>
 							<tool errorParsers="" id="cdt.managedbuild.tool.gnu.assembler.cygwin.base.1328720" name="GCC Assembler" superClass="cdt.managedbuild.tool.gnu.assembler.cygwin.base">
 								<inputType id="cdt.managedbuild.tool.gnu.assembler.input.1942194261" superClass="cdt.managedbuild.tool.gnu.assembler.input"/>
 							</tool>
@@ -39,14 +39,20 @@
 	<storageModule moduleId="cdtBuildSystem" version="4.0.0">
 		<project id="GaussianFit.null.753687323" name="GaussianFit"/>
 	</storageModule>
-	<storageModule moduleId="scannerConfiguration">
-		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
-	</storageModule>
 	<storageModule moduleId="org.eclipse.cdt.core.LanguageSettingsProviders"/>
 	<storageModule moduleId="org.eclipse.cdt.make.core.buildtargets"/>
 	<storageModule moduleId="refreshScope" versionNumber="2">
 		<configuration configurationName="Default">
 			<resource resourceType="PROJECT" workspacePath="/GaussianFit"/>
 		</configuration>
+	</storageModule>
+	<storageModule moduleId="scannerConfiguration">
+		<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.cygwin.base.400875928;cdt.managedbuild.toolchain.gnu.cygwin.base.400875928.1450641272;cdt.managedbuild.tool.gnu.c.compiler.cygwin.base.731863085;cdt.managedbuild.tool.gnu.c.compiler.input.cygwin.849216547">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
+		<scannerConfigBuildInfo instanceId="cdt.managedbuild.toolchain.gnu.cygwin.base.400875928;cdt.managedbuild.toolchain.gnu.cygwin.base.400875928.1450641272;cdt.managedbuild.tool.gnu.cpp.compiler.cygwin.base.1318436998;cdt.managedbuild.tool.gnu.cpp.compiler.input.cygwin.1383803276">
+			<autodiscovery enabled="true" problemReportingEnabled="true" selectedProfileId=""/>
+		</scannerConfigBuildInfo>
 	</storageModule>
 </cproject>
