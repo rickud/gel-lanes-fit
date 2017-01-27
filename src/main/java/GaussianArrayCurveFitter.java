@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.math4.analysis.ParametricUnivariateFunction;
 import org.apache.commons.math4.analysis.differentiation.DerivativeStructure;
 import org.apache.commons.math4.analysis.differentiation.UnivariateDifferentiableFunction;
@@ -16,10 +17,11 @@ import org.apache.commons.math4.exception.OutOfRangeException;
 import org.apache.commons.math4.exception.ZeroException;
 import org.apache.commons.math4.exception.util.LocalizedFormats;
 import org.apache.commons.math4.fitting.AbstractCurveFitter;
-import org.apache.commons.math4.fitting.GaussianCurveFitter;
 import org.apache.commons.math4.fitting.WeightedObservedPoint;
 import org.apache.commons.math4.fitting.leastsquares.LeastSquaresBuilder;
 import org.apache.commons.math4.fitting.leastsquares.LeastSquaresProblem;
+import org.apache.commons.math4.fitting.leastsquares.ParameterValidator;
+import org.apache.commons.math4.linear.ArrayRealVector;
 import org.apache.commons.math4.linear.DiagonalMatrix;
 import org.apache.commons.math4.linear.RealVector;
 import org.apache.commons.math4.util.FastMath;
@@ -130,11 +132,15 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		final double[] startPoint = initialGuess != null ?
 				initialGuess :
 					// Compute estimation.
+					// TODO: Check consistency with guessing function
 					new ParameterGuesser(observations, initialGuess.length/3).guess();
+		
+		final GaussianArrayParameterValidator parValid = new GaussianArrayParameterValidator();
 
 		// Return a new least squares problem set up to fit a Gaussian curve to the
 		// observed points.
 		return new LeastSquaresBuilder().
+				parameterValidator(parValid).
 				maxEvaluations(Integer.MAX_VALUE).
 				maxIterations(maxIter).
 				start(startPoint).
@@ -178,9 +184,9 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 			final List<WeightedObservedPoint> sorted = sortObservations(observations);
 			final double[] params = basicGuess(sorted.toArray(new WeightedObservedPoint[0]));
-			norm = new double[gaussN];
-			mean = new double[gaussN];
-			sigma= new double[gaussN];
+			norm  = new double[gaussN];
+			mean  = new double[gaussN];
+			sigma = new double[gaussN];
 			for (int p=0; p<params.length; p++ ){
 				norm [p/3] = params[p];
 				mean [p/3] = params[p+1];
@@ -255,6 +261,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * sigma).
 		 */
 		private double[] basicGuess(WeightedObservedPoint[] points) {
+			// TODO: Guess multiple peaks
 			final int maxYIdx = findMaxY(points);
 			final double n = points[maxYIdx].getY();
 			final double m = points[maxYIdx].getX();
@@ -388,19 +395,32 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					(value >= boundary2 && value <= boundary1);
 		}
 	}
+	
+	public static class GaussianArrayParameterValidator 
+						implements ParameterValidator {
+		
+		@Override
+		public RealVector validate(RealVector pars) {
+			for (int i = 0; i<pars.getDimension(); i+=3) {
+			    if (pars.getEntry(i) < 0)  
+			    	pars.setEntry(i, 0);;
+			}
+			return pars;
+		}
+		
+	}
 }
 
 class GaussianArray implements UnivariateDifferentiableFunction {
 	private double[] means;
-	private double[] stds;
 	private double[] norms;
 	
 	private double[] is;  // 1*std
 	private double[] i2s2;// 1/(2*std^2)
 	
-	public GaussianArray(double[] means,
-					double[] stds,
-					double[] norms)
+	public GaussianArray(	double[] norms,
+							double[] means,
+							double[] stds)
 					throws NotStrictlyPositiveException {
 	
 		this.means = means;
@@ -413,65 +433,119 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 	
 	@Override
 	public double value(double x) {
-		return value(x, means, stds, norms);
+		RealVector diffs = new ArrayRealVector(means);
+		diffs.mapAddToSelf(-x).mapMultiplyToSelf(-1);
+		return value(diffs.toArray(), norms, i2s2);
 	}
 	
-	private static double value(double   x, 
-								double[] means, 
-								double[] i2s2, 
-								double[] norms) {
+	private static double value(double[] xMinusMean, 
+								double[] norms, 
+								double[] i2s2) {
 		double output = 0;
-		for (int i=0;i<means.length;i++) {
-			output += norms[i] * FastMath.exp(-(x-means[i]) * (x-means[i]) * i2s2[i]);
+		for (int i=0;i<xMinusMean.length;i++) {
+			output += norms[i] * FastMath.exp(-xMinusMean[i] * xMinusMean[i] * i2s2[i]);
 		}
 		return output;
 	} 
 	
 	@Override
-	public DerivativeStructure value(DerivativeStructure arg0) throws DimensionMismatchException {
+	public DerivativeStructure value(DerivativeStructure t) throws DimensionMismatchException {
 		// TODO Auto-generated method stub
+		//final double[] u = new double[] {is.multiplyToSelf(means.subtractToself(t.getValue()).multiplyToSelf(-1)).toArray()};
+		
+        double[] f = new double[t.getOrder() + 1];
+
+        // the nth order derivative of the Gaussian has the form:
+        // dn(g(x)/dxn = (norm / s^n) P_n(u) exp(-u^2/2) with u=(x-m)/s
+        // where P_n(u) is a degree n polynomial with same parity as n
+        // P_0(u) = 1, P_1(u) = -u, P_2(u) = u^2 - 1, P_3(u) = -u^3 + 3 u...
+        // the general recurrence relation for P_n is:
+        // P_n(u) = P_(n-1)'(u) - u P_(n-1)(u)
+        // as per polynomial parity, we can store coefficients of both P_(n-1) and P_n in the same array
 		return null;
 	}
 	
+	/**
+	 * Parametric function where the input array contains the parameters of
+	 * the Gaussian, ordered as follows:
+	 * <ul>
+	 *  <li>Norm</li>
+	 *  <li>Mean</li>
+	 *  <li>Standard deviation</li>
+	 * </ul>
+	 */
 	public static class Parametric implements ParametricUnivariateFunction {
-
-		@Override
-		public double[] gradient(double x, double... pars) 
-				throws NullArgumentException,
-				DimensionMismatchException,
-				NotStrictlyPositiveException {
-			
-			validateParameters(pars);
-			for (int i=0;i<pars.length;i++){
-				final double diff = x - pars[1];
-				final double i2s2 = 1 / (2 * pars[2] * pars[2]);
-			} 
-			return null;
-			//return GaussianArray.value(diff, pars[0], i2s2);
-		}
-
+		/**
+		 * Computes the value of the Gaussian at {@code x}.
+		 *
+		 * @param x Value for which the function must be computed.
+		 * @param param Values of norm, mean and standard deviation,
+		 * 		passed in subsequent triplets.
+		 * @return the value of the function.
+		 * @throws NullArgumentException if {@code param} is {@code null}.
+		 * @throws DimensionMismatchException if the size of {@code param} is
+		 * not a multiple of 3.
+		 * @throws NotStrictlyPositiveException if {@code param[2]} is negative.
+		 */
 		@Override
 		public double value(double x, double... pars) {
 			validateParameters(pars);
+			final double[] diffs = new double[pars.length / 3];
 			final double[] norms = new double[pars.length / 3];
-			final double[] means = new double[pars.length / 3];
-			
-			final double[] is    = new double[pars.length / 3];
 			final double[] i2s2  = new double[pars.length / 3];
 			
-			int i = 0;
-			while (i<pars.length-2) {
-				norms[i/3] = pars[i];
-				means[i/3] = pars[i+1];
-
-				is   [i/3] = 1 / pars[i+2];
-				i2s2 [i/3] = 0.5 * is[i/3] * is[i/3];
-				i += 3;
+			for (int i = 0; i<pars.length; i+=3) {
+				diffs[i/3] = x - pars[i+1];
+				norms[1/3] = pars[i];
+				i2s2 [i/3] = 1/(2*pars[i+2] * pars[i+2]);
 			}
-			return GaussianArray.value(x,norms,means,i2s2);
-			
+			return GaussianArray.value(diffs,norms,i2s2);
 		}
 		
+        /**
+         * Computes the value of the gradient at {@code x}.
+         * The components of the gradient vector are the partial
+         * derivatives of the function with respect to each of the
+         * <em>parameters</em> (norm, mean and standard deviation,
+         * for each Gaussian in the array).
+         *
+         * @param x Value at which the gradient must be computed.
+         * @param param Values of norm, mean and standard deviation triplets.
+         * @return the gradient vector at {@code x}.
+         * @throws NullArgumentException if {@code param} is {@code null}.
+         * @throws DimensionMismatchException if the size of {@code param} is
+         * not 3.
+         * @throws NotStrictlyPositiveException if {@code param[2]} is negative.
+         */
+		@Override
+		public double[] gradient(double x, double ... param)
+                throws NullArgumentException,
+                       DimensionMismatchException,
+                       NotStrictlyPositiveException {
+                validateParameters(param);
+                double[] out = new double[param.length];
+                
+            	final double[] norm  = new double[param.length/3];
+            	final double[] diff  = new double[param.length/3];
+            	final double[] sigma = new double[param.length/3];
+            	final double[] i2s2  = new double[param.length/3];
+                
+                for (int gg=0; gg<param.length; gg+=3) {
+                	norm [gg/3] =     param[gg]  ;
+                	diff [gg/3] = x - param[gg+1];
+                	sigma[gg/3] =     param[gg+2];
+                	i2s2 [gg/3] = 1 / (2 * sigma[gg/3] * sigma[gg/3]);
+                	
+                	// Only 1 Gaussian function at a time contributes to the gradient
+                	final double n = new Gaussian(diff[gg/3], 1, i2s2[gg/3]).value(x);
+                	final double m = norm[gg/3] * n * 2 * i2s2[gg/3] * diff[gg/3];
+                	final double s = m * diff[gg/3] / sigma[gg/3];
+                	out[gg]   = n;
+                	out[gg+1] = m;
+                	out[gg+2] = s;
+                }
+                return out;
+            }
 
 		/**
 		 * Validates parameters to ensure they are appropriate for the evaluation of
