@@ -4,7 +4,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.math4.analysis.ParametricUnivariateFunction;
 import org.apache.commons.math4.analysis.differentiation.DerivativeStructure;
 import org.apache.commons.math4.analysis.differentiation.UnivariateDifferentiableFunction;
@@ -143,6 +142,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				parameterValidator(parValid).
 				maxEvaluations(Integer.MAX_VALUE).
 				maxIterations(maxIter).
+				lazyEvaluation(false).
 				start(startPoint).
 				target(target).
 				weight(new DiagonalMatrix(weights)).
@@ -402,8 +402,13 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		@Override
 		public RealVector validate(RealVector pars) {
 			for (int i = 0; i<pars.getDimension(); i++) {
-			    if ((i % 3 == 0 || i % 3 == 1) && pars.getEntry(i) < 0)  
+				// {0=Norm, 1=Mean, 2=Sigma}
+			    if ((i % 3 == 0 || i % 3 == 1) && pars.getEntry(i) < 0.0)  
 			    	pars.setEntry(i, 0);
+			    if ((i % 3 == 2) && pars.getEntry(i) > 5.0)  
+			    	pars.setEntry(i, 5.0);
+			    if ((i % 3 == 0) && pars.getEntry(i) > 65535.0)  
+			    	pars.setEntry(i, 65535.0);
 			}
 			return pars;
 		}
@@ -537,7 +542,7 @@ class GaussianArray implements UnivariateDifferentiableFunction {
                 	i2s2 [gg/3] = 1 / (2 * sigma[gg/3] * sigma[gg/3]);
                 	
                 	// Only 1 Gaussian function at a time contributes to the gradient
-                	final double n = new Gaussian(diff[gg/3], 1, i2s2[gg/3]).value(x);
+                	final double n = new Gaussian(1, diff[gg/3], i2s2[gg/3]).value(x);
                 	final double m = norm[gg/3] * n * 2 * i2s2[gg/3] * diff[gg/3];
                 	final double s = m * diff[gg/3] / sigma[gg/3];
                 	out[gg]   = n;

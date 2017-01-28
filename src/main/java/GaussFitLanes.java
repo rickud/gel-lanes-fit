@@ -70,6 +70,7 @@ import javax.swing.event.DocumentListener;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.math4.analysis.function.Gaussian;
+import org.apache.commons.math4.fitting.GaussianCurveFitter;
 import org.apache.commons.math4.fitting.PolynomialCurveFitter;
 import org.apache.commons.math4.fitting.WeightedObservedPoints;
 import org.apache.commons.math4.linear.ArrayRealVector;
@@ -323,8 +324,8 @@ public class GaussFitLanes implements
 			double tolbg = cd.getTolBG()*(NumberUtils.max(yvals)-NumberUtils.min(yvals));
 			double tolpk = cd.getTolPK()*(NumberUtils.max(yvals)-NumberUtils.min(yvals));
 			
-			int[] minimaIdx = findMaxima(new ArrayRealVector(yvals).mapMultiplyToSelf(-1).toArray(), 
-											tolbg, true);
+			int[] minimaIdx = findMaxima(new ArrayRealVector(yvals).mapMultiplyToSelf(-1.0).toArray(), 
+											tolbg, true); // Actually find MINIMA
 			
 			double[] xvalsbg = new double[minimaIdx.length]; // Valleys to determine BG
 			double[] yvalsbg = new double[minimaIdx.length];
@@ -336,30 +337,30 @@ public class GaussFitLanes implements
 			}
 			
 			// fit background poly
+			int max_deg = 8;
+			int deg = Math.min(minimaIdx.length-1, max_deg);
 			double[] bg = new double[xvals.length];
-			if (minimaIdx.length>3) {
-				double[] pars_bg = PolynomialCurveFitter.create(3).fit(obsbg.toList());
+			
+			if (minimaIdx.length>max_deg+1) {
+				double[] pars_bg = GaussianCurveFitter.create().fit(obsbg.toList());
 				for (int b=0; b<xvals.length; b++) {
-					bg[b] = pars_bg[0] + xvals[b]*(pars_bg[1] + xvals[b]*(pars_bg[2] + xvals[b]*pars_bg[3]));
-				}
-			} else if (minimaIdx.length>2) {
-				double[] pars_bg = PolynomialCurveFitter.create(2).fit(obsbg.toList());
-				for (int b=0; b<xvals.length; b++) {
-					bg[b] = pars_bg[0] + xvals[b]*(pars_bg[1] + xvals[b]*pars_bg[2]);
-				}
-			} else if (minimaIdx.length>1) {
-				double[] pars_bg = PolynomialCurveFitter.create(1).fit(obsbg.toList());
-				for (int b=0; b<xvals.length; b++) {
-					bg[b] = pars_bg[0] + xvals[b]*pars_bg[1];
+					bg[b] = new Gaussian(pars_bg[0], pars_bg[1], pars_bg[2]).value(xvals[b]);
+					//bg[b] = pars_bg[0] + xvals[b]*(pars_bg[1] + xvals[b]*(pars_bg[2] + xvals[b]*pars_bg[3]));
 				}
 			} else {
+				double[] pars_bg = PolynomialCurveFitter.create(deg).fit(obsbg.toList());
 				for (int b=0; b<xvals.length; b++) {
-					bg[b] = NumberUtils.min(yvals);
+					if (deg == 0) {
+						bg[b] = NumberUtils.min(yvals);
+					} else {
+						for (int p = deg; p > 0; p--){
+							bg[b] = pars_bg[p-1] + (xvals[b] * bg[b]);
+						}
+					}
 				}
 			}
-
 			for (int b=0; b<xvals.length; b++) {
-				Math.max(yvals[b] -= bg[b], 0);
+				//yvals[b] =  Math.max(yvals[b] -= bg[b], 0);
 			}
 
 			// Local maxima where the peaks are
@@ -375,14 +376,17 @@ public class GaussFitLanes implements
 			for (int m=0; m<maximaIdx.length; m++) {
 				norms[m] = yvals[maximaIdx[m]];
 				means[m] = xvals[maximaIdx[m]];
-				stds [m] = 0.1;
+				stds [m] = 0.3;
 				guessStart[3*m]   = norms[m];
 				guessStart[3*m+1] = means[m];
 				guessStart[3*m+2] = stds [m];
 			}
 
 			//double[] pars = GaussianCurveFitter.create().withStartPoint(ArrayUtils.subarray(guessStart, 0, 3)).fit(obs.toList());
-			double[] pars  = GaussianArrayCurveFitter.create().withStartPoint(guessStart).fit(obs.toList());
+			double[] pars  = GaussianArrayCurveFitter.
+					create().withStartPoint(guessStart).
+					withMaxIterations(10000).
+					fit(obs.toList());
 			double[] gauss = new double[xvals.length];
 			if (pars.length != maximaIdx.length*3) {
 				System.out.println("Par number mismatch: " +
@@ -394,21 +398,26 @@ public class GaussFitLanes implements
 			for (int b=0; b<maximaIdx.length; b++){ // plot one gaussian for each peak
 				Gaussian g = new Gaussian(pars[b*3], pars[b*3+1], pars[b*3+2]);
 				for (int c=0; c<xvals.length; c++) {
-					gauss[c] = g.value(xvals[c])+bg[c];
+					gauss[c] = g.value(xvals[c]); //+bg[c];
 				}
 				plots[i].setColor(Color.red);
 				plots[i].addPoints(xvals, gauss, PlotWindow.LINE);
 			}
 			
 			plots[i].setColor(Color.blue);
-			plots[i].addPoints(xvals, bg, PlotWindow.LINE);		
+			plots[i].addPoints(xvals, bg, PlotWindow.LINE);
+			plots[i].addPoints(xvalsbg, yvalsbg, PlotWindow.CIRCLE);
 			plots[i].setLimitsToFit(true);
 			
-			String parStr = String.format("Lane %1$d-par: ", i);
-			String maxStr = String.format("Lane %1$d-max: ", i);;
-			String minStr = String.format("Lane %1$d-min: ", i);;
-			for (int pp = 0; pp<pars.length; pp++){
-				parStr += String.format("%1$.2f, ", pars[pp]);
+			String parStrN = String.format("Lane %1$d-parN: ", i);
+			String parStrM = String.format("Lane %1$d-parM: ", i);
+			String parStrS = String.format("Lane %1$d-parS: ", i);
+			String maxStr  = String.format("Lane %1$d-max: ", i);
+			String minStr  = String.format("Lane %1$d-min: ", i);
+			for (int pp = 0; pp<pars.length; pp+=3){
+				parStrN += String.format("%1$.2f, ", pars[pp]);
+				parStrM += String.format("%1$.2f, ", pars[pp+1]);
+				parStrS += String.format("%1$.2f, ", pars[pp+2]);
 			}
 			for (int pp = 0; pp<maximaIdx.length; pp++){
 				maxStr += String.format("[%1$.2f, %2$.2f] ", xvals[maximaIdx[pp]], yvals[maximaIdx[pp]]);
@@ -416,9 +425,11 @@ public class GaussFitLanes implements
 			for (int pp = 0; pp<minimaIdx.length; pp++){
 				minStr += String.format("[%1$.2f, %2$.2f] ", xvals[minimaIdx[pp]], yvals[minimaIdx[pp]]);
 			}
-			System.out.println(parStr.substring(0,parStr.length()-2));
-			System.out.println(maxStr.substring(0,maxStr.length()));
-			System.out.println(minStr.substring(0,minStr.length()));
+			System.out.println(parStrN.substring(0,parStrN.length()-2));
+			System.out.println(parStrM.substring(0,parStrM.length()-2));
+			System.out.println(parStrS.substring(0,parStrS.length()-2));
+			//System.out.println(maxStr.substring(0,maxStr.length()));
+			//System.out.println(minStr.substring(0,minStr.length()));
 		}	
 	}
 	
@@ -429,12 +440,12 @@ public class GaussFitLanes implements
 	 * @param x Array containing peaks.
 	 * @param tolerance Depth of a qualified valley must exceed tolerance.
 	 * Tolerance must be >= 0. Flat tops are marked at their centers.
-	 * @param  excludeOnEdges If 'true', a peak is only
-	 * accepted if it is separated by two qualified valleys. If 'false', a peak
+	 * @param  includeEnds If 'false', a peak is only
+	 * accepted if it is separated by two qualified valleys. If 'true', a peak
 	 * is also accepted if separated by one qualified valley and by a border.
 	 * @return Positions of peaks, sorted with decreasing amplitude
 	 */
-	public static int[] findMaxima(double[] x, double tolerance, boolean includeEnds) {
+	private int[] findMaxima(double[] x, double tolerance, boolean includeEnds) {
 		int len = x.length;
 		if (len<2)
 			return new int[0];
