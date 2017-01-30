@@ -29,6 +29,10 @@ import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Arrays;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -50,10 +54,12 @@ import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.math4.analysis.function.Gaussian;
 import org.apache.commons.math4.analysis.interpolation.SplineInterpolator;
 import org.apache.commons.math4.analysis.polynomials.PolynomialSplineFunction;
-import org.apache.commons.math4.fitting.GaussianCurveFitter;
-import org.apache.commons.math4.fitting.PolynomialCurveFitter;
 import org.apache.commons.math4.fitting.WeightedObservedPoints;
+import org.apache.commons.math4.fitting.leastsquares.LeastSquaresOptimizer;
+import org.apache.commons.math4.fitting.leastsquares.LeastSquaresProblem;
+import org.apache.commons.math4.fitting.leastsquares.LevenbergMarquardtOptimizer;
 import org.apache.commons.math4.linear.ArrayRealVector;
+import org.apache.commons.math4.linear.RealVector;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.command.Previewable;
@@ -342,7 +348,7 @@ public class GaussFitLanes implements
 		return plotsMontage;
 	}
     
-	private void doFit() {
+	private void doFit() throws IOException {
 		//Reset the plots window
 		getProfilePlots();
 		makePlotsMontage(rows);
@@ -352,139 +358,147 @@ public class GaussFitLanes implements
 			float[] yvalsf   = plots[i].getYValues();
 			double[] xvals   = new double[xvalsf.length];
 			double[] yvals   = new double[yvalsf.length];
-					
+
 			WeightedObservedPoints obs   = new WeightedObservedPoints(); // All Y
-			WeightedObservedPoints obsbg = new WeightedObservedPoints(); // Only minima for BG
+			BufferedWriter br = new BufferedWriter(new FileWriter("Plot"+i+1+".csv"));
+			StringBuilder  sb = new StringBuilder();
 			for (int o = 0 ; o<xvals.length; o++) {
 				xvals[o] = (double) xvalsf[o];
 				yvals[o] = (double) yvalsf[o];
 				obs.add(xvals[o], yvals[o]);
+				sb.append(xvals[o] +"\t"+yvals[o]+"\n");
 			}
+			br.write(sb.toString());
+			br.close();
+			
 			plots[i].setColor(Color.black);
 			plots[i].addPoints(xvals, yvals, PlotWindow.LINE);
+
+			// Tolerances as percentage of the range
 			double tolbg = cd.getTolBG()*(NumberUtils.max(yvals)-NumberUtils.min(yvals));
 			double tolpk = cd.getTolPK()*(NumberUtils.max(yvals)-NumberUtils.min(yvals));
-			
+
 			int[] minimaIdx = findMaxima(new ArrayRealVector(yvals).mapMultiplyToSelf(-1.0).toArray(), 
-											tolbg, false); // Actually find MINIMA
-			
+					tolbg, false); // Actually find MINIMA
+			if (!ArrayUtils.isSorted(minimaIdx))
+				Arrays.sort(minimaIdx);
+
 			double[] xvalsbg = new double[minimaIdx.length+2]; // Valleys to determine BG
 			double[] yvalsbg = new double[minimaIdx.length+2];
-			xvalsbg[0] = xvals[0];
+
+			// Include first and last point in array
+			xvalsbg[0] = xvals[0]; // First Point
 			yvalsbg[0] = yvals[0];
-			xvalsbg[xvalsbg.length-1] = xvals[xvals.length-1];
-			yvalsbg[yvalsbg.length-1] = yvals[yvals.length-1];
-			for (int o = 1 ; o<minimaIdx.length+1; o++) {
+			for (int o = 1 ; o<minimaIdx.length+1; o++) { // Middle Points
 				xvalsbg[o] = xvals[minimaIdx[o-1]];
 				yvalsbg[o] = yvals[minimaIdx[o-1]];
-				obsbg.add(xvalsbg[o], yvalsbg[o]);
 			}
-			
-			
-			// fit background poly
-			int max_deg = 20;
-			int deg = Math.min(minimaIdx.length-1, max_deg);
+			xvalsbg[xvalsbg.length-1] = xvals[xvals.length-1]; // Last Point
+			yvalsbg[yvalsbg.length-1] = yvals[yvals.length-1];
+			// fit background spline
 			double[] bg = new double[xvals.length];
 			if (minimaIdx.length == 0) {
-				String msg ="Invalid points for Poly fit: ";
+				String msg ="Invalid points for Poly fit: "+minimaIdx.length;
 				log.error(String.format(msg));
-				return;
-			}
-			if (minimaIdx.length>max_deg+1) {
-				double[] pars_bg = GaussianCurveFitter.create().fit(obsbg.toList());
-				for (int b=0; b<xvals.length; b++) {
-					bg[b] = new Gaussian(pars_bg[0], pars_bg[1], pars_bg[2]).value(xvals[b]);
-					//bg[b] = pars_bg[0] + xvals[b]*(pars_bg[1] + xvals[b]*(pars_bg[2] + xvals[b]*pars_bg[3]));
-				}
 			} else {
+
 				SplineInterpolator si = new SplineInterpolator();
 				PolynomialSplineFunction bgsp = si.interpolate(xvalsbg, yvalsbg);
 				double[] pars_bg = new double[3];
 				for (int b=0; b<xvals.length; b++) {
-					if (deg == 0) {
-						bg[b] = NumberUtils.min(yvals);
-					} else {
-						bg[b] = bgsp.value(xvals[b]);
-						for (int p = deg; p >=0; p--){
-							//bg[b] = pars_bg[p] + (xvals[b] * bg[b]);
-						}
+					bg[b] = bgsp.value(xvals[b]);
+				}
+
+				for (int b=0; b<xvals.length; b++) {
+					yvals[b] =  Math.max(yvals[b] -= bg[b], 0);
+				}
+
+				// Local maxima where the peaks are
+				int[] maximaIdx = findMaxima(yvals, tolpk, true);
+
+				// Define a Gaussian at each peak
+				double[] means      = new double[maximaIdx.length];
+				double[] stds       = new double[maximaIdx.length];
+				double[] norms      = new double[maximaIdx.length];
+				double[] guessStart = new double[3*maximaIdx.length]; // Array of parameters for Fitter
+
+				// Initial parameters based on the position of the peaks
+				for (int m=0; m<maximaIdx.length; m++) {
+					norms[m] = yvals[maximaIdx[m]];
+					means[m] = xvals[maximaIdx[m]];
+					stds [m] = 0.5;
+					guessStart[3*m]   = norms[m];
+					guessStart[3*m+1] = means[m];
+					guessStart[3*m+2] = stds [m];
+				}
+
+				//double[] pars = GaussianCurveFitter.create().withStartPoint(ArrayUtils.subarray(guessStart, 0, 3)).fit(obs.toList());
+				LeastSquaresProblem problem  = GaussianArrayCurveFitter.
+						create().
+						withStartPoint(guessStart).getProblem(obs.toList());
+
+				LeastSquaresOptimizer.Optimum optimum = new LevenbergMarquardtOptimizer()
+						.withCostRelativeTolerance(1e-100)
+						.withOrthoTolerance(1e-100)
+						.withParameterRelativeTolerance(1e-15)
+						.withInitialStepBoundFactor(0.1)
+						.optimize(problem);
+				System.out.println("RMS: "           + optimum.getRMS());
+				System.out.println("evaluations: "   + optimum.getEvaluations());
+				System.out.println("iterations: "    + optimum.getIterations());
+				RealVector opt = new ArrayRealVector(guessStart).subtract(optimum.getPoint());
+				double[] pars  = GaussianArrayCurveFitter.
+						create().
+						withStartPoint(guessStart).
+						fit(obs.toList());
+				double[] gauss = new double[xvals.length];
+				RealVector diff = new ArrayRealVector(pars).subtract(optimum.getPoint());
+				if (pars.length != maximaIdx.length*3) {
+					System.out.println("Par number mismatch: " +
+							pars.length+ " parameters, " +
+							maximaIdx.length + " peaks!");
+					return;
+				}
+
+				for (int b=0; b<maximaIdx.length; b++){ // plot one gaussian for each peak
+					Gaussian g = new Gaussian(pars[b*3], pars[b*3+1], pars[b*3+2]);
+					for (int c=0; c<xvals.length; c++) {
+						gauss[c] = g.value(xvals[c])+bg[c];
 					}
+					plots[i].setColor(Color.red);
+					plots[i].addPoints(xvals, gauss, PlotWindow.LINE);
 				}
-			}
-			for (int b=0; b<xvals.length; b++) {
-				yvals[b] =  Math.max(yvals[b] -= bg[b], 0);
-			}
+				double[] normsPlusBg = new double[maximaIdx.length];
+				for (int n = 0; n<maximaIdx.length; n++)
+					normsPlusBg[n] = norms[n]+bg[maximaIdx[n]];
+				plots[i].addPoints(means, normsPlusBg, PlotWindow.CIRCLE);
+				plots[i].setColor(Color.blue);
+				plots[i].addPoints(xvals, bg, PlotWindow.LINE);
+				plots[i].addPoints(xvalsbg, yvalsbg, PlotWindow.CIRCLE);
+				plots[i].setLimitsToFit(true);
 
-			// Local maxima where the peaks are
-			int[] maximaIdx = findMaxima(yvals, tolpk, true);
-
-			// Define a Gaussian at each peak
-			double[] means      = new double[maximaIdx.length];
-			double[] stds       = new double[maximaIdx.length];
-			double[] norms      = new double[maximaIdx.length];
-			double[] guessStart = new double[3*maximaIdx.length]; // Array of parameters for Fitter
-			
-			// Initial parameters based on the position of the peaks
-			for (int m=0; m<maximaIdx.length; m++) {
-				norms[m] = yvals[maximaIdx[m]];
-				means[m] = xvals[maximaIdx[m]];
-				stds [m] = 0.5;
-				guessStart[3*m]   = norms[m];
-				guessStart[3*m+1] = means[m];
-				guessStart[3*m+2] = stds [m];
-			}
-
-			//double[] pars = GaussianCurveFitter.create().withStartPoint(ArrayUtils.subarray(guessStart, 0, 3)).fit(obs.toList());
-			double[] pars  = GaussianArrayCurveFitter.
-									create().
-									withStartPoint(guessStart).
-									fit(obs.toList());
-			double[] gauss = new double[xvals.length];
-			if (pars.length != maximaIdx.length*3) {
-				System.out.println("Par number mismatch: " +
-									pars.length+ " parameters, " +
-									maximaIdx.length + " peaks!");
-				return;
-			}
-			
-			for (int b=0; b<maximaIdx.length; b++){ // plot one gaussian for each peak
-				Gaussian g = new Gaussian(pars[b*3], pars[b*3+1], pars[b*3+2]);
-				for (int c=0; c<xvals.length; c++) {
-					gauss[c] = g.value(xvals[c])+bg[c];
+				String parStrN = String.format("Lane %1$d-parN: ", i+1);
+				String parStrM = String.format("Lane %1$d-parM: ", i+1);
+				String parStrS = String.format("Lane %1$d-parS: ", i+1);
+				String maxStr  = String.format("Lane %1$d-max: ", i+1);
+				String minStr  = String.format("Lane %1$d-min: ", i+1);
+				for (int pp = 0; pp<pars.length; pp+=3){
+					parStrN += String.format("%1$.2f, ", pars[pp]);
+					parStrM += String.format("%1$.2f, ", pars[pp+1]);
+					parStrS += String.format("%1$.2f, ", pars[pp+2]);
 				}
-				plots[i].setColor(Color.red);
-				plots[i].addPoints(xvals, gauss, PlotWindow.LINE);
-			}
-			double[] normsPlusBg = new double[maximaIdx.length];
-			for (int n = 0; n<maximaIdx.length; n++)
-				normsPlusBg[n] = norms[n]+bg[maximaIdx[n]];
-			plots[i].addPoints(means, normsPlusBg, PlotWindow.CIRCLE);
-			plots[i].setColor(Color.blue);
-			plots[i].addPoints(xvals, bg, PlotWindow.LINE);
-			plots[i].addPoints(xvalsbg, yvalsbg, PlotWindow.CIRCLE);
-			plots[i].setLimitsToFit(true);
-			
-			String parStrN = String.format("Lane %1$d-parN: ", i);
-			String parStrM = String.format("Lane %1$d-parM: ", i);
-			String parStrS = String.format("Lane %1$d-parS: ", i);
-			String maxStr  = String.format("Lane %1$d-max: ", i);
-			String minStr  = String.format("Lane %1$d-min: ", i);
-			for (int pp = 0; pp<pars.length; pp+=3){
-				parStrN += String.format("%1$.2f, ", pars[pp]);
-				parStrM += String.format("%1$.2f, ", pars[pp+1]);
-				parStrS += String.format("%1$.2f, ", pars[pp+2]);
-			}
-			for (int pp = 0; pp<maximaIdx.length; pp++){
-				maxStr += String.format("[%1$.2f, %2$.2f] ", xvals[maximaIdx[pp]], yvals[maximaIdx[pp]]);
-			}
-			for (int pp = 0; pp<minimaIdx.length; pp++){
-				minStr += String.format("[%1$.2f, %2$.2f] ", xvals[minimaIdx[pp]], yvals[minimaIdx[pp]]);
-			}
-			System.out.println(parStrN.substring(0,parStrN.length()-2));
-			System.out.println(parStrM.substring(0,parStrM.length()-2));
-			System.out.println(parStrS.substring(0,parStrS.length()-2));
-			//System.out.println(maxStr.substring(0,maxStr.length()));
-			//System.out.println(minStr.substring(0,minStr.length()));
+				for (int pp = 0; pp<maximaIdx.length; pp++){
+					maxStr += String.format("[%1$.2f, %2$.2f] ", xvals[maximaIdx[pp]], yvals[maximaIdx[pp]]);
+				}
+				for (int pp = 0; pp<minimaIdx.length; pp++){
+					minStr += String.format("[%1$.2f, %2$.2f] ", xvals[minimaIdx[pp]], yvals[minimaIdx[pp]]);
+				}
+				System.out.println(parStrN.substring(0,parStrN.length()-2));
+				System.out.println(parStrM.substring(0,parStrM.length()-2));
+				System.out.println(parStrS.substring(0,parStrS.length()-2));
+				//System.out.println(maxStr.substring(0,maxStr.length()));
+				//System.out.println(minStr.substring(0,minStr.length()));
+			}	
 		}	
 	}
 	
@@ -854,7 +868,12 @@ public class GaussFitLanes implements
 		@Override
 		public void actionPerformed(ActionEvent e) {
 			if (e.getSource().equals(buttonMeasure)){
-				doFit();
+				try {
+					doFit();
+				} catch (IOException e1) {
+					// TODO Auto-generated catch block
+					e1.printStackTrace();
+				}
 				plotImage.setProcessor(null, makePlotsMontage(rows));
 				if (plotImage.getRoi()!=null) plotImage.deleteRoi();
 				chkBoxBands.setEnabled(true);

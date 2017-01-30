@@ -18,7 +18,9 @@ import org.apache.commons.math4.exception.util.LocalizedFormats;
 import org.apache.commons.math4.fitting.AbstractCurveFitter;
 import org.apache.commons.math4.fitting.WeightedObservedPoint;
 import org.apache.commons.math4.fitting.leastsquares.LeastSquaresBuilder;
+import org.apache.commons.math4.fitting.leastsquares.LeastSquaresOptimizer;
 import org.apache.commons.math4.fitting.leastsquares.LeastSquaresProblem;
+import org.apache.commons.math4.fitting.leastsquares.LevenbergMarquardtOptimizer;
 import org.apache.commons.math4.fitting.leastsquares.ParameterValidator;
 import org.apache.commons.math4.linear.ArrayRealVector;
 import org.apache.commons.math4.linear.DiagonalMatrix;
@@ -140,7 +142,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				new GaussianArrayParameterValidator(initialGuess, xx, target);
 
 		// Return a new least squares problem set up to fit a Gaussian curve to the
-		// observed points.
+		// observed points
 		return new LeastSquaresBuilder().
 				parameterValidator(parValid).
 				maxEvaluations(Integer.MAX_VALUE).
@@ -153,7 +155,17 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				build();
 
 	}
-
+	
+	/** {@inheritDoc} */
+	@Override
+	protected LeastSquaresOptimizer getOptimizer() {
+		// Return a new least squares problem set up to fit a Gaussian curve to the
+		// observed points.
+		return new LevenbergMarquardtOptimizer()
+				.withCostRelativeTolerance(1e-15)
+				.withOrthoTolerance(1e-15)
+				.withParameterRelativeTolerance(1e-15);
+	}
 	/**
 	 * Guesses the parameters {@code norm}, {@code mean}, and {@code sigma}
 	 * of a {@link org.apache.commons.math4.analysis.function.GaussianArray.Parametric}
@@ -571,7 +583,7 @@ class GaussianArray implements UnivariateDifferentiableFunction {
                 	i2s2 [gg/3] = 1 / (2 * sigma[gg/3] * sigma[gg/3]);
                 	
                 	// Only 1 Gaussian function at a time contributes to the gradient
-                	final double n = new Gaussian(1, diff[gg/3], i2s2[gg/3]).value(x);
+                	final double n = new Gaussian(1.0, param[gg+1],param[gg+2]).value(x);
                 	final double m = norm[gg/3] * n * 2 * i2s2[gg/3] * diff[gg/3];
                 	final double s = m * diff[gg/3] / sigma[gg/3];
                 	out[gg]   = n;
