@@ -57,7 +57,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		}
 	};
 	/** Initial guess. */
-	private final double[] initialGuess;
+	private double[] initialGuess;
 	/** Maximum number of iterations of the optimization algorithm. */
 	private final int maxIter;
 
@@ -115,11 +115,13 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 		// Prepare least-squares problem.
 		final int len = observations.size();
+		final double[] xx      = new double[len];
 		final double[] target  = new double[len];
 		final double[] weights = new double[len];
 
 		int i = 0;
 		for (WeightedObservedPoint obs : observations) {
+			xx[i]      = obs.getX();
 			target[i]  = obs.getY();
 			weights[i] = obs.getWeight();
 			++i;
@@ -134,7 +136,8 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					// TODO: Check consistency with guessing function
 					new ParameterGuesser(observations, initialGuess.length/3).guess();
 		
-		final GaussianArrayParameterValidator parValid = new GaussianArrayParameterValidator();
+		final GaussianArrayParameterValidator parValid = 
+				new GaussianArrayParameterValidator(initialGuess, xx, target);
 
 		// Return a new least squares problem set up to fit a Gaussian curve to the
 		// observed points.
@@ -248,7 +251,6 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					return 0;
 				}
 			};
-
 			Collections.sort(observations, cmp);
 			return observations;
 		}
@@ -396,19 +398,46 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		}
 	}
 	
+	/**
+	 * Checks the parameter triplets {@code norm}, {@code mean}, and {@code sigma}
+	 * of a {@code GaussianArray.Parametric} for applied constraints,
+	 *  based on the specified points and initial guess.
+	 */
 	public static class GaussianArrayParameterValidator 
 						implements ParameterValidator {
+		private double[] initialParameterSet;
+		private double   maxXvalue;
+		private double   maxMeandiff;
+		public GaussianArrayParameterValidator(double[] initialGuess, double[] xtarget, double[] ytarget) {
+			this.initialParameterSet = initialGuess;
+			this.maxXvalue = xtarget[xtarget.length-1];
+			this.maxMeandiff = maxXvalue/(initialGuess.length/3)/50;
+//			for (int p = 1; p<initialGuess.length-4; p+=3){
+//				if (initialGuess[p+3]-initialGuess[p]<maxMeandiff) 
+//					maxMeandiff = initialGuess[p+3]-initialGuess[p];
+//			} // any mean not further than this from initial guess
+		}
 		
 		@Override
+		// Set parameter constraints here
 		public RealVector validate(RealVector pars) {
 			for (int i = 0; i<pars.getDimension(); i++) {
 				// {0=Norm, 1=Mean, 2=Sigma}
-			    if ((i % 3 == 0 || i % 3 == 1) && pars.getEntry(i) < 0.0)  
-			    	pars.setEntry(i, 0);
-			    if ((i % 3 == 2) && pars.getEntry(i) > 5.0)  
-			    	pars.setEntry(i, 5.0);
-			    if ((i % 3 == 0) && pars.getEntry(i) > 65535.0)  
-			    	pars.setEntry(i, 65535.0);
+				// Lower bound of 0 for all 3
+			    if ((i % 3 == 0 || i % 3 == 1 || i % 3 == 2) && pars.getEntry(i) < 1e-1)  
+			    	pars.setEntry(i, 0.0);
+			    // Upper bounds for each parameter
+			    if ((i % 3 == 0) && pars.getEntry(i) > initialParameterSet[i])  
+			    	pars.setEntry(i, initialParameterSet[i]);
+			    if ((i % 3 == 1) && 
+			    		(pars.getEntry(i) > maxXvalue ))  
+			    	pars.setEntry(i, maxXvalue);
+			    if ((i % 3 == 2) && pars.getEntry(i) > 1.0)  
+			    	pars.setEntry(i, 1.0);
+			    // Keep means close to maxima
+			    double diff = pars.getEntry(i)-initialParameterSet[i];
+			    if ((i % 3 == 1) && (Math.abs(diff) > maxMeandiff))
+			    	pars.setEntry(i,initialParameterSet[i]+maxMeandiff*diff/Math.abs(diff));
 			}
 			return pars;
 		}

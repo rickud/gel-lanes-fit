@@ -1,42 +1,20 @@
 /**
+ * Gauss Fit
+ * GaussFitLanes.java
+ * author: Rick Ziraldo, 2017
+ * The /University of Texas at Dallas, Richardson, TX
+ * http://www.utdallas.edu
  * 
- * GaussFit_OnSpot.java
- * author: by Peter Haub, Nov 2013
- * PD Dr. Tobias Meckel, University Darmstadt, www.bio.tu-darmstadt.de/meckel
- * Peter Haub, phaub@dipsystems.de
+ * Feature:   Fitting of Gaussian profiles along gel lanes
+ * v is a tool for fitting gaussian profiles and estimating
+ * the profile parameters on selected lanes in gel electrophoresis images.
  * 
- * 
- * Feature:   Fitting of Gaussian profiles at manually selected PointROIs
- * 
- * GaussFit_OnSpot is a tool for fitting gaussian profiles and estimating
- * the profile parameters on manually selected positions in
- * sub-diffraction-limited microscopic images.
- * 
- * 
- * The code is based on the Gaussian Fitting package developed by Nico Stuurman.
- * Original code and license information can be found on:
- * 		http://valelab.ucsf.edu/~nstuurman/IJplugins/GaussianFit.html
- * 		http://valelab.ucsf.edu/~nstuurman/IJplugins/license.html
- * 
- * Original files from the Gaussian Fitting package included:
- *    GaussianSpotData.java
- *    GaussianFit.java
- *    MultiVariateGaussianFunction.java
- *    ParametricGaussianFunction.java
- * 
- * Files based on the Gaussian Fitting package:
- *    GFUtils.java (contains parts of the GaussianUtils.java)
- * 
- * 
- * History :
- * 
- * Modifications thanks to Wayne Rasband, July 2014
- * 
- * Correction by Peter Haub, Jan. 2015
- * Bug: Identical CenterX and CenterY value
- * Update: setHideLabels() changed to setShowLabels() ( for IJ.version >= 1.49m )
+ *    The GaussianArrayCurveFitter class is implemented using
+ *    Abstract classes from Apache Commons project
+ *    
+ *    The source code is maintained and made available on GitHub
+ *    https://github.com/rickud/gauss-curve-fit 
  */
-
 
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -70,6 +48,8 @@ import javax.swing.event.DocumentListener;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.math4.analysis.function.Gaussian;
+import org.apache.commons.math4.analysis.interpolation.SplineInterpolator;
+import org.apache.commons.math4.analysis.polynomials.PolynomialSplineFunction;
 import org.apache.commons.math4.fitting.GaussianCurveFitter;
 import org.apache.commons.math4.fitting.PolynomialCurveFitter;
 import org.apache.commons.math4.fitting.WeightedObservedPoints;
@@ -205,6 +185,65 @@ public class GaussFitLanes implements
 		}
 	}
 	
+	
+	private double[][] getLaneProfiles() {
+		if (roiMan.getCount() == 0) return null;
+		ImageProcessor ip = imp.getProcessor();
+		//IterableMap profiles = new double[roiMan.getRoi(0).][roiMan.getCount()];
+		
+		for (int p = 0; p<roiMan.getCount(); p++) {
+			roiMan.select(p);
+			Roi roi = roiMan.getRoi(p);
+			if (ip == null || roi == null) return null; //these may change asynchronously
+			if (roi.getType() == Roi.LINE)
+				ip.setInterpolate(PlotWindow.interpolate);
+			else
+				ip.setInterpolate(false);
+			ProfilePlot profileP = new ProfilePlot(imp, true);//get the profile
+			double[] profile = profileP.getProfile();
+			if (profile==null || profile.length<2)
+				return null;
+			
+			//the following code is mainly for x calibration
+			String xUnit = "pixels";                    
+			double xInc = 1;
+			Calibration cal = imp.getCalibration(); 
+			if (roi.getType() == Roi.LINE) {
+				Line line = (Line)roi;
+				if (cal != null) {
+					double dx = cal.pixelWidth*(line.x2 - line.x1);
+					double dy = cal.pixelHeight*(line.y2 - line.y1);
+					double length = Math.sqrt(dx*dx + dy*dy);
+					xInc = length/(profile.length-1);
+					xUnit = cal.getUnits();
+				}
+			} else if (roi.getType() == Roi.RECTANGLE) {
+				if (cal != null) {
+					xInc = roi.getBounds().getWidth()*cal.pixelWidth/(profile.length-1);
+					xUnit = cal.getUnits();
+				}
+			} else return null;
+			String xLabel = "Distance (" + xUnit + ")";
+			String yLabel = (cal !=null && cal.getValueUnit()!=null && !cal.getValueUnit().equals("Gray Value")) ?
+					"Value ("+cal.getValueUnit()+")" : "Value";
+
+			int n = profile.length;                 // create the x axis
+			double[] x = new double[n];
+			for (int i=0; i<n; i++)
+				x[i] = i*xInc;
+
+			Plot plot = new Plot("Lane "+(p+1), xLabel, yLabel, x, profile);
+			plot.addText(plot.getTitle(), plot.getSize().getWidth()/2, plot.getSize().getHeight()/2);
+			double fixedMin = ProfilePlot.getFixedMin();
+			double fixedMax = ProfilePlot.getFixedMax();
+			if (fixedMin!=0 || fixedMax!=0) {
+				double[] a = Tools.getMinMax(x);
+				plot.setLimits(a[0],a[1], fixedMin, fixedMax);
+			}
+			plots[p] = plot;
+		}
+		return null;
+	}
     /** get a profile, analyze it and return a plot (or null if not possible) */
 	private Plot[] getProfilePlots() {
 		if (roiMan.getCount() == 0) return null;
@@ -223,7 +262,9 @@ public class GaussFitLanes implements
 			double[] profile = profileP.getProfile();
 			if (profile==null || profile.length<2)
 				return null;
-			String xUnit = "pixels";                    //the following code is mainly for x calibration
+			
+			//the following code is mainly for x calibration
+			String xUnit = "pixels";                    
 			double xInc = 1;
 			Calibration cal = imp.getCalibration(); 
 			if (roi.getType() == Roi.LINE) {
@@ -305,7 +346,7 @@ public class GaussFitLanes implements
 		//Reset the plots window
 		getProfilePlots();
 		makePlotsMontage(rows);
-		
+
 		for (int i = 0; i<plots.length; i++) {
 			float[] xvalsf   = plots[i].getXValues();
 			float[] yvalsf   = plots[i].getYValues();
@@ -325,22 +366,30 @@ public class GaussFitLanes implements
 			double tolpk = cd.getTolPK()*(NumberUtils.max(yvals)-NumberUtils.min(yvals));
 			
 			int[] minimaIdx = findMaxima(new ArrayRealVector(yvals).mapMultiplyToSelf(-1.0).toArray(), 
-											tolbg, true); // Actually find MINIMA
+											tolbg, false); // Actually find MINIMA
 			
-			double[] xvalsbg = new double[minimaIdx.length]; // Valleys to determine BG
-			double[] yvalsbg = new double[minimaIdx.length];
-			
-			for (int o = 0 ; o<minimaIdx.length; o++) {
-				xvalsbg[o] = xvals[minimaIdx[o]];
-				yvalsbg[o] = yvals[minimaIdx[o]];
+			double[] xvalsbg = new double[minimaIdx.length+2]; // Valleys to determine BG
+			double[] yvalsbg = new double[minimaIdx.length+2];
+			xvalsbg[0] = xvals[0];
+			yvalsbg[0] = yvals[0];
+			xvalsbg[xvalsbg.length-1] = xvals[xvals.length-1];
+			yvalsbg[yvalsbg.length-1] = yvals[yvals.length-1];
+			for (int o = 1 ; o<minimaIdx.length+1; o++) {
+				xvalsbg[o] = xvals[minimaIdx[o-1]];
+				yvalsbg[o] = yvals[minimaIdx[o-1]];
 				obsbg.add(xvalsbg[o], yvalsbg[o]);
 			}
 			
+			
 			// fit background poly
-			int max_deg = 8;
+			int max_deg = 20;
 			int deg = Math.min(minimaIdx.length-1, max_deg);
 			double[] bg = new double[xvals.length];
-			
+			if (minimaIdx.length == 0) {
+				String msg ="Invalid points for Poly fit: ";
+				log.error(String.format(msg));
+				return;
+			}
 			if (minimaIdx.length>max_deg+1) {
 				double[] pars_bg = GaussianCurveFitter.create().fit(obsbg.toList());
 				for (int b=0; b<xvals.length; b++) {
@@ -348,19 +397,22 @@ public class GaussFitLanes implements
 					//bg[b] = pars_bg[0] + xvals[b]*(pars_bg[1] + xvals[b]*(pars_bg[2] + xvals[b]*pars_bg[3]));
 				}
 			} else {
-				double[] pars_bg = PolynomialCurveFitter.create(deg).fit(obsbg.toList());
+				SplineInterpolator si = new SplineInterpolator();
+				PolynomialSplineFunction bgsp = si.interpolate(xvalsbg, yvalsbg);
+				double[] pars_bg = new double[3];
 				for (int b=0; b<xvals.length; b++) {
 					if (deg == 0) {
 						bg[b] = NumberUtils.min(yvals);
 					} else {
-						for (int p = deg; p > 0; p--){
-							bg[b] = pars_bg[p-1] + (xvals[b] * bg[b]);
+						bg[b] = bgsp.value(xvals[b]);
+						for (int p = deg; p >=0; p--){
+							//bg[b] = pars_bg[p] + (xvals[b] * bg[b]);
 						}
 					}
 				}
 			}
 			for (int b=0; b<xvals.length; b++) {
-				//yvals[b] =  Math.max(yvals[b] -= bg[b], 0);
+				yvals[b] =  Math.max(yvals[b] -= bg[b], 0);
 			}
 
 			// Local maxima where the peaks are
@@ -376,7 +428,7 @@ public class GaussFitLanes implements
 			for (int m=0; m<maximaIdx.length; m++) {
 				norms[m] = yvals[maximaIdx[m]];
 				means[m] = xvals[maximaIdx[m]];
-				stds [m] = 0.3;
+				stds [m] = 0.5;
 				guessStart[3*m]   = norms[m];
 				guessStart[3*m+1] = means[m];
 				guessStart[3*m+2] = stds [m];
@@ -384,9 +436,9 @@ public class GaussFitLanes implements
 
 			//double[] pars = GaussianCurveFitter.create().withStartPoint(ArrayUtils.subarray(guessStart, 0, 3)).fit(obs.toList());
 			double[] pars  = GaussianArrayCurveFitter.
-					create().withStartPoint(guessStart).
-					withMaxIterations(10000).
-					fit(obs.toList());
+									create().
+									withStartPoint(guessStart).
+									fit(obs.toList());
 			double[] gauss = new double[xvals.length];
 			if (pars.length != maximaIdx.length*3) {
 				System.out.println("Par number mismatch: " +
@@ -398,12 +450,15 @@ public class GaussFitLanes implements
 			for (int b=0; b<maximaIdx.length; b++){ // plot one gaussian for each peak
 				Gaussian g = new Gaussian(pars[b*3], pars[b*3+1], pars[b*3+2]);
 				for (int c=0; c<xvals.length; c++) {
-					gauss[c] = g.value(xvals[c]); //+bg[c];
+					gauss[c] = g.value(xvals[c])+bg[c];
 				}
 				plots[i].setColor(Color.red);
 				plots[i].addPoints(xvals, gauss, PlotWindow.LINE);
 			}
-			
+			double[] normsPlusBg = new double[maximaIdx.length];
+			for (int n = 0; n<maximaIdx.length; n++)
+				normsPlusBg[n] = norms[n]+bg[maximaIdx[n]];
+			plots[i].addPoints(means, normsPlusBg, PlotWindow.CIRCLE);
 			plots[i].setColor(Color.blue);
 			plots[i].addPoints(xvals, bg, PlotWindow.LINE);
 			plots[i].addPoints(xvalsbg, yvalsbg, PlotWindow.CIRCLE);
@@ -548,7 +603,7 @@ public class GaussFitLanes implements
 		int LHOff  = LSp;
 		int LVOff  = (IH-LH)/2;
 		
-		double tolBG = 0.5; 
+		double tolBG = 0.3; 
 		double tolPK = 0.1;
 
 		private JPanel     textPanel;
