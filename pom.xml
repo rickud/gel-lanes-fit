@@ -8,8 +8,7 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>12.0.0</version>
-		<relativePath />
+		<version>13.0.0</version>
 	</parent>
 	
 	<groupId>imagej-plugins</groupId>
@@ -18,7 +17,7 @@
 	
 	<name> Gauss Fit</name>
 	<description>This plugin fits Gaussians around local maxima.</description>
-		<url>https://github.com/rickud/gauss-curve-fit/</url>
+	<url>https://github.com/rickud/gauss-curve-fit/</url>
 	<inceptionYear>2017</inceptionYear>
 	<organization>
 		<name>UT Dallas</name>
@@ -30,6 +29,13 @@
 			<distribution>repo</distribution>
 		</license>
 	</licenses>
+
+ 	<properties>
+		<main-class>GaussFitLanes</main-class>
+		<scijava.jvm.version>1.8</scijava.jvm.version>
+		<license.licenseName>bsd_2</license.licenseName>
+		<license.copyrightOwners>The University of Texas at Dallas </license.copyrightOwners>
+  	</properties>
 
 	<developers>
 		<developer>
@@ -99,13 +105,6 @@
 		<system>None</system>
 	</ciManagement>
 	
- 	<properties>
-		<main-class>GaussFitLanes</main-class>
-		<scijava.jvm.version>1.8</scijava.jvm.version>
-		<license.licenseName>bsd_2</license.licenseName>
-		<license.copyrightOwners>The University of Texas at Dallas </license.copyrightOwners>
-  	</properties>
-
 	<repositories>
 		<repository>
 				<id>imagej.public</id>
@@ -118,6 +117,10 @@
 	</repositories>
 	
 	<dependencies>
+		<dependency>
+			<groupId>net.imagej</groupId>
+			<artifactId>ij</artifactId>
+		</dependency>
 		<dependency>
 			<groupId>net.imagej</groupId>
 			<artifactId>imagej</artifactId>
