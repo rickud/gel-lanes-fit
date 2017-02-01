@@ -49,6 +49,13 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
+import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.collections4.IterableMap;
+import org.apache.commons.collections4.MapIterator;
+import org.apache.commons.collections4.collection.IndexedCollection;
+import org.apache.commons.collections4.iterators.ArrayListIterator;
+import org.apache.commons.collections4.list.FixedSizeList;
+import org.apache.commons.collections4.map.HashedMap;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.apache.commons.math4.analysis.function.Gaussian;
@@ -59,7 +66,10 @@ import org.apache.commons.math4.fitting.leastsquares.LeastSquaresOptimizer;
 import org.apache.commons.math4.fitting.leastsquares.LeastSquaresProblem;
 import org.apache.commons.math4.fitting.leastsquares.LevenbergMarquardtOptimizer;
 import org.apache.commons.math4.linear.ArrayRealVector;
+import org.apache.commons.math4.linear.MatrixUtils;
+import org.apache.commons.math4.linear.RealMatrix;
 import org.apache.commons.math4.linear.RealVector;
+import org.apache.commons.math4.util.OpenIntToDoubleHashMap.Iterator;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.command.Previewable;
@@ -70,6 +80,7 @@ import org.scijava.plugin.Plugin;
 
 import ij.IJ;
 import ij.ImagePlus;
+import ij.ImageStack;
 import ij.WindowManager;
 import ij.gui.ImageCanvas;
 import ij.gui.ImageWindow;
@@ -89,6 +100,7 @@ import net.imagej.DatasetService;
 import net.imagej.ImageJ;
 import net.imagej.display.ImageDisplayService;
 import net.imagej.ops.OpService;
+import scala.collection.mutable.HashMap;
 
 
 @Plugin(type = Command.class, headless = true,
@@ -124,10 +136,11 @@ Command, Previewable, Runnable {
 	private boolean doFit;               //tells the background thread to update
 	ImagePlus imp;
 
-	private ImagePlus plotImage;
+	private ImagePlus plotImage = new ImagePlus();
 	private RoiManager roiMan = new RoiManager();
 	private CustomDialog cd;
-	private int rows = 4; // Number of plot Rows in display
+	private int rows = 2; // Number of plot Rows in display
+	private int cols = 2; // Number of plot Rows in display
 	private Plot[] plots;
 
 	public void init() {
@@ -143,13 +156,12 @@ Command, Previewable, Runnable {
 		cd.showMainDialog();
 
 		IJ.wait(50); //delay to make sure ROIs have updated
+		plotImage.setTitle("Profiles of " + imp.getShortTitle()); 
 		getProfilePlots();
-		ImageProcessor ip = makePlotsMontage(rows);  
-		plotImage = new ImagePlus("Profile of "+imp.getShortTitle(),ip);
-
-		if (ip != null) plotImage.setProcessor(null, ip);
-		if (plotImage.getRoi()!=null) plotImage.deleteRoi();
+		updatePlotsImage(rows, cols);
+		
 		plotImage.show();
+		if (plotImage.getRoi()!=null) plotImage.deleteRoi();
 		imp.getCanvas().requestFocus();
 
 		IJ.wait(50);
@@ -188,68 +200,45 @@ Command, Previewable, Runnable {
 			//						return;
 			//					}
 			//				}
-		}
+		};
 	}
 
-
-	private double[][] getLaneProfiles() {
+	/** Profile data from Roi, ready for fitting 
+	 *  (null if not possible) */
+	private RealMatrix getLaneProfile(int laneRoi) {
 		if (roiMan.getCount() == 0) return null;
-		ImageProcessor ip = imp.getProcessor();
-		//IterableMap profiles = new double[roiMan.getRoi(0).][roiMan.getCount()];
+		roiMan.select(laneRoi);
+		Roi roi = roiMan.getRoi(laneRoi);	
+		ProfilePlot profileP = new ProfilePlot(imp, true);//get the profile
+		double[] profile = profileP.getProfile();
+		if (profile==null || profile.length<2)
+			return null;
 
-		for (int p = 0; p<roiMan.getCount(); p++) {
-			roiMan.select(p);
-			Roi roi = roiMan.getRoi(p);
-			if (ip == null || roi == null) return null; //these may change asynchronously
-			if (roi.getType() == Roi.LINE)
-				ip.setInterpolate(PlotWindow.interpolate);
-			else
-				ip.setInterpolate(false);
-			ProfilePlot profileP = new ProfilePlot(imp, true);//get the profile
-			double[] profile = profileP.getProfile();
-			if (profile==null || profile.length<2)
-				return null;
-
-			//the following code is mainly for x calibration
-			String xUnit = "pixels";                    
-			double xInc = 1;
-			Calibration cal = imp.getCalibration(); 
-			if (roi.getType() == Roi.LINE) {
-				Line line = (Line)roi;
-				if (cal != null) {
-					double dx = cal.pixelWidth*(line.x2 - line.x1);
-					double dy = cal.pixelHeight*(line.y2 - line.y1);
-					double length = Math.sqrt(dx*dx + dy*dy);
-					xInc = length/(profile.length-1);
-					xUnit = cal.getUnits();
-				}
-			} else if (roi.getType() == Roi.RECTANGLE) {
-				if (cal != null) {
-					xInc = roi.getBounds().getWidth()*cal.pixelWidth/(profile.length-1);
-					xUnit = cal.getUnits();
-				}
-			} else return null;
-			String xLabel = "Distance (" + xUnit + ")";
-			String yLabel = (cal !=null && cal.getValueUnit()!=null && !cal.getValueUnit().equals("Gray Value")) ?
-					"Value ("+cal.getValueUnit()+")" : "Value";
-
-			int n = profile.length;                 // create the x axis
-			double[] x = new double[n];
-			for (int i=0; i<n; i++)
-				x[i] = i*xInc;
-
-			Plot plot = new Plot("Lane "+(p+1), xLabel, yLabel, x, profile);
-			plot.addText(plot.getTitle(), plot.getSize().getWidth()/2, plot.getSize().getHeight()/2);
-			double fixedMin = ProfilePlot.getFixedMin();
-			double fixedMax = ProfilePlot.getFixedMax();
-			if (fixedMin!=0 || fixedMax!=0) {
-				double[] a = Tools.getMinMax(x);
-				plot.setLimits(a[0],a[1], fixedMin, fixedMax);
+		//the following code is mainly for x calibration                   
+		double xInc = 1;
+		Calibration cal = imp.getCalibration(); 
+		if (roi.getType() == Roi.LINE) {
+			Line line = (Line)roi;
+			if (cal != null) {
+				double dx = cal.pixelWidth*(line.x2 - line.x1);
+				double dy = cal.pixelHeight*(line.y2 - line.y1);
+				double length = Math.sqrt(dx*dx + dy*dy);
+				xInc = length/(profile.length-1);
 			}
-			plots[p] = plot;
-		}
-		return null;
+		} else if (roi.getType() == Roi.RECTANGLE) {
+			if (cal != null) {
+				xInc = roi.getBounds().getWidth()*cal.pixelWidth/(profile.length-1);
+			}
+		} else return null;
+
+		int n = profile.length; // create the x axis
+		double[] x = new double[n];
+		for (int i=0; i<n; i++)
+			x[i] = i*xInc;
+		RealMatrix output = MatrixUtils.createRealMatrix(new double[][] {x,profile});
+		return output;
 	}
+	
 	/** get a profile, analyze it and return a plot (or null if not possible) */
 	private Plot[] getProfilePlots() {
 		if (roiMan.getCount() == 0) return null;
@@ -269,34 +258,16 @@ Command, Previewable, Runnable {
 			if (profile==null || profile.length<2)
 				return null;
 
-			//the following code is mainly for x calibration
-			String xUnit = "pixels";                    
-			double xInc = 1;
-			Calibration cal = imp.getCalibration(); 
-			if (roi.getType() == Roi.LINE) {
-				Line line = (Line)roi;
-				if (cal != null) {
-					double dx = cal.pixelWidth*(line.x2 - line.x1);
-					double dy = cal.pixelHeight*(line.y2 - line.y1);
-					double length = Math.sqrt(dx*dx + dy*dy);
-					xInc = length/(profile.length-1);
-					xUnit = cal.getUnits();
-				}
-			} else if (roi.getType() == Roi.RECTANGLE) {
-				if (cal != null) {
-					xInc = roi.getBounds().getWidth()*cal.pixelWidth/(profile.length-1);
-					xUnit = cal.getUnits();
-				}
-			} else return null;
+			Calibration cal = imp.getCalibration();
+			String xUnit;
+			if (cal.getUnit() == null)
+				xUnit = "pixels";
+			else
+				xUnit = cal.getUnit();
+			double [] x = calibrateX(profile, roi, cal);
 			String xLabel = "Distance (" + xUnit + ")";
 			String yLabel = (cal !=null && cal.getValueUnit()!=null && !cal.getValueUnit().equals("Gray Value")) ?
 					"Value ("+cal.getValueUnit()+")" : "Value";
-
-			int n = profile.length;                 // create the x axis
-			double[] x = new double[n];
-			for (int i=0; i<n; i++)
-				x[i] = i*xInc;
-
 			Plot plot = new Plot("Lane "+(p+1), xLabel, yLabel, x, profile);
 			plot.addText(plot.getTitle(), plot.getSize().getWidth()/2, plot.getSize().getHeight()/2);
 			double fixedMin = ProfilePlot.getFixedMin();
@@ -309,14 +280,44 @@ Command, Previewable, Runnable {
 		}
 		return plots;
 	}
-
-	private ImageProcessor makePlotsMontage(int rows){
+	
+	/**
+	 * Method for x calibration
+	 **/
+	private double[] calibrateX(double[] y, Roi roi, Calibration cal) {                    
+		double xInc = 1;
+		if (roi.getType() == Roi.LINE) {
+			Line line = (Line)roi;
+			if (cal != null) {
+				double dx = cal.pixelWidth*(line.x2 - line.x1);
+				double dy = cal.pixelHeight*(line.y2 - line.y1);
+				double length = Math.sqrt(dx*dx + dy*dy);
+				xInc = length/(y.length-1);
+			}
+		} else if (roi.getType() == Roi.RECTANGLE) {
+			if (cal != null) {
+				xInc = roi.getBounds().getWidth()*cal.pixelWidth/(y.length-1);
+			}
+		} else return null;
+		
+		int n = y.length; // create the x axis
+		double[] x = new double[n];
+		for (int i=0; i<n; i++)
+			x[i] = i*xInc;
+		return x;
+	}
+	
+	/**
+	 * Method for Output plot collage
+	 * */
+	private void updatePlotsImage(int rows, int cols){
 		// Construct the plot image
 		if (ArrayUtils.contains(plots,null)) {                          // no profile?
-			IJ.error("Gauss Fit","No Profiles Obtained"); return null;
+			IJ.error("Gauss Fit","No Profiles Obtained"); return;
 		}
 
-		int cols = Math.floorDiv(plots.length, rows);
+		//int cols  = Math.floorDiv(plots.length, rows);
+		int pages = Math.floorDiv(plots.length, rows*cols)+1;
 		if (Math.floorMod(plots.length, rows)!=0) cols++;
 
 		int plotSpacing = 5; // black border
@@ -327,44 +328,54 @@ Command, Previewable, Runnable {
 		IJ.setForegroundColor(255,255,255);
 		blank.fill();
 
-		ImageProcessor plotsMontage = new ColorProcessor(plotsWidth, plotsHeight);
-		for (int c = 0; c<cols; c++) {
-			for (int r = 0; r<rows; r++) {
-				if (c*rows+r<plots.length){
-					plotsMontage.insert(plots[c*rows+r].getProcessor(), //here NP
-							plotSpacing+c*(plotSpacing + plotW), 
-							plotSpacing+r*(plotSpacing + plotH));
-					plotsMontage.drawString(plots[c*rows+r].getTitle(),
-							plotSpacing+plotW/2+c*(plotSpacing + plotW),
-							plotSpacing+plotH/5+r*(plotSpacing + plotH),
-							Color.LIGHT_GRAY);
-				} else {
-					plotsMontage.insert(blank, 
-							plotSpacing+c*(plotSpacing + plotW), 
-							plotSpacing+r*(plotSpacing + plotH));
+		ImageProcessor[] pageMontages = new ImageProcessor[pages];
+		for (int pg = 0; pg<pages-1; pg++){
+			ImageProcessor plotsMontage = new ColorProcessor(plotsWidth, plotsHeight);
+			for (int c = 0; c<cols; c++) {
+				for (int r = 0; r<rows; r++) {
+					if (c*rows+r<plots.length){
+						plotsMontage.insert(plots[pg*cols*rows+(c*rows+r)].getProcessor(), //here NP
+								plotSpacing+c*(plotSpacing + plotW), 
+								plotSpacing+r*(plotSpacing + plotH));
+						plotsMontage.drawString(plots[pg*cols*rows+(c*rows+r)].getTitle(),
+								plotSpacing+plotW/2+c*(plotSpacing + plotW),
+								plotSpacing+plotH/5+r*(plotSpacing + plotH),
+								Color.LIGHT_GRAY);
+					} else {
+						plotsMontage.insert(blank, 
+								plotSpacing+c*(plotSpacing + plotW), 
+								plotSpacing+r*(plotSpacing + plotH));
+					}
 				}
 			}
+			pageMontages[pg] = plotsMontage;
 		}
-		return plotsMontage;
+		plotImage.setProcessor(pageMontages[0]);
+		ImageStack plotStack = plotImage.createEmptyStack();
+
+		for (int i=0; i<pageMontages.length; i++){
+			if (pageMontages[i] != null)
+				plotStack.addSlice("Lanes "+ (rows*cols*i+1) + "-" + (rows*cols*i+rows*cols),
+						pageMontages[i], i);
+		}
+		plotImage.setStack(plotStack);
+		plotImage.updateImage();
 	}
 
 	private void doFit() throws IOException {
 		//Reset the plots window
 		getProfilePlots();
-		makePlotsMontage(rows);
+		updatePlotsImage(rows,cols);
 
 		for (int i = 0; i<plots.length; i++) {
-			float[] xvalsf   = plots[i].getXValues();
-			float[] yvalsf   = plots[i].getYValues();
-			double[] xvals   = new double[xvalsf.length];
-			double[] yvals   = new double[yvalsf.length];
+			double[] xvals = getLaneProfile(i).getRow(0);
+			double[] yvals = getLaneProfile(i).getRow(1);;
 
 			WeightedObservedPoints obs   = new WeightedObservedPoints(); // All Y
-			BufferedWriter br = new BufferedWriter(new FileWriter("Plot"+i+1+".csv"));
+			BufferedWriter br = new BufferedWriter(new FileWriter("output//Plot"+(i+1)+".csv"));
 			StringBuilder  sb = new StringBuilder();
+			yvals = new ArrayRealVector(yvals).mapSubtractToSelf(NumberUtils.min(yvals)).toArray();
 			for (int o = 0 ; o<xvals.length; o++) {
-				xvals[o] = (double) xvalsf[o];
-				yvals[o] = (double) yvalsf[o];
 				obs.add(xvals[o], yvals[o]);
 				sb.append(xvals[o] +"\t"+yvals[o]+"\n");
 			}
@@ -378,155 +389,111 @@ Command, Previewable, Runnable {
 			double tolbg = cd.getTolBG()*(NumberUtils.max(yvals)-NumberUtils.min(yvals));
 			double tolpk = cd.getTolPK()*(NumberUtils.max(yvals)-NumberUtils.min(yvals));
 
-			int[] minimaIdx = findMaxima(new ArrayRealVector(yvals).mapMultiplyToSelf(-1.0).toArray(), 
-					tolbg, false); // Actually find MINIMA
-			if (!ArrayUtils.isSorted(minimaIdx))
-				Arrays.sort(minimaIdx);
 
-			double[] xvalsbg = new double[minimaIdx.length+2]; // Valleys to determine BG
-			double[] yvalsbg = new double[minimaIdx.length+2];
 
-			// Include first and last point in array
-			xvalsbg[0] = xvals[0]; // First Point
-			yvalsbg[0] = yvals[0];
-			for (int o = 1 ; o<minimaIdx.length+1; o++) { // Middle Points
-				xvalsbg[o] = xvals[minimaIdx[o-1]];
-				yvalsbg[o] = yvals[minimaIdx[o-1]];
+			// Local maxima where the peaks are
+			int[] maximaIdx = findMaxima(yvals, tolpk, true);
+
+			// Define a Gaussian at each peak
+			double[] means      = new double[maximaIdx.length];
+			double[] stds       = new double[maximaIdx.length];
+			double[] norms      = new double[maximaIdx.length];
+			double[] guessStart = new double[3*maximaIdx.length]; // Array of parameters for Fitter
+
+			// Initial parameters based on the position of the peaks
+			for (int m=0; m<maximaIdx.length; m++) {
+				norms[m] = yvals[maximaIdx[m]];
+				means[m] = xvals[maximaIdx[m]];
+
+				//estimate stds from maxima and mean
+
+				boolean foundHWHM  = false;
+				boolean foundHWHML = false; 
+				boolean foundHWHMR = false;
+				double leftHWHM    = 1.0; 
+				double rightHWHM   = 1.0;;
+				int p = 0;
+				while (!foundHWHM) {
+					double hm = norms[m]/2;
+					if (yvals[maximaIdx[m]+p]       < hm && 
+							yvals[maximaIdx[m]+p+1] < hm &&
+							yvals[maximaIdx[m]+p+2] < hm) {
+						foundHWHMR = true;
+						rightHWHM  = xvals[p]-xvals[maximaIdx[m]];
+					}
+					if (yvals[maximaIdx[m]-p]       < hm && 
+							yvals[maximaIdx[m]-p-1] < hm && 
+							yvals[maximaIdx[m]-p-2] < hm) {
+						foundHWHML = true;
+						leftHWHM   = xvals[maximaIdx[m]]-xvals[p];
+					}
+					if (foundHWHML && foundHWHMR) {
+						foundHWHM = true;
+						stds [m] = (rightHWHM-leftHWHM)/2;
+					}
+					p++;
+					if (maximaIdx[m]+p+2 > yvals.length -1 ||
+							maximaIdx[m]-p-2 < 0) {
+						stds [m] = break;
+					}
+				}
+				guessStart[3*m]   = norms[m];
+				guessStart[3*m+1] = means[m];
+				guessStart[3*m+2] = stds [m];
 			}
-			xvalsbg[xvalsbg.length-1] = xvals[xvals.length-1]; // Last Point
-			yvalsbg[yvalsbg.length-1] = yvals[yvals.length-1];
-			// fit background spline
-			double[] bg = new double[xvals.length];
-			if (minimaIdx.length == 0) {
-				String msg ="Invalid points for Poly fit: "+minimaIdx.length;
-				log.error(String.format(msg));
-			} else {
 
-				SplineInterpolator si = new SplineInterpolator();
-				PolynomialSplineFunction bgsp = si.interpolate(xvalsbg, yvalsbg);
-				double[] pars_bg = new double[3];
-				for (int b=0; b<xvals.length; b++) {
-					bg[b] = bgsp.value(xvals[b]);
+			//double[] pars = GaussianCurveFitter.create().withStartPoint(ArrayUtils.subarray(guessStart, 0, 3)).fit(obs.toList());
+			LeastSquaresProblem problem  = GaussianArrayCurveFitter.
+					create().
+					withStartPoint(guessStart).getProblem(obs.toList());
+
+			LeastSquaresOptimizer.Optimum optimum = new LevenbergMarquardtOptimizer()
+					//.withCostRelativeTolerance(1e-100)
+					//.withOrthoTolerance(1e-100)
+					//.withParameterRelativeTolerance(1e-15)
+					//.withInitialStepBoundFactor(0.1)
+					.optimize(problem);
+			System.out.println("RMS: "           + optimum.getRMS());
+			System.out.println("evaluations: "   + optimum.getEvaluations());
+			System.out.println("iterations: "    + optimum.getIterations());
+			RealVector opt = new ArrayRealVector(guessStart).subtract(optimum.getPoint());
+			double[] pars  = GaussianArrayCurveFitter.
+					create().
+					withStartPoint(guessStart).
+					fit(obs.toList());
+			double[] gauss = new double[xvals.length];
+			RealVector diff = new ArrayRealVector(pars).subtract(optimum.getPoint());
+			if (pars.length != maximaIdx.length*3) {
+				System.out.println("Par number mismatch: " +
+						pars.length+ " parameters, " +
+						maximaIdx.length + " peaks!");
+				return;
+			}
+
+			for (int b=0; b<maximaIdx.length; b++){ // plot one gaussian for each peak
+				Gaussian g = new Gaussian(pars[b*3], pars[b*3+1], pars[b*3+2]);
+				for (int c=0; c<xvals.length; c++) {
+					gauss[c] = g.value(xvals[c]);
 				}
+				plots[i].setColor(Color.red);
+				plots[i].addPoints(xvals, gauss, PlotWindow.LINE);
+			}
+			
+			plots[i].addPoints(means, norms, PlotWindow.CIRCLE);
+			plots[i].setLimitsToFit(true);
 
-//				for (int b=0; b<xvals.length; b++) {
-//					yvals[b] =  Math.max(yvals[b] -= bg[b], 0);
-//				}
+			String parStrN = String.format("Lane %1$d-parN: ", i+1);
+			String parStrM = String.format("Lane %1$d-parM: ", i+1);
+			String parStrS = String.format("Lane %1$d-parS: ", i+1);
+			for (int pp = 0; pp<pars.length; pp+=3){
+				parStrN += String.format("%1$.2f, ", pars[pp]);
+				parStrM += String.format("%1$.2f, ", pars[pp+1]);
+				parStrS += String.format("%1$.2f, ", pars[pp+2]);
+			}
 
-				// Local maxima where the peaks are
-				int[] maximaIdx = findMaxima(yvals, tolpk, true);
-
-				// Define a Gaussian at each peak
-				double[] means      = new double[maximaIdx.length];
-				double[] stds       = new double[maximaIdx.length];
-				double[] norms      = new double[maximaIdx.length];
-				double[] guessStart = new double[3*maximaIdx.length]; // Array of parameters for Fitter
-
-				// Initial parameters based on the position of the peaks
-				for (int m=0; m<maximaIdx.length; m++) {
-					norms[m] = yvals[maximaIdx[m]];
-					means[m] = xvals[maximaIdx[m]];
-					
-					//estimate stds from maxima and mean
-					
-					boolean foundHWHM  = false;
-					boolean foundHWHML = false; 
-					boolean foundHWHMR = false;
-					double leftHWHM    = 0.0; 
-					double rightHWHM   = 0.0;;
-					int p = 0;
-					while (!foundHWHM) {
-						double hm = norms[m]/2;
-						if (yvals[maximaIdx[m]+p]       < hm && 
-								yvals[maximaIdx[m]+p+1] < hm &&
-								yvals[maximaIdx[m]+p+2] < hm) {
-							foundHWHMR = true;
-							rightHWHM  = xvals[p]-xvals[maximaIdx[m]];
-				        }
-						if (yvals[maximaIdx[m]-p]       < hm && 
-								yvals[maximaIdx[m]-p-1] < hm && 
-								yvals[maximaIdx[m]-p-2] < hm) {
-							foundHWHML = true;
-							leftHWHM   = xvals[maximaIdx[m]]-xvals[p];
-						}
-						if (foundHWHML && foundHWHMR) {
-							foundHWHM = true;
-							stds [m] = (rightHWHM-leftHWHM)/2;
-						}
-						p++;
-					}
-					guessStart[3*m]   = norms[m];
-					guessStart[3*m+1] = means[m];
-					guessStart[3*m+2] = stds [m];
-				}
-
-				//double[] pars = GaussianCurveFitter.create().withStartPoint(ArrayUtils.subarray(guessStart, 0, 3)).fit(obs.toList());
-				LeastSquaresProblem problem  = GaussianArrayCurveFitter.
-						create().
-						withStartPoint(guessStart).getProblem(obs.toList());
-
-				LeastSquaresOptimizer.Optimum optimum = new LevenbergMarquardtOptimizer()
-						.withCostRelativeTolerance(1e-100)
-						.withOrthoTolerance(1e-100)
-						.withParameterRelativeTolerance(1e-15)
-						.withInitialStepBoundFactor(0.1)
-						.optimize(problem);
-				System.out.println("RMS: "           + optimum.getRMS());
-				System.out.println("evaluations: "   + optimum.getEvaluations());
-				System.out.println("iterations: "    + optimum.getIterations());
-				RealVector opt = new ArrayRealVector(guessStart).subtract(optimum.getPoint());
-				double[] pars  = GaussianArrayCurveFitter.
-						create().
-						withStartPoint(guessStart).
-						fit(obs.toList());
-				double[] gauss = new double[xvals.length];
-				RealVector diff = new ArrayRealVector(pars).subtract(optimum.getPoint());
-				if (pars.length != maximaIdx.length*3) {
-					System.out.println("Par number mismatch: " +
-							pars.length+ " parameters, " +
-							maximaIdx.length + " peaks!");
-					return;
-				}
-
-				for (int b=0; b<maximaIdx.length; b++){ // plot one gaussian for each peak
-					Gaussian g = new Gaussian(pars[b*3], pars[b*3+1], pars[b*3+2]);
-					for (int c=0; c<xvals.length; c++) {
-						gauss[c] = g.value(xvals[c])+bg[c];
-					}
-					plots[i].setColor(Color.red);
-					plots[i].addPoints(xvals, gauss, PlotWindow.LINE);
-				}
-				double[] normsPlusBg = new double[maximaIdx.length];
-				for (int n = 0; n<maximaIdx.length; n++)
-					normsPlusBg[n] = norms[n]+bg[maximaIdx[n]];
-				plots[i].addPoints(means, normsPlusBg, PlotWindow.CIRCLE);
-				plots[i].setColor(Color.blue);
-				plots[i].addPoints(xvals, bg, PlotWindow.LINE);
-				plots[i].addPoints(xvalsbg, yvalsbg, PlotWindow.CIRCLE);
-				plots[i].setLimitsToFit(true);
-
-				String parStrN = String.format("Lane %1$d-parN: ", i+1);
-				String parStrM = String.format("Lane %1$d-parM: ", i+1);
-				String parStrS = String.format("Lane %1$d-parS: ", i+1);
-				String maxStr  = String.format("Lane %1$d-max: ", i+1);
-				String minStr  = String.format("Lane %1$d-min: ", i+1);
-				for (int pp = 0; pp<pars.length; pp+=3){
-					parStrN += String.format("%1$.2f, ", pars[pp]);
-					parStrM += String.format("%1$.2f, ", pars[pp+1]);
-					parStrS += String.format("%1$.2f, ", pars[pp+2]);
-				}
-				for (int pp = 0; pp<maximaIdx.length; pp++){
-					maxStr += String.format("[%1$.2f, %2$.2f] ", xvals[maximaIdx[pp]], yvals[maximaIdx[pp]]);
-				}
-				for (int pp = 0; pp<minimaIdx.length; pp++){
-					minStr += String.format("[%1$.2f, %2$.2f] ", xvals[minimaIdx[pp]], yvals[minimaIdx[pp]]);
-				}
-				System.out.println(parStrN.substring(0,parStrN.length()-2));
-				System.out.println(parStrM.substring(0,parStrM.length()-2));
-				System.out.println(parStrS.substring(0,parStrS.length()-2));
-				//System.out.println(maxStr.substring(0,maxStr.length()));
-				//System.out.println(minStr.substring(0,minStr.length()));
-			}	
+			System.out.println(parStrN.substring(0,parStrN.length()-2));
+			System.out.println(parStrM.substring(0,parStrM.length()-2));
+			System.out.println(parStrS.substring(0,parStrS.length()-2));
 		}	
 	}
 
@@ -820,8 +787,7 @@ Command, Previewable, Runnable {
 			//IJ.wait(50);
 			//delay to make sure the roi has been updated
 			getProfilePlots();
-			ImageProcessor ip = makePlotsMontage(rows);
-			if (ip != null) plotImage.setProcessor(ip);
+			updatePlotsImage(rows,cols);
 		}
 
 		private void reDrawROIs(ImagePlus image, int lw, int lh, int lsp, int lhoff, int lvoff) {
@@ -901,7 +867,7 @@ Command, Previewable, Runnable {
 					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
-				plotImage.setProcessor(null, makePlotsMontage(rows));
+				updatePlotsImage(rows,cols);
 				if (plotImage.getRoi()!=null) plotImage.deleteRoi();
 				chkBoxBands.setEnabled(true);
 			}
