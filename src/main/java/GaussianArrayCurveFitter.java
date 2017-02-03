@@ -27,6 +27,8 @@ import org.apache.commons.math4.linear.DiagonalMatrix;
 import org.apache.commons.math4.linear.RealVector;
 import org.apache.commons.math4.util.FastMath;
 
+import ij.util.Tools;
+
 
 
 public class GaussianArrayCurveFitter extends AbstractCurveFitter {
@@ -62,6 +64,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private double[] initialGuess;
 	/** Maximum number of iterations of the optimization algorithm. */
 	private final int maxIter;
+	private final double peakTol;
 
 	/**
 	 * Contructor used by the factory methods.
@@ -71,8 +74,9 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * @param maxIter Maximum number of iterations of the optimization algorithm.
 	 */
 	private GaussianArrayCurveFitter(double[] initialGuess,
-			int maxIter) {
+			int maxIter, double peakTol) {
 		this.initialGuess = initialGuess;
+		this.peakTol = peakTol;
 		this.maxIter = maxIter;
 	}
 
@@ -87,8 +91,8 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * @see #withStartPoint(double[])
 	 * @see #withMaxIterations(int)
 	 */
-	public static GaussianArrayCurveFitter create() {
-		return new GaussianArrayCurveFitter(null, Integer.MAX_VALUE);
+	public static GaussianArrayCurveFitter create(double peakTol) {
+		return new GaussianArrayCurveFitter(null, Integer.MAX_VALUE, peakTol);
 	}
 
 	/**
@@ -98,7 +102,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 */
 	public GaussianArrayCurveFitter withStartPoint(double[] newStart) {
 		return new GaussianArrayCurveFitter(newStart.clone(),
-				maxIter);
+				maxIter, peakTol);
 	}
 
 	/**
@@ -108,7 +112,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 */
 	public GaussianArrayCurveFitter withMaxIterations(int newMaxIter) {
 		return new GaussianArrayCurveFitter(initialGuess,
-				newMaxIter);
+				newMaxIter, peakTol);
 	}
 
 	/** {@inheritDoc} */
@@ -136,7 +140,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				initialGuess :
 					// Compute estimation.
 					// TODO: Check consistency with guessing function
-					new ParameterGuesser(observations, initialGuess.length/3).guess();
+					new ParameterGuesser(observations, peakTol).guess();
 		
 		final GaussianArrayParameterValidator parValid = 
 				new GaussianArrayParameterValidator(initialGuess, xx, target);
@@ -173,11 +177,11 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 */
 	public static class ParameterGuesser {
 		/** Normalization factor. */
-		private final double[] norm;
+		private final RealVector norm = new ArrayRealVector();
 		/** Mean. */
-		private final double[] mean;
+		private final RealVector mean = new ArrayRealVector();
 		/** Standard deviation. */
-		private final double[] sigma;
+		private final RealVector sigma = new ArrayRealVector();
 
 		/**
 		 * Constructs instance with the specified observed points.
@@ -189,7 +193,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * @throws NumberIsTooSmallException if there are less than 3
 		 * observations.
 		 */
-		public ParameterGuesser(Collection<WeightedObservedPoint> observations, int gaussN) {
+		public ParameterGuesser(Collection<WeightedObservedPoint> observations, double peakTol) {
 			if (observations == null) {
 				throw new NullArgumentException(LocalizedFormats.INPUT_ARRAY);
 			}
@@ -198,14 +202,12 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			}
 
 			final List<WeightedObservedPoint> sorted = sortObservations(observations);
-			final double[] params = basicGuess(sorted.toArray(new WeightedObservedPoint[0]));
-			norm  = new double[gaussN];
-			mean  = new double[gaussN];
-			sigma = new double[gaussN];
-			for (int p=0; p<params.length; p++ ){
-				norm [p/3] = params[p];
-				mean [p/3] = params[p+1];
-				sigma[p/3] = params[p+2];
+			final RealVector params = basicGuess(sorted.toArray(new WeightedObservedPoint[0]), peakTol);
+
+			for (int p=0; p<params.getDimension(); p+=3 ){
+				norm.append(params.getEntry(p));
+				mean.append(params.getEntry(p+1));
+				sigma.append(params.getEntry(p+2));
 			}
 		}
 
@@ -220,9 +222,13 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * </ul>
 		 */
 		public double[] guess() {
-			// TODO:
-			return null;
-			//return new double[] { norm, mean, sigma };
+			RealVector guess = new ArrayRealVector();
+			for (int vv = 0; vv<norm.getDimension(); vv++) {
+				guess.append(norm. getEntry(vv)).
+					  append(mean. getEntry(vv)).
+					  append(sigma.getEntry(vv));
+			}
+			return guess.toArray();
 		}
 
 		/**
@@ -274,41 +280,153 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * @return the guessed parameters (normalization factor, mean and
 		 * sigma).
 		 */
-		private double[] basicGuess(WeightedObservedPoint[] points) {
-			// TODO: Guess multiple peaks
-			final int maxYIdx = findMaxY(points);
-			final double n = points[maxYIdx].getY();
-			final double m = points[maxYIdx].getX();
-
-			double fwhmApprox;
-			try {
-				final double halfY = n + ((m - n) / 2);
-				final double fwhmX1 = interpolateXAtY(points, maxYIdx, -1, halfY);
-				final double fwhmX2 = interpolateXAtY(points, maxYIdx, 1, halfY);
-				fwhmApprox = fwhmX2 - fwhmX1;
-			} catch (OutOfRangeException e) {
-				// TODO: Exceptions should not be used for flow control.
-				fwhmApprox = points[points.length - 1].getX() - points[0].getX();
+		private RealVector basicGuess(WeightedObservedPoint[] points, double tolpk) {
+			RealVector xvals = new ArrayRealVector();
+			RealVector yvals = new ArrayRealVector();
+			for(int o = 0; o<points.length; o++){
+				xvals.append(points[o].getX());
+				yvals.append(points[o].getY());
 			}
-			final double s = fwhmApprox / (2 * FastMath.sqrt(2 * FastMath.log(2)));
+			// Local maxima where the peaks are
+			int[] maximaIdx = findMaxima(points, tolpk, true);
 
-			return new double[] { n, m, s };
+			// Define a Gaussian at each peak
+			double[] means      = new double[maximaIdx.length];
+			double[] stds       = new double[maximaIdx.length];
+			double[] norms      = new double[maximaIdx.length];
+			RealVector guessStart = new ArrayRealVector(); // Array of parameters for Fitter
+
+			// Initial parameters based on the position of the peaks
+			for (int m=0; m<maximaIdx.length; m++) {
+				norms[m] = yvals.getEntry(maximaIdx[m]);
+				means[m] = xvals.getEntry(maximaIdx[m]);
+
+				//estimate stds from maxima and mean
+				boolean foundHWHM  = false;
+				boolean foundHWHML = false; 
+				boolean foundHWHMR = false;
+				boolean mustExit   = false;
+				double  leftHWHM   = 1.0; 
+				double  rightHWHM  = 1.0;;
+				double  hm         = norms[m]/2;
+				double  mean       = means[m];
+				int     pkPos      = maximaIdx[m];
+				int     p          = 0;
+
+				while (!foundHWHM) {
+					if (yvals.getEntry(pkPos+p)       < hm && // Right side
+							yvals.getEntry(pkPos+p+1) < hm && // check 3 consecutive points for smoothing
+							yvals.getEntry(pkPos+p+2) < hm) {
+						foundHWHMR = true;
+						rightHWHM  = xvals.getEntry(pkPos+p)-mean;
+					}
+					if (yvals.getEntry(pkPos-p)       < hm && // Left side
+							yvals.getEntry(pkPos-p-1) < hm && // check 3 consecutive points for smoothing
+							yvals.getEntry(pkPos-p-2) < hm) {
+						foundHWHML = true;
+						leftHWHM   = mean-xvals.getEntry(pkPos-p);
+					}
+					if (foundHWHML && foundHWHMR) { // both sides found
+						foundHWHM = true;
+						stds [m]  = (rightHWHM+leftHWHM)/2;
+					}
+					p++;
+					if ((pkPos+p+2 > yvals.getMaxIndex() || pkPos-p-2 < 0)) {
+						if (!mustExit) {
+							hm *= 0.5; // Do another round with smaller hm
+							p   = 0;
+							mustExit = true;
+						} else  { // Give up
+							rightHWHM  = xvals.getEntry(pkPos+p)-mean;
+							leftHWHM   = mean-xvals.getEntry(pkPos-p);
+							stds [m] = Math.min(rightHWHM,leftHWHM)
+									/(2*FastMath.sqrt(2*FastMath.log(2)));
+							break;
+						}
+					}
+				}
+				guessStart = guessStart.append(norms[m]);
+				guessStart = guessStart.append(means[m]);
+				guessStart = guessStart.append(stds [m]);
+			}
+			return guessStart;
 		}
 
 		/**
-		 * Finds index of point in specified points with the largest Y.
+		 * Adapted From:
+		 * Calculates peak positions of 1D array N.Vischer, 13-sep-2013
 		 *
-		 * @param points Points to search.
-		 * @return the index in specified points array.
+		 * @param x Array containing peaks.
+		 * @param tolerance Depth of a qualified valley must exceed tolerance.
+		 * Tolerance must be >= 0. Flat tops are marked at their centers.
+		 * @param  includeEnds If 'false', a peak is only
+		 * accepted if it is separated by two qualified valleys. If 'true', a peak
+		 * is also accepted if separated by one qualified valley and by a border.
+		 * @return Positions of peaks, sorted with decreasing amplitude
 		 */
-		private int findMaxY(WeightedObservedPoint[] points) {
-			int maxYIdx = 0;
-			for (int i = 1; i < points.length; i++) {
-				if (points[i].getY() > points[maxYIdx].getY()) {
-					maxYIdx = i;
+		private int[] findMaxima(WeightedObservedPoint[] x, double tolerance, boolean includeEnds) {
+			int len = x.length;
+			if (len<2)
+				return new int[0];
+			if (tolerance < 0)
+				tolerance = 0;
+			int[] maxPositions = new int[len];
+			double max = x[0].getY();
+			double min = x[0].getY();
+			int maxPos = 0;
+			int lastMaxPos = -1;
+			boolean leftValleyFound = includeEnds;
+			int maxCount = 0;
+			for (int j = 1; j < len; j++) {
+				double val = x[j].getY();
+				if (val > min + tolerance)
+					leftValleyFound = true;
+				if (val > max && leftValleyFound) {
+					max = val;
+					maxPos = j;
+				}
+				if (leftValleyFound)
+					lastMaxPos = maxPos;
+				if (val < max - tolerance && leftValleyFound) {
+					maxPositions[maxCount] = maxPos;
+					maxCount++;
+					leftValleyFound = false;
+					min = val;
+					max = val;
+				}
+				if (val < min) {
+					min = val;
+					if (!leftValleyFound)
+						max = val;
 				}
 			}
-			return maxYIdx;
+			if (includeEnds) {
+				if (maxCount > 0 && maxPositions[maxCount - 1] != lastMaxPos)
+					maxPositions[maxCount++] = lastMaxPos;
+				if (maxCount == 0 && max - min >= tolerance)
+					maxPositions[maxCount++] = lastMaxPos;
+			}
+			int[] cropped = new int[maxCount];
+			System.arraycopy(maxPositions, 0, cropped, 0, maxCount);
+			maxPositions = cropped;
+			double[] maxValues = new double[maxCount];
+			for (int m = 0; m < maxCount; m++) {
+				int pos = maxPositions[m];
+				double midPos = pos;
+				while (pos < len - 1 && x[pos] == x[pos + 1]) {
+					midPos += 0.5;
+					pos++;
+				}
+				maxPositions[m] = (int) midPos;
+				maxValues[m] = x[maxPositions[m]].getY();
+			}
+			int[] rankPositions = Tools.rank(maxValues);
+			int[] returnArr = new int[maxCount];
+			for (int n = 0; n < maxCount; n++) {
+				int pos = maxPositions[rankPositions[n]];
+				returnArr[maxCount - n - 1] = pos; //in descending order
+			}
+			return returnArr;
 		}
 
 		/**
@@ -444,8 +562,8 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			    if ((i % 3 == 1) && 
 			    		(pars.getEntry(i) > maxXvalue ))  
 			    	pars.setEntry(i, maxXvalue);
-			    if ((i % 3 == 2) && pars.getEntry(i) > 1.0)  
-			    	pars.setEntry(i, 1.0);
+			    if ((i % 3 == 2) && pars.getEntry(i) > 1.5*initialParameterSet[i])  
+			    	pars.setEntry(i, 1.5*initialParameterSet[i]);
 			    // Keep means close to maxima
 			    double diff = pars.getEntry(i)-initialParameterSet[i];
 			    if ((i % 3 == 1) && (Math.abs(diff) > maxMeandiff))
