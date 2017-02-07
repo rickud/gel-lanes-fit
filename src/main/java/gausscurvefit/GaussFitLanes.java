@@ -33,7 +33,6 @@ import java.awt.event.WindowEvent;
 import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.Arrays;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -50,12 +49,7 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
-
 import org.apache.commons.math4.analysis.function.Gaussian;
-import org.apache.commons.math4.analysis.interpolation.SplineInterpolator;
-import org.apache.commons.math4.analysis.polynomials.PolynomialSplineFunction;
-import org.apache.commons.math4.exception.ConvergenceException;
-import org.apache.commons.math4.exception.DimensionMismatchException;
 import org.apache.commons.math4.fitting.WeightedObservedPoints;
 import org.apache.commons.math4.fitting.leastsquares.LeastSquaresOptimizer;
 import org.apache.commons.math4.fitting.leastsquares.LeastSquaresProblem;
@@ -64,7 +58,6 @@ import org.apache.commons.math4.linear.ArrayRealVector;
 import org.apache.commons.math4.linear.MatrixUtils;
 import org.apache.commons.math4.linear.RealMatrix;
 import org.apache.commons.math4.linear.RealVector;
-import org.apache.commons.math4.util.OpenIntToDoubleHashMap.Iterator;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.command.Previewable;
@@ -96,7 +89,7 @@ import net.imagej.DatasetService;
 import net.imagej.ImageJ;
 import net.imagej.display.ImageDisplayService;
 import net.imagej.ops.OpService;
-import scala.collection.mutable.HashMap;
+
 
 
 @Plugin(type = Command.class, headless = true,
@@ -371,26 +364,22 @@ Command, Previewable, Runnable {
 			
 			
 			optimum = new LevenbergMarquardtOptimizer()
-					//.withCostRelativeTolerance(1e-100)
-					//.withOrthoTolerance(1e-100)
-					//.withParameterRelativeTolerance(1e-15)
-					//.withInitialStepBoundFactor(0.1)
+					.withCostRelativeTolerance(1e-14)
+					.withOrthoTolerance(1e-14)
+					.withParameterRelativeTolerance(1e-14)
+					.withInitialStepBoundFactor(10.0)
 					.optimize(problem);
 			System.out.println("RMS: "           + optimum.getRMS());
 			System.out.println("evaluations: "   + optimum.getEvaluations());
 			System.out.println("iterations: "    + optimum.getIterations());
 
-
 			RealVector pars  = new ArrayRealVector(
 					GaussianArrayCurveFitter.
 					create(tolpk).
 					fit(obs.toList()));
-//			} catch (ConvergenceException e) {
-//				System.out.println("No Convergence: "+ e.getCause());
-//				pars= new ArrayRealVector();
-//			}
-			RealVector diff = new ArrayRealVector(pars).subtract(optimum.getPoint());
 			
+			RealVector diff = new ArrayRealVector(pars).subtract(optimum.getPoint());
+			pars = optimum.getPoint();
 			// After fitting
 			RealVector norms  = new ArrayRealVector();
 			RealVector means  = new ArrayRealVector();
@@ -413,8 +402,8 @@ Command, Previewable, Runnable {
 						new Gaussian(firstGuess.getEntry(b),
 									 firstGuess.getEntry(b+1),
 									 firstGuess.getEntry(b+2)));					
-				plots[i].setColor(Color.blue);
-				plots[i].addPoints(xvals.toArray(), gauss0.toArray(), PlotWindow.LINE);
+//				plots[i].setColor(Color.blue);
+//				plots[i].addPoints(xvals.toArray(), gauss0.toArray(), PlotWindow.LINE);
 				
 				// After fitting
 				norms = norms.append(pars.getEntry(b));
@@ -432,7 +421,7 @@ Command, Previewable, Runnable {
 								means.toArray(), 
 								sds.  toArray()));
 			plots[i].setColor(Color.blue);
-			plots[i].addPoints(means0.toArray(), norms0.toArray(), PlotWindow.CIRCLE);
+			plots[i].addPoints(means0.toArray(), norms0.toArray(), PlotWindow.CROSS);
 			plots[i].setColor(Color.red);
 			plots[i].addPoints(means.toArray(),  norms.toArray(),  PlotWindow.CIRCLE);
 			plots[i].setColor(Color.green);
@@ -497,7 +486,7 @@ Command, Previewable, Runnable {
 		int LVOff  = (IH-LH)/2;
 
 		double tolBG = 0.2; 
-		double tolPK = 0.05;
+		double tolPK = 0.03;
 
 		private JPanel     textPanel;
 		private JLabel     labelNLanes;

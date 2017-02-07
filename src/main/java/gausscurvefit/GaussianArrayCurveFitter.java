@@ -309,7 +309,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				boolean foundHWHMR = false;
 				double  leftHWHM   = 1.0; 
 				double  rightHWHM  = 1.0;
-				double  maxSD      = 0.05*xvals.getEntry(xvals.getMaxIndex())/maximaIdx.length;
+				double  maxSD      = 0.2*xvals.getEntry(xvals.getMaxIndex())/maximaIdx.length;
 				double  hm         = yvals.getEntry(maximaIdx[m])/2;
 				double  mean       = means[m];
 				int     pkPos      = maximaIdx[m];
@@ -323,11 +323,14 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 							yvals.getEntry(pkPos+p+1)  < hm && // check 3 consecutive points for smoothing
 							yvals.getEntry(pkPos+p+2)  < hm) {
 						foundHWHMR = true;
-						rightHWHM  = xvals.getEntry(pkPos+p)-mean;
+						rightHWHM  = xvals.getEntry(pkPos+p)-mean > 0.0 ?
+									 xvals.getEntry(pkPos+p)-mean : 0.1;
 					}
 					if (pkPos-p-2 < 0) {
 						foundHWHML = true;
-						leftHWHM   = xvals.getEntry(pkPos)-xvals.getEntry(01);
+						leftHWHM   = xvals.getEntry(pkPos)-xvals.getEntry(0) > 0.0 ?
+									 xvals.getEntry(pkPos)-xvals.getEntry(0) : 0.1;
+						
 					} else if (yvals.getEntry(pkPos-p)       < hm && // Left side
 							yvals.getEntry(pkPos-p-1) < hm && // check 3 consecutive points for smoothing
 							yvals.getEntry(pkPos-p-2) < hm) {
@@ -340,7 +343,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 											(2*FastMath.sqrt(2*FastMath.log(2)));
 					}
 					if (sds [m] > maxSD) {
-						if (hm < 0.9*yvals.getEntry(maximaIdx[m])) {
+						if (hm < 0.95*yvals.getEntry(maximaIdx[m])) {
 							hm *= 1.1; // Do another round with smaller hm
 							p   = 0;
 						} else {
@@ -548,8 +551,8 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		public GaussianArrayParameterValidator(double[] initialGuess, double[] xtarget, double[] ytarget) {
 			this.initialParameterSet = initialGuess;
 			this.maxXvalue = xtarget[xtarget.length-1];
-			this.maxMeandiff = maxXvalue/(initialGuess.length/3)/50;
-			this.maxSD = 0.2*maxXvalue/(initialGuess.length/3);
+			this.maxMeandiff = maxXvalue/(initialGuess.length/3)/40;
+			this.maxSD = 0.3*maxXvalue/(initialGuess.length/3);
 		}
 		
 		@Override
@@ -558,7 +561,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			for (int i = 0; i<pars.getDimension(); i++) {
 				// {0=Norm, 1=Mean, 2=Sigma}
 				// Lower bound of 0 for all 3
-				if (i % 3 == 0 && pars.getEntry(i) < 0.5*initialParameterSet[i])
+				if ( i % 3 == 0 && pars.getEntry(i) < 0.5*initialParameterSet[i])
 					pars.setEntry(i, 0.5*initialParameterSet[i]);
 			    if ((i % 3 == 1 || i % 3 == 2) && pars.getEntry(i) < 1e-1)  
 			    	pars.setEntry(i, 1e-1);
