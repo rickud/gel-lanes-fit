@@ -50,6 +50,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
 import org.apache.commons.math4.analysis.function.Gaussian;
+import org.apache.commons.math4.analysis.polynomials.PolynomialFunction;
 import org.apache.commons.math4.fitting.WeightedObservedPoints;
 import org.apache.commons.math4.fitting.leastsquares.LeastSquaresOptimizer;
 import org.apache.commons.math4.fitting.leastsquares.LeastSquaresProblem;
@@ -87,14 +88,15 @@ import ij.util.Tools;
 import io.scif.services.DatasetIOService;
 import net.imagej.DatasetService;
 import net.imagej.ImageJ;
+import net.imagej.ImgPlus;
 import net.imagej.display.ImageDisplayService;
 import net.imagej.ops.OpService;
 
 
 
 @Plugin(type = Command.class, headless = true,
-menuPath = "Plugins>Gauss Fit")
-public class GaussFitLanes implements 
+menuPath = "Plugins>Gel Tools>Gauss Fit")
+public class _GaussFitLanes implements 
 Command, Previewable, Runnable {
 
 	@Parameter
@@ -132,6 +134,8 @@ Command, Previewable, Runnable {
 	private CustomDialog cd;
 	private int rows = 1; // Number of plot Rows in display
 	private int cols = 1; // Number of plot Rows in display
+	
+	private int deg  = 3; // Order of Background Polynomial
 
 	public void init() {
 		imp = IJ.getImage();
@@ -233,7 +237,6 @@ Command, Previewable, Runnable {
 			}
 		} else return null;
 		
-
 		double[] x = new double[y.getDimension()];// create the x axis
 		for (int i=0; i<y.getDimension(); i++)
 			x[i] = i*xInc;
@@ -351,13 +354,13 @@ Command, Previewable, Runnable {
 			br.close();
 			
 			// Tolerances as percentage of the range
-			double tolbg = cd.getTolBG()*(yvals.getMaxValue()-yvals.getMinValue());
+			int    degbg = cd.getTolBG();
 			double tolpk = cd.getTolPK()*(yvals.getMaxValue()-yvals.getMinValue());
 
-			ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(),tolpk);
+			ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(),tolpk,deg);
 			RealVector firstGuess = new ArrayRealVector(pg.guess());
 			LeastSquaresProblem problem  = GaussianArrayCurveFitter.
-					create(tolpk).
+					create(tolpk,degbg).
 					getProblem(obs.toList());
 
 			LeastSquaresOptimizer.Optimum optimum;
@@ -375,25 +378,30 @@ Command, Previewable, Runnable {
 
 			RealVector pars  = new ArrayRealVector(
 					GaussianArrayCurveFitter.
-					create(tolpk).
+					create(tolpk,degbg).
 					fit(obs.toList()));
 			
 			RealVector diff = new ArrayRealVector(pars).subtract(optimum.getPoint());
 			pars = optimum.getPoint();
-			// After fitting
-			RealVector norms  = new ArrayRealVector();
-			RealVector means  = new ArrayRealVector();
-			RealVector sds    = new ArrayRealVector();
-			RealVector gauss  = new ArrayRealVector();
 			
 			// Initial Guess
 			RealVector norms0 = new ArrayRealVector();
 			RealVector means0 = new ArrayRealVector();
 			RealVector sds0   = new ArrayRealVector();
 			RealVector gauss0 = new ArrayRealVector();
-			RealVector fitted = new ArrayRealVector();
+			RealVector poly0  = new ArrayRealVector();
 			
-			for (int b=0; b<pars.getDimension(); b+=3) { // plot one gaussian for each peak
+			RealVector fitted = new ArrayRealVector(); // Train of Gaussians with BG
+			// After fitting
+			RealVector norms  = new ArrayRealVector();
+			RealVector means  = new ArrayRealVector();
+			RealVector sds    = new ArrayRealVector();
+			RealVector gauss  = new ArrayRealVector(); // Each Gaussian for plotting
+			
+
+			poly0  = xvals.map(
+					new PolynomialFunction(firstGuess.getSubVector(1, deg+1).toArray()));
+			for (int b=deg+2; b<pars.getDimension(); b+=3) { // plot one gaussian for each peak
 				// Initial Guess
 				norms0 = norms0.append(firstGuess.getEntry(b));
 				means0 = means0.append(firstGuess.getEntry(b+1));
@@ -416,10 +424,8 @@ Command, Previewable, Runnable {
 				plots[i].setColor(Color.red);
 				plots[i].addPoints(xvals.toArray(), gauss.toArray(), PlotWindow.LINE);
 			}
-			fitted = xvals.map(new GaussianArray(
-								norms.toArray(), 
-								means.toArray(), 
-								sds.  toArray()));
+			fitted = xvals.map(new GaussianArrayBackGround(norms, means, sds, 
+														   firstGuess.getSubVector(1, deg+1)));
 			plots[i].setColor(Color.blue);
 			plots[i].addPoints(means0.toArray(), norms0.toArray(), PlotWindow.CROSS);
 			plots[i].setColor(Color.red);
@@ -462,7 +468,8 @@ Command, Previewable, Runnable {
 	}
 
 	public void cancel() {
-		log.info("Process canceled");
+		cd.dispose();
+		log.info("Gauss Fit terminated.");
 		return;
 	}
 
@@ -485,7 +492,7 @@ Command, Previewable, Runnable {
 		int LHOff  = LSp;
 		int LVOff  = (IH-LH)/2;
 
-		double tolBG = 0.2; 
+		int    degBG = 2;    // Background polynomial degree
 		double tolPK = 0.03;
 
 		private JPanel     textPanel;
@@ -501,10 +508,11 @@ Command, Previewable, Runnable {
 
 		private JPanel    buttonPanel;
 		private JButton   buttonMeasure;
+		private JButton   buttonCancel;
 		private JCheckBox chkBoxBands;
-		private JLabel     labelTolBG;
+		private JLabel     labelDegBG;
 		private JLabel     labelTolPK;
-		private JTextField textTolBG;
+		private JTextField textDegBG;
 		private JTextField textTolPK;
 
 		private JPanel    dialogPanel;
@@ -538,21 +546,23 @@ Command, Previewable, Runnable {
 
 			buttonPanel = new JPanel();
 			buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
+			buttonCancel  = new JButton("Cancel");
+			buttonCancel.addActionListener(this);
 			buttonMeasure = new JButton("Measure");
 			buttonMeasure.addActionListener(this);
 			buttonPanel.add(buttonMeasure);
 			chkBoxBands = new JCheckBox("Show Bands");
 			chkBoxBands.addItemListener(this);
 			chkBoxBands.setSelected(false);
-			//chkBoxBands.setVisible(false);
+			
 			chkBoxBands.setEnabled(false);
 			buttonPanel.add(chkBoxBands);
-			labelTolBG = new JLabel("Tol BG");
+			labelDegBG = new JLabel("Deg BG");
 			labelTolPK = new JLabel("Tol PK");
-			textTolBG  = new JTextField(3); textTolBG.setText("" + tolBG);
+			textDegBG  = new JTextField(3); textDegBG.setText("" + degBG);
 			textTolPK  = new JTextField(3); textTolPK.setText("" + tolPK);
-			buttonPanel.add(labelTolBG);
-			buttonPanel.add(textTolBG);
+			buttonPanel.add(labelDegBG);
+			buttonPanel.add(textDegBG);
 			buttonPanel.add(textTolPK);
 			buttonPanel.add(labelTolPK);
 
@@ -595,6 +605,7 @@ Command, Previewable, Runnable {
 
 
 		public void cleanup() {
+			// Remove Listeners on imp
 			//imp.removeImageListener(listener);
 
 		}
@@ -694,12 +705,12 @@ Command, Previewable, Runnable {
 			return nLanes;
 		}
 
-		public double getTolBG(){
+		public int getTolBG(){
 			try {
-				tolBG = (double) Double.parseDouble(textTolBG.getText().trim());
-				return tolBG;
+				degBG =  Integer.parseInt(textDegBG.getText().trim());
+				return degBG;
 			} catch (NumberFormatException e1) {
-				return 1.0;
+				return -1;
 			}
 		}
 
@@ -743,6 +754,10 @@ Command, Previewable, Runnable {
 				}
 				updatePlots(rows,cols,subMin);
 				chkBoxBands.setEnabled(true);
+			}
+			if (e.getSource().equals(buttonMeasure)){
+				cleanup();
+				cancel();
 			}
 		}
 

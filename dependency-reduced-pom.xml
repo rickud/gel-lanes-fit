@@ -8,7 +8,7 @@
   </parent>
   <modelVersion>4.0.0</modelVersion>
   <groupId>imagej-plugins</groupId>
-  <artifactId>GaussianFit</artifactId>
+  <artifactId>_GaussianFit</artifactId>
   <name>Gauss Fit</name>
   <version>1.0.0-SNAPSHOT</version>
   <description>This plugin fits Gaussians around local maxima.</description>

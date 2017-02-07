@@ -12,7 +12,7 @@
 	</parent>
 	
 	<groupId>imagej-plugins</groupId>
-	<artifactId>GaussianFit</artifactId>
+	<artifactId>_GaussianFit</artifactId>
 	<version>1.0.0-SNAPSHOT</version>
 	
 	<name> Gauss Fit</name>
@@ -31,49 +31,12 @@
 	</licenses>
 
  	<properties>
-		<main-class>GaussFitLanes</main-class>
+		<main-class>_GaussFitLanes</main-class>
 		<scijava.jvm.version>1.8</scijava.jvm.version>
 		<license.licenseName>bsd_2</license.licenseName>
 		<license.copyrightOwners>The University of Texas at Dallas </license.copyrightOwners>
   	</properties>
-	<build>
-    	<plugins>
-			<plugin>
-    			<groupId>org.apache.maven.plugins</groupId>
-    			<artifactId>maven-jar-plugin</artifactId>
-    			<configuration>
-      				<archive>
-        				<manifest>
-          					<mainClass>gausscurvefit.GaussFitLanes</mainClass>
-        				</manifest>
-      				</archive>
-    			</configuration>
-      		</plugin>
-      		<plugin>
-    			<groupId>org.apache.maven.plugins</groupId>
-    			<artifactId>maven-compiler-plugin</artifactId>
-    			<configuration>
-					<compilerArgument>-XDignore.symbol.file</compilerArgument>
-				</configuration>
-			</plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-shade-plugin</artifactId>
-				<version>2.4</version>
-        		<configuration>
-					<!-- put your configurations here -->
-        		</configuration>
-				<executions>
-					<execution>
-						<phase>package</phase>
-							<goals>
-								<goal>shade</goal>
-							</goals>
-					</execution>
-				</executions>
-			</plugin>
-		</plugins>
-	</build>
+
 	<developers>
 		<developer>
 			<id>ctrueden</id>

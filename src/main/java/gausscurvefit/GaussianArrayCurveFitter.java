@@ -31,10 +31,10 @@ import org.apache.commons.math4.util.FastMath;
 import ij.util.Tools;
 
 
-
 public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	/** Parametric function to be fitted. */
-	private static final GaussianArray.Parametric FUNCTION = new GaussianArray.Parametric() {
+	private static final GaussianArrayBackGround.Parametric FUNCTION = 
+										new GaussianArrayBackGround.Parametric() {
 		/** {@inheritDoc} */
 		@Override
 		public double value(double x, double ... p) {
@@ -66,6 +66,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	/** Maximum number of iterations of the optimization algorithm. */
 	private final int      maxIter;
 	private final double   peakTol;
+	private final int      deg;
 
 	/**
 	 * Contructor used by the factory methods.
@@ -75,10 +76,11 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * @param maxIter Maximum number of iterations of the optimization algorithm.
 	 */
 	private GaussianArrayCurveFitter(double[] initialGuess,
-			int maxIter, double peakTol) {
+			int maxIter, double peakTol, int deg) {
 		this.initialGuess = initialGuess;
-		this.peakTol = peakTol;
-		this.maxIter = maxIter;
+		this.peakTol      = peakTol;
+		this.maxIter      = maxIter;
+		this.deg          = deg;
 	}
 
 	/**
@@ -92,8 +94,8 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * @see #withStartPoint(double[])
 	 * @see #withMaxIterations(int)
 	 */
-	public static GaussianArrayCurveFitter create(double peakTol) {
-		return new GaussianArrayCurveFitter(null, Integer.MAX_VALUE, peakTol);
+	public static GaussianArrayCurveFitter create(double peakTol, int deg) {
+		return new GaussianArrayCurveFitter(null, Integer.MAX_VALUE, peakTol, deg);
 	}
 
 	/**
@@ -103,7 +105,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 */
 	public GaussianArrayCurveFitter withStartPoint(double[] newStart) {
 		return new GaussianArrayCurveFitter(newStart.clone(),
-				maxIter, peakTol);
+				maxIter, peakTol, deg);
 	}
 
 	/**
@@ -113,7 +115,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 */
 	public GaussianArrayCurveFitter withMaxIterations(int newMaxIter) {
 		return new GaussianArrayCurveFitter(initialGuess,
-				newMaxIter, peakTol);
+				newMaxIter, peakTol, deg);
 	}
 
 	/** {@inheritDoc} */
@@ -141,7 +143,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				initialGuess :
 					// Compute estimation.
 					// TODO: Check consistency with guessing function
-					new ParameterGuesser(observations, peakTol).guess();
+					new ParameterGuesser(observations, peakTol, deg).guess();
 		
 		final GaussianArrayParameterValidator parValid = 
 				new GaussianArrayParameterValidator(startPoint, xx, target);
@@ -183,6 +185,8 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private RealVector mean  = new ArrayRealVector();
 		/** Standard deviation. */
 		private RealVector sigma = new ArrayRealVector();
+		/** Polynomial background. */
+		private RealVector poly = new ArrayRealVector();
 
 		/**
 		 * Constructs instance with the specified observed points.
@@ -194,7 +198,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * @throws NumberIsTooSmallException if there are less than 3
 		 * observations.
 		 */
-		public ParameterGuesser(Collection<WeightedObservedPoint> observations, double peakTol) {
+		public ParameterGuesser(Collection<WeightedObservedPoint> observations, double peakTol, int deg) {
 			if (observations == null) {
 				throw new NullArgumentException(LocalizedFormats.INPUT_ARRAY);
 			}
@@ -203,9 +207,13 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			}
 
 			final List<WeightedObservedPoint> sorted = sortObservations(observations);
-			final RealVector params = basicGuess(sorted.toArray(new WeightedObservedPoint[0]), peakTol);
-
-			for (int p=0; p<params.getDimension(); p+=3 ){
+			final RealVector params = basicGuess(sorted.toArray(new WeightedObservedPoint[0]), peakTol, deg);
+			int gaussStart = 1;
+			if (deg != -1) {
+				gaussStart = deg + 2;
+				poly = poly.append(params.getSubVector(1, deg+1));
+			}
+			for (int p=gaussStart; p<params.getDimension(); p+=3 ){
 				norm  = norm .append(params.getEntry(p));
 				mean  = mean .append(params.getEntry(p+1));
 				sigma = sigma.append(params.getEntry(p+2));
@@ -281,14 +289,20 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * @return the guessed parameters (normalization factor, mean and
 		 * sigma).
 		 */
-		private RealVector basicGuess(WeightedObservedPoint[] points, double tolpk) {
+		private RealVector basicGuess(WeightedObservedPoint[] points, double tolpk, int deg) {
 			RealVector xvals = new ArrayRealVector();
 			RealVector yvals = new ArrayRealVector();
 			for(int o = 0; o<points.length; o++) {
 				xvals = xvals.append(points[o].getX());
 				yvals = yvals.append(points[o].getY());
 			}
-
+			
+			RealVector polyGuess  = new ArrayRealVector();
+			RealVector gaussGuess = new ArrayRealVector();
+			polyGuess = polyGuess.append(deg)
+								 .append(new ArrayRealVector(new double[deg+1]));
+			
+			
 			// Local maxima where the peaks are
 			int[] maximaIdx = findMaxima(points, tolpk, true);
 
@@ -296,9 +310,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			double[]   means      = new double[maximaIdx.length];
 			double[]   sds        = new double[maximaIdx.length];
 			double[]   norms      = new double[maximaIdx.length];
-			RealVector guessStart = new ArrayRealVector(); // Array of parameters for Fitter
 
-			// Initial parameters based on the position of the peaks
 			for (int m=0; m<maximaIdx.length; m++) {
 				norms[m] = yvals.getEntry(maximaIdx[m]);
 				means[m] = xvals.getEntry(maximaIdx[m]);
@@ -354,11 +366,12 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					} 
 					p++;
 				}
-				guessStart = guessStart.append(norms[m]);
-				guessStart = guessStart.append(means[m]);
-				guessStart = guessStart.append(sds [m]);
+				gaussGuess = gaussGuess.append(norms[m]);
+				gaussGuess = gaussGuess.append(means[m]);
+				gaussGuess = gaussGuess.append(sds [m]);
 			}
-			return guessStart;
+			// Array of parameters for Fitter
+			return polyGuess.append(gaussGuess);
 		}
 
 		/**
@@ -538,9 +551,10 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	}
 	
 	/**
-	 * Checks the parameter triplets {@code norm}, {@code mean}, and {@code sigma}
+	 * Checks the polynomial coefficients {@code poly} and
+	 * the parameter triplets {@code norm}, {@code mean}, and {@code sigma}
 	 * of a {@code GaussianArray.Parametric} for applied constraints,
-	 *  based on the specified points and initial guess.
+	 * based on the specified points and initial guess.
 	 */
 	public static class GaussianArrayParameterValidator 
 						implements ParameterValidator {
@@ -557,65 +571,77 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		
 		@Override
 		// Set parameter constraints here
-		public RealVector validate(RealVector pars) {
-			for (int i = 0; i<pars.getDimension(); i++) {
+		public RealVector validate(RealVector param) {
+			if (param.getEntry(0) != initialParameterSet[0]){
+				param.setEntry(0,    initialParameterSet[0]);		
+			}
+			for (int i = (int) initialParameterSet[0]+2; i<param.getDimension(); i++) {
 				// {0=Norm, 1=Mean, 2=Sigma}
 				// Lower bound of 0 for all 3
-				if ( i % 3 == 0 && pars.getEntry(i) < 0.5*initialParameterSet[i])
-					pars.setEntry(i, 0.5*initialParameterSet[i]);
-			    if ((i % 3 == 1 || i % 3 == 2) && pars.getEntry(i) < 1e-1)  
-			    	pars.setEntry(i, 1e-1);
+				if ( i % 3 == 0 && param.getEntry(i) < 0.5*initialParameterSet[i])
+					param.setEntry(i, 0.5*initialParameterSet[i]);
+			    if ((i % 3 == 1 || i % 3 == 2) && param.getEntry(i) < 1e-1)  
+			    	param.setEntry(i, 1e-1);
 			    // Upper bounds for each parameter
-			    if ((i % 3 == 0) && pars.getEntry(i) > initialParameterSet[i])  
-			    	pars.setEntry(i, initialParameterSet[i]);
+			    if ((i % 3 == 0) && param.getEntry(i) > initialParameterSet[i])  
+			    	param.setEntry(i, initialParameterSet[i]);
 			    if ((i % 3 == 1) && 
-			    		(pars.getEntry(i) > maxXvalue ))  
-			    	pars.setEntry(i, maxXvalue);
-			    if ((i % 3 == 2) && pars.getEntry(i) > maxSD)  
+			    		(param.getEntry(i) > maxXvalue ))  
+			    	param.setEntry(i, maxXvalue);
+			    if ((i % 3 == 2) && param.getEntry(i) > maxSD)  
 			    	pars.setEntry(i, maxSD);
 			    // Keep means close to maxima
-			    double diff = pars.getEntry(i)-initialParameterSet[i];
+			    double diff = param.getEntry(i)-initialParameterSet[i];
 			    if ((i % 3 == 1) && (Math.abs(diff) > maxMeandiff))
-			    	pars.setEntry(i,initialParameterSet[i]+maxMeandiff*diff/Math.abs(diff));
+			    	param.setEntry(i,initialParameterSet[i]+maxMeandiff*diff/Math.abs(diff));
 			}
-			return pars;
+			return param;
 		}
 		
 	}
 }
 
-class GaussianArray implements UnivariateDifferentiableFunction {
+class GaussianArrayBackGround implements UnivariateDifferentiableFunction {
+	// Implements atrain of Gaussian peaks 
+	// with an optional polynomial background function
+	
 	private RealVector means;
 	private RealVector norms;
 	
-	private RealVector is;  // 1*sd
-	private RealVector i2s2;// 1/(2*sd^2)
+	private RealVector is;   // 1*sd
+	private RealVector i2s2; // 1/(2*sd^2)
 	
-	public GaussianArray(	double[] norms,
-							double[] means,
-							double[] sds)
+	private RealVector poly; // Polynomial background curve
+	
+	public GaussianArrayBackGround(RealVector norms,
+						 RealVector means,
+						 RealVector sds,
+						 RealVector poly)
 					throws NotStrictlyPositiveException {
-	
-		this.means = new ArrayRealVector(means);
-		this.norms = new ArrayRealVector(norms);
+		this.means = means;
+		this.norms = norms;
 		this.is    = new ArrayRealVector();
 		this.i2s2  = new ArrayRealVector();
-		for (int q = 0; q< means.length; q++) {
-			this.is   = this.is.append(1 / sds[q]);
+		this.poly  = poly; // NO poly background
+		for (int q = 0; q< means.getDimension(); q++) {
+			this.is   = this.is.append(1 / sds.getEntry(q));
 			this.i2s2 = this.i2s2.append(0.5*is.getEntry(q)*is.getEntry(q));
 		}
 	}
+	
 	
 	@Override
 	public double value(double x) {
 		RealVector diffs = new ArrayRealVector(means);
 		diffs.mapAddToSelf(-x).mapMultiplyToSelf(-1);
-		return value(diffs, norms, i2s2);
+		return value(x, diffs, norms, i2s2, poly);
 	}
 	
-	private static double value(RealVector xMinusMean, 
+	private static double value(double     x,
+								RealVector xMinusMean, 
 								RealVector norms, 
-								RealVector i2s2) {
+								RealVector i2s2,
+								RealVector poly) {
 		double output = 0;
 		for (int i=0;i<xMinusMean.getDimension();i++) {
 			output += norms.getEntry(i)*
@@ -623,6 +649,13 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 									  xMinusMean.getEntry(i)*
 									  i2s2.getEntry(i));
 		}
+		
+		double polyValue = 0;
+		// p[0] + p[1] x^1 + p[2] x^2 + ... + p[n-1] x^n-1
+		for (int p = poly.getMaxIndex(); p >= 0; p--)
+			polyValue = poly.getEntry(p) + (x * polyValue);
+		
+		output += polyValue;
 		return output;
 	} 
 	
@@ -662,22 +695,32 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 		 * @return the value of the function.
 		 * @throws NullArgumentException if {@code param} is {@code null}.
 		 * @throws DimensionMismatchException if the size of {@code param} is
-		 * not a multiple of 3.
+		 * not a multiple of 3 + number of polynomial coefficients + 1.
 		 * @throws NotStrictlyPositiveException if {@code param[2]} is negative.
 		 */
 		@Override
-		public double value(double x, double... pars) {
-			validateParameters(pars);
+		public double value(double x, double... param) {
+			validateParameters(param); // in Parametric class
+			int degPoly = (int) param[0];
 			RealVector diffs = new ArrayRealVector();
 			RealVector norms = new ArrayRealVector();
 			RealVector i2s2  = new ArrayRealVector();
+			RealVector poly  = new ArrayRealVector();
 			
-			for (int i = 0; i<pars.length; i+=3) {
-				diffs = diffs.append(x - pars[i+1]);
-				norms = norms.append(pars[i]);
-				i2s2  = i2s2 .append(1/(2*pars[i+2]*pars[i+2]));
+			int gaussStart = 1;
+			if (degPoly != -1) { // No background, param[0] == -1
+				gaussStart = degPoly+2;
+				for (int p = 0; p < gaussStart+1 ; ++p) {
+					poly = poly.append(param[p]);
+				}
 			}
-			return GaussianArray.value(diffs,norms,i2s2);
+			
+			for (int i = gaussStart; i<param.length; i+=3) {
+				diffs = diffs.append(x - param[i+1]);
+				norms = norms.append(param[i]);
+				i2s2  = i2s2 .append(1/(2*param[i+2]*param[i+2]));
+			}
+			return GaussianArrayBackGround.value(x, diffs,norms,i2s2, poly);
 		}
 		
         /**
@@ -701,23 +744,34 @@ class GaussianArray implements UnivariateDifferentiableFunction {
                        DimensionMismatchException,
                        NotStrictlyPositiveException {
                 validateParameters(param);
-                double[] out = new double[param.length];
+    			int        degPoly = (int) param[0];
+    			double[]   out = new double[param.length];
+    			RealVector diffs  = new ArrayRealVector();
+    			RealVector norms  = new ArrayRealVector();
+    			RealVector sigmas = new ArrayRealVector();
+    			RealVector i2s2   = new ArrayRealVector();
+    			
+    			int gaussStart = 1;
+    			out[0] = 0.0;
+    			if (degPoly != -1) { // No background, param[0] == -1
+    				gaussStart = degPoly+2;
+    				double xn = 1.0;
+    				for (int p = 0; p < degPoly+1; ++p) {
+    		             out[p+1] = xn;
+    		             xn *= x;
+    				}
+    			}
                 
-            	final double[] norm  = new double[param.length/3];
-            	final double[] diff  = new double[param.length/3];
-            	final double[] sigma = new double[param.length/3];
-            	final double[] i2s2  = new double[param.length/3];
-                
-                for (int gg=0; gg<param.length; gg+=3) {
-                	norm [gg/3] =     param[gg]  ;
-                	diff [gg/3] = x - param[gg+1];
-                	sigma[gg/3] =     param[gg+2];
-                	i2s2 [gg/3] = 1 / (2 * sigma[gg/3] * sigma[gg/3]);
+                for (int gg=gaussStart; gg<param.length; gg+=3) {
+                	norms  = norms .append(param[gg]  ) ;
+                	diffs  = diffs .append(x-	param[gg+1]);
+                	sigmas = sigmas.append(param[gg+2]);
+                	i2s2   = i2s2  .append(1 / (2 * sigmas.getEntry(gg/3) * sigmas.getEntry(gg/3)));
                 	
                 	// Only 1 Gaussian function at a time contributes to the gradient
-                	final double n = new Gaussian(1.0, param[gg+1],param[gg+2]).value(x);
-                	final double m = norm[gg/3] * n * 2 * i2s2[gg/3] * diff[gg/3];
-                	final double s = m * diff[gg/3] / sigma[gg/3];
+                	final double n = new Gaussian(1.0, param[gg+1], param[gg+2]).value(x);
+                	final double m = norms.getEntry(gg/3) * n * 2 * i2s2.getEntry(gg/3) * diffs.getEntry(gg/3);
+                	final double s = m * diffs.getEntry(gg/3) / sigmas.getEntry(gg/3);
                 	out[gg]   = n;
                 	out[gg+1] = m;
                 	out[gg+2] = s;
@@ -740,11 +794,19 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 				throws NullArgumentException,
 				DimensionMismatchException,
 				NotStrictlyPositiveException {
+
 			if (param == null) {
 				throw new NullArgumentException();
 			}
-			if ((param.length % 3) != 0) {
-				throw new DimensionMismatchException(param.length % 3, 0);
+			
+			if (param[0] == -1) {
+				if ((param.length - 1 % 3) != 0) {
+					throw new DimensionMismatchException(param.length - 1 % 3, 0);
+				}
+			} else{
+				if ((param.length - (int) param[0]-2 % 3) != 0) {
+					throw new DimensionMismatchException((param.length - (int) param[0] - 2) % 3, 0);
+				}
 			}
 			
 			for (int p=0; p<param.length;p++)
