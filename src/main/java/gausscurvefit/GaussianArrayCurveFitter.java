@@ -1,3 +1,4 @@
+package gausscurvefit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -61,10 +62,10 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		}
 	};
 	/** Initial guess. */
-	private double[] initialGuess;
+	private       double[] initialGuess;
 	/** Maximum number of iterations of the optimization algorithm. */
-	private final int maxIter;
-	private final double peakTol;
+	private final int      maxIter;
+	private final double   peakTol;
 
 	/**
 	 * Contructor used by the factory methods.
@@ -143,7 +144,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					new ParameterGuesser(observations, peakTol).guess();
 		
 		final GaussianArrayParameterValidator parValid = 
-				new GaussianArrayParameterValidator(initialGuess, xx, target);
+				new GaussianArrayParameterValidator(startPoint, xx, target);
 
 		// Return a new least squares problem set up to fit a Gaussian curve to the
 		// observed points
@@ -177,11 +178,11 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 */
 	public static class ParameterGuesser {
 		/** Normalization factor. */
-		private final RealVector norm = new ArrayRealVector();
+		private RealVector norm  = new ArrayRealVector();
 		/** Mean. */
-		private final RealVector mean = new ArrayRealVector();
+		private RealVector mean  = new ArrayRealVector();
 		/** Standard deviation. */
-		private final RealVector sigma = new ArrayRealVector();
+		private RealVector sigma = new ArrayRealVector();
 
 		/**
 		 * Constructs instance with the specified observed points.
@@ -205,9 +206,9 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			final RealVector params = basicGuess(sorted.toArray(new WeightedObservedPoint[0]), peakTol);
 
 			for (int p=0; p<params.getDimension(); p+=3 ){
-				norm.append(params.getEntry(p));
-				mean.append(params.getEntry(p+1));
-				sigma.append(params.getEntry(p+2));
+				norm  = norm .append(params.getEntry(p));
+				mean  = mean .append(params.getEntry(p+1));
+				sigma = sigma.append(params.getEntry(p+2));
 			}
 		}
 
@@ -224,9 +225,9 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		public double[] guess() {
 			RealVector guess = new ArrayRealVector();
 			for (int vv = 0; vv<norm.getDimension(); vv++) {
-				guess.append(norm. getEntry(vv)).
-					  append(mean. getEntry(vv)).
-					  append(sigma.getEntry(vv));
+				guess = guess.append(norm. getEntry(vv)).
+							  append(mean. getEntry(vv)).
+							  append(sigma.getEntry(vv));
 			}
 			return guess.toArray();
 		}
@@ -283,17 +284,18 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private RealVector basicGuess(WeightedObservedPoint[] points, double tolpk) {
 			RealVector xvals = new ArrayRealVector();
 			RealVector yvals = new ArrayRealVector();
-			for(int o = 0; o<points.length; o++){
-				xvals.append(points[o].getX());
-				yvals.append(points[o].getY());
+			for(int o = 0; o<points.length; o++) {
+				xvals = xvals.append(points[o].getX());
+				yvals = yvals.append(points[o].getY());
 			}
+
 			// Local maxima where the peaks are
 			int[] maximaIdx = findMaxima(points, tolpk, true);
 
 			// Define a Gaussian at each peak
-			double[] means      = new double[maximaIdx.length];
-			double[] stds       = new double[maximaIdx.length];
-			double[] norms      = new double[maximaIdx.length];
+			double[]   means      = new double[maximaIdx.length];
+			double[]   sds        = new double[maximaIdx.length];
+			double[]   norms      = new double[maximaIdx.length];
 			RealVector guessStart = new ArrayRealVector(); // Array of parameters for Fitter
 
 			// Initial parameters based on the position of the peaks
@@ -301,26 +303,32 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				norms[m] = yvals.getEntry(maximaIdx[m]);
 				means[m] = xvals.getEntry(maximaIdx[m]);
 
-				//estimate stds from maxima and mean
+				//estimate sds from maxima and mean
 				boolean foundHWHM  = false;
 				boolean foundHWHML = false; 
 				boolean foundHWHMR = false;
-				boolean mustExit   = false;
 				double  leftHWHM   = 1.0; 
-				double  rightHWHM  = 1.0;;
-				double  hm         = norms[m]/2;
+				double  rightHWHM  = 1.0;
+				double  maxSD      = 0.05*xvals.getEntry(xvals.getMaxIndex())/maximaIdx.length;
+				double  hm         = yvals.getEntry(maximaIdx[m])/2;
 				double  mean       = means[m];
 				int     pkPos      = maximaIdx[m];
 				int     p          = 0;
 
 				while (!foundHWHM) {
-					if (yvals.getEntry(pkPos+p)       < hm && // Right side
-							yvals.getEntry(pkPos+p+1) < hm && // check 3 consecutive points for smoothing
-							yvals.getEntry(pkPos+p+2) < hm) {
+					if (pkPos+p+2 > yvals.getMaxIndex()) {
+						foundHWHMR = true;
+						rightHWHM  = xvals.getEntry(xvals.getMaxIndex())-mean;
+					} else if (yvals.getEntry(pkPos+p) < hm && // Right side
+							yvals.getEntry(pkPos+p+1)  < hm && // check 3 consecutive points for smoothing
+							yvals.getEntry(pkPos+p+2)  < hm) {
 						foundHWHMR = true;
 						rightHWHM  = xvals.getEntry(pkPos+p)-mean;
 					}
-					if (yvals.getEntry(pkPos-p)       < hm && // Left side
+					if (pkPos-p-2 < 0) {
+						foundHWHML = true;
+						leftHWHM   = xvals.getEntry(pkPos)-xvals.getEntry(01);
+					} else if (yvals.getEntry(pkPos-p)       < hm && // Left side
 							yvals.getEntry(pkPos-p-1) < hm && // check 3 consecutive points for smoothing
 							yvals.getEntry(pkPos-p-2) < hm) {
 						foundHWHML = true;
@@ -328,26 +336,24 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					}
 					if (foundHWHML && foundHWHMR) { // both sides found
 						foundHWHM = true;
-						stds [m]  = (rightHWHM+leftHWHM)/2;
+						sds [m]  = FastMath.min(rightHWHM, leftHWHM)/
+											(2*FastMath.sqrt(2*FastMath.log(2)));
 					}
-					p++;
-					if ((pkPos+p+2 > yvals.getMaxIndex() || pkPos-p-2 < 0)) {
-						if (!mustExit) {
-							hm *= 0.5; // Do another round with smaller hm
+					if (sds [m] > maxSD) {
+						if (hm < 0.9*yvals.getEntry(maximaIdx[m])) {
+							hm *= 1.1; // Do another round with smaller hm
 							p   = 0;
-							mustExit = true;
-						} else  { // Give up
-							rightHWHM  = xvals.getEntry(pkPos+p)-mean;
-							leftHWHM   = mean-xvals.getEntry(pkPos-p);
-							stds [m] = Math.min(rightHWHM,leftHWHM)
-									/(2*FastMath.sqrt(2*FastMath.log(2)));
+						} else {
+							// If exiting without finding anything
+							sds [m]  = maxSD;
 							break;
 						}
-					}
+					} 
+					p++;
 				}
 				guessStart = guessStart.append(norms[m]);
 				guessStart = guessStart.append(means[m]);
-				guessStart = guessStart.append(stds [m]);
+				guessStart = guessStart.append(sds [m]);
 			}
 			return guessStart;
 		}
@@ -538,14 +544,12 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private double[] initialParameterSet;
 		private double   maxXvalue;
 		private double   maxMeandiff;
+		private double   maxSD; 
 		public GaussianArrayParameterValidator(double[] initialGuess, double[] xtarget, double[] ytarget) {
 			this.initialParameterSet = initialGuess;
 			this.maxXvalue = xtarget[xtarget.length-1];
 			this.maxMeandiff = maxXvalue/(initialGuess.length/3)/50;
-//			for (int p = 1; p<initialGuess.length-4; p+=3){
-//				if (initialGuess[p+3]-initialGuess[p]<maxMeandiff) 
-//					maxMeandiff = initialGuess[p+3]-initialGuess[p];
-//			} // any mean not further than this from initial guess
+			this.maxSD = 0.2*maxXvalue/(initialGuess.length/3);
 		}
 		
 		@Override
@@ -554,16 +558,18 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			for (int i = 0; i<pars.getDimension(); i++) {
 				// {0=Norm, 1=Mean, 2=Sigma}
 				// Lower bound of 0 for all 3
-			    if ((i % 3 == 0 || i % 3 == 1 || i % 3 == 2) && pars.getEntry(i) < 1e-1)  
-			    	pars.setEntry(i, 0.0);
+				if (i % 3 == 0 && pars.getEntry(i) < 0.5*initialParameterSet[i])
+					pars.setEntry(i, 0.5*initialParameterSet[i]);
+			    if ((i % 3 == 1 || i % 3 == 2) && pars.getEntry(i) < 1e-1)  
+			    	pars.setEntry(i, 1e-1);
 			    // Upper bounds for each parameter
 			    if ((i % 3 == 0) && pars.getEntry(i) > initialParameterSet[i])  
 			    	pars.setEntry(i, initialParameterSet[i]);
 			    if ((i % 3 == 1) && 
 			    		(pars.getEntry(i) > maxXvalue ))  
 			    	pars.setEntry(i, maxXvalue);
-			    if ((i % 3 == 2) && pars.getEntry(i) > 1.5*initialParameterSet[i])  
-			    	pars.setEntry(i, 1.5*initialParameterSet[i]);
+			    if ((i % 3 == 2) && pars.getEntry(i) > maxSD)  
+			    	pars.setEntry(i, maxSD);
 			    // Keep means close to maxima
 			    double diff = pars.getEntry(i)-initialParameterSet[i];
 			    if ((i % 3 == 1) && (Math.abs(diff) > maxMeandiff))
@@ -576,22 +582,24 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 }
 
 class GaussianArray implements UnivariateDifferentiableFunction {
-	private double[] means;
-	private double[] norms;
+	private RealVector means;
+	private RealVector norms;
 	
-	private double[] is;  // 1*std
-	private double[] i2s2;// 1/(2*std^2)
+	private RealVector is;  // 1*sd
+	private RealVector i2s2;// 1/(2*sd^2)
 	
 	public GaussianArray(	double[] norms,
 							double[] means,
-							double[] stds)
+							double[] sds)
 					throws NotStrictlyPositiveException {
 	
-		this.means = means;
-		this.norms = norms;
+		this.means = new ArrayRealVector(means);
+		this.norms = new ArrayRealVector(norms);
+		this.is    = new ArrayRealVector();
+		this.i2s2  = new ArrayRealVector();
 		for (int q = 0; q< means.length; q++) {
-			this.is  [q] = 1 / stds[q];
-			this.i2s2[q] = 0.5*is[q]*is[q];
+			this.is   = this.is.append(1 / sds[q]);
+			this.i2s2 = this.i2s2.append(0.5*is.getEntry(q)*is.getEntry(q));
 		}
 	}
 	
@@ -599,15 +607,18 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 	public double value(double x) {
 		RealVector diffs = new ArrayRealVector(means);
 		diffs.mapAddToSelf(-x).mapMultiplyToSelf(-1);
-		return value(diffs.toArray(), norms, i2s2);
+		return value(diffs, norms, i2s2);
 	}
 	
-	private static double value(double[] xMinusMean, 
-								double[] norms, 
-								double[] i2s2) {
+	private static double value(RealVector xMinusMean, 
+								RealVector norms, 
+								RealVector i2s2) {
 		double output = 0;
-		for (int i=0;i<xMinusMean.length;i++) {
-			output += norms[i] * FastMath.exp(-xMinusMean[i] * xMinusMean[i] * i2s2[i]);
+		for (int i=0;i<xMinusMean.getDimension();i++) {
+			output += norms.getEntry(i)*
+						FastMath.exp(-xMinusMean.getEntry(i)*
+									  xMinusMean.getEntry(i)*
+									  i2s2.getEntry(i));
 		}
 		return output;
 	} 
@@ -654,14 +665,14 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 		@Override
 		public double value(double x, double... pars) {
 			validateParameters(pars);
-			final double[] diffs = new double[pars.length / 3];
-			final double[] norms = new double[pars.length / 3];
-			final double[] i2s2  = new double[pars.length / 3];
+			RealVector diffs = new ArrayRealVector();
+			RealVector norms = new ArrayRealVector();
+			RealVector i2s2  = new ArrayRealVector();
 			
 			for (int i = 0; i<pars.length; i+=3) {
-				diffs[i/3] = x - pars[i+1];
-				norms[1/3] = pars[i];
-				i2s2 [i/3] = 1/(2*pars[i+2] * pars[i+2]);
+				diffs = diffs.append(x - pars[i+1]);
+				norms = norms.append(pars[i]);
+				i2s2  = i2s2 .append(1/(2*pars[i+2]*pars[i+2]));
 			}
 			return GaussianArray.value(diffs,norms,i2s2);
 		}

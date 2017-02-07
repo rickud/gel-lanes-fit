@@ -1,3 +1,4 @@
+package gausscurvefit;
 /**
  * Gauss Fit
  * GaussFitLanes.java
@@ -49,15 +50,7 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
-import org.apache.commons.collections4.CollectionUtils;
-import org.apache.commons.collections4.IterableMap;
-import org.apache.commons.collections4.MapIterator;
-import org.apache.commons.collections4.collection.IndexedCollection;
-import org.apache.commons.collections4.iterators.ArrayListIterator;
-import org.apache.commons.collections4.list.FixedSizeList;
-import org.apache.commons.collections4.map.HashedMap;
-import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.math.NumberUtils;
+
 import org.apache.commons.math4.analysis.function.Gaussian;
 import org.apache.commons.math4.analysis.interpolation.SplineInterpolator;
 import org.apache.commons.math4.analysis.polynomials.PolynomialSplineFunction;
@@ -80,6 +73,7 @@ import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
 
+import gausscurvefit.GaussianArrayCurveFitter.ParameterGuesser;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
@@ -143,8 +137,8 @@ Command, Previewable, Runnable {
 	private ImagePlus plotImage = new ImagePlus();
 	private RoiManager roiMan = new RoiManager();
 	private CustomDialog cd;
-	private int rows = 2; // Number of plot Rows in display
-	private int cols = 2; // Number of plot Rows in display
+	private int rows = 1; // Number of plot Rows in display
+	private int cols = 1; // Number of plot Rows in display
 
 	public void init() {
 		imp = IJ.getImage();
@@ -363,68 +357,96 @@ Command, Previewable, Runnable {
 			br.write(sb.toString());
 			br.close();
 			
-//			plots[i].setColor(Color.black);
-//			plots[i].addPoints(xvals.toArray(), yvals.toArray(), PlotWindow.LINE);
-
 			// Tolerances as percentage of the range
 			double tolbg = cd.getTolBG()*(yvals.getMaxValue()-yvals.getMinValue());
 			double tolpk = cd.getTolPK()*(yvals.getMaxValue()-yvals.getMinValue());
 
-			
-
-			//double[] pars = GaussianCurveFitter.create().withStartPoint(ArrayUtils.subarray(guessStart, 0, 3)).fit(obs.toList());
+			ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(),tolpk);
+			RealVector firstGuess = new ArrayRealVector(pg.guess());
 			LeastSquaresProblem problem  = GaussianArrayCurveFitter.
 					create(tolpk).
 					getProblem(obs.toList());
 
 			LeastSquaresOptimizer.Optimum optimum;
-			RealVector pars = new ArrayRealVector();
 			
-				optimum = new LevenbergMarquardtOptimizer()
-						//.withCostRelativeTolerance(1e-100)
-						//.withOrthoTolerance(1e-100)
-						//.withParameterRelativeTolerance(1e-15)
-						//.withInitialStepBoundFactor(0.1)
-						.optimize(problem);
-				System.out.println("RMS: "           + optimum.getRMS());
-				System.out.println("evaluations: "   + optimum.getEvaluations());
-				System.out.println("iterations: "    + optimum.getIterations());
+			
+			optimum = new LevenbergMarquardtOptimizer()
+					//.withCostRelativeTolerance(1e-100)
+					//.withOrthoTolerance(1e-100)
+					//.withParameterRelativeTolerance(1e-15)
+					//.withInitialStepBoundFactor(0.1)
+					.optimize(problem);
+			System.out.println("RMS: "           + optimum.getRMS());
+			System.out.println("evaluations: "   + optimum.getEvaluations());
+			System.out.println("iterations: "    + optimum.getIterations());
 
 
-				pars  = new ArrayRealVector(
-						GaussianArrayCurveFitter.
-						create(tolpk).
-						fit(obs.toList()));
+			RealVector pars  = new ArrayRealVector(
+					GaussianArrayCurveFitter.
+					create(tolpk).
+					fit(obs.toList()));
 //			} catch (ConvergenceException e) {
 //				System.out.println("No Convergence: "+ e.getCause());
 //				pars= new ArrayRealVector();
 //			}
 			RealVector diff = new ArrayRealVector(pars).subtract(optimum.getPoint());
+			
+			// After fitting
+			RealVector norms  = new ArrayRealVector();
+			RealVector means  = new ArrayRealVector();
+			RealVector sds    = new ArrayRealVector();
 			RealVector gauss  = new ArrayRealVector();
+			
+			// Initial Guess
+			RealVector norms0 = new ArrayRealVector();
+			RealVector means0 = new ArrayRealVector();
+			RealVector sds0   = new ArrayRealVector();
 			RealVector gauss0 = new ArrayRealVector();
-			for (int b=0; b<pars.getDimension()/3; b++){ // plot one gaussian for each peak
-				gauss = xvals.map(
-						new Gaussian(pars.getEntry(b*3), pars.getEntry(b*3+1), pars.getEntry(b*3+2)));
-	
-				plots[i].setColor(Color.red);
-				plots[i].addPoints(xvals.toArray(), gauss.toArray(), PlotWindow.LINE);
+			RealVector fitted = new ArrayRealVector();
+			
+			for (int b=0; b<pars.getDimension(); b+=3) { // plot one gaussian for each peak
+				// Initial Guess
+				norms0 = norms0.append(firstGuess.getEntry(b));
+				means0 = means0.append(firstGuess.getEntry(b+1));
+				sds0   = sds0  .append(firstGuess.getEntry(b+2));
 				gauss0 = xvals.map(
-						new Gaussian(norms[b],means[b],stds[b]));					
+						new Gaussian(firstGuess.getEntry(b),
+									 firstGuess.getEntry(b+1),
+									 firstGuess.getEntry(b+2)));					
 				plots[i].setColor(Color.blue);
 				plots[i].addPoints(xvals.toArray(), gauss0.toArray(), PlotWindow.LINE);
+				
+				// After fitting
+				norms = norms.append(pars.getEntry(b));
+				means = means.append(pars.getEntry(b+1));
+				sds   = sds  .append(pars.getEntry(b+2));
+				gauss = xvals.map(
+						new Gaussian(pars.getEntry(b),
+									 pars.getEntry(b+1),
+									 pars.getEntry(b+2)));
+				plots[i].setColor(Color.red);
+				plots[i].addPoints(xvals.toArray(), gauss.toArray(), PlotWindow.LINE);
 			}
+			fitted = xvals.map(new GaussianArray(
+								norms.toArray(), 
+								means.toArray(), 
+								sds.  toArray()));
 			plots[i].setColor(Color.blue);
-			plots[i].addPoints(means, norms, PlotWindow.CIRCLE);
-
-
+			plots[i].addPoints(means0.toArray(), norms0.toArray(), PlotWindow.CIRCLE);
+			plots[i].setColor(Color.red);
+			plots[i].addPoints(means.toArray(),  norms.toArray(),  PlotWindow.CIRCLE);
+			plots[i].setColor(Color.green);
+			plots[i].addPoints(xvals.toArray(), fitted.toArray(), PlotWindow.LINE);
 			String parStrN = String.format("Lane %1$d-parN: ", i+1);
 			String parStrM = String.format("Lane %1$d-parM: ", i+1);
 			String parStrS = String.format("Lane %1$d-parS: ", i+1);
-			for (int pp = 0; pp<pars.getDimension(); pp+=3){
-				parStrN += String.format("%1$.2f, ", pars.getEntry(pp  ));
-				parStrM += String.format("%1$.2f, ", pars.getEntry(pp+1));
-				parStrS += String.format("%1$.2f, ", pars.getEntry(pp+2));
-			}
+			
+			for (double d : norms.toArray()) 	
+				parStrN += String.format("%1$.2f, ", d);
+			for (double d : means.toArray())
+				parStrM += String.format("%1$.2f, ", d);
+			for (double d : sds  .toArray())
+				parStrS += String.format("%1$.2f, ", d);
 
 			System.out.println(parStrN.substring(0,parStrN.length()-2));
 			System.out.println(parStrM.substring(0,parStrM.length()-2));
@@ -474,8 +496,8 @@ Command, Previewable, Runnable {
 		int LHOff  = LSp;
 		int LVOff  = (IH-LH)/2;
 
-		double tolBG = 0.3; 
-		double tolPK = 0.1;
+		double tolBG = 0.2; 
+		double tolPK = 0.05;
 
 		private JPanel     textPanel;
 		private JLabel     labelNLanes;
