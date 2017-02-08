@@ -88,7 +88,6 @@ import ij.util.Tools;
 import io.scif.services.DatasetIOService;
 import net.imagej.DatasetService;
 import net.imagej.ImageJ;
-import net.imagej.ImgPlus;
 import net.imagej.display.ImageDisplayService;
 import net.imagej.ops.OpService;
 
@@ -127,16 +126,20 @@ Command, Previewable, Runnable {
 	private boolean doFit;               //tells the background thread to update
 	ImagePlus imp;
 	private Plot[] plots; 
-	private boolean subMin = true;  // subtract min y value from all profile plots
-
-	private ImagePlus plotImage = new ImagePlus();
-	private RoiManager roiMan = new RoiManager();
-	private CustomDialog cd;
-	private int rows = 1; // Number of plot Rows in display
-	private int cols = 1; // Number of plot Rows in display
 	
-	private int deg  = 3; // Order of Background Polynomial
 
+	private ImagePlus    plotImage = new ImagePlus();
+	private RoiManager   roiMan = new RoiManager();
+	private CustomDialog cd;
+	
+	private int rows   = 2; // Number of plot Rows in display
+	private int cols   = 2; // Number of plot Rows in display
+	private int nLanes = 4;
+	
+	private int degBG = 3;       // Order of Background Polynomial
+	
+	private double tolPK = 0.05; // Peak detection tolerance as % of intensity range
+		
 	public void init() {
 		imp = IJ.getImage();
 		roiMan = RoiManager.getInstance(); 
@@ -152,7 +155,7 @@ Command, Previewable, Runnable {
 		IJ.wait(50); //delay to make sure ROIs have updated
 		plotImage.setTitle("Profiles of " + imp.getShortTitle()); 
 
-		updatePlots(rows, cols, subMin);
+		updatePlots(rows, cols);
 		
 		plotImage.show();
 		if (plotImage.getRoi()!=null) plotImage.deleteRoi();
@@ -199,7 +202,7 @@ Command, Previewable, Runnable {
 
 	/** Profile data from Roi, ready for fitting 
 	 *  (null if not possible) */
-	private RealMatrix getLaneProfile(int laneRoi, boolean minValueZero) {
+	private RealMatrix getLaneProfile(int laneRoi) {
 		if (roiMan.getCount() == 0) return null;
 		roiMan.select(laneRoi);
 		Roi roi = roiMan.getRoi(laneRoi);	
@@ -207,8 +210,6 @@ Command, Previewable, Runnable {
 		RealVector profile = new ArrayRealVector(profileP.getProfile());
 		if (profile==null || profile.getDimension()<2)
 			return null;
-		if (minValueZero)
-			profile.mapSubtractToSelf(profile.getMinValue());
 
 		//the following code is mainly for x calibration                   
 		Calibration cal = imp.getCalibration();
@@ -246,7 +247,7 @@ Command, Previewable, Runnable {
 	/**
 	 * Method for Output plot collage
 	 * */
-	private void updatePlots(int rows, int cols, boolean minValueZero){
+	private void updatePlots(int rows, int cols){
 		if (roiMan.getCount() == 0) return;
 		ImageProcessor ip = imp.getProcessor();
 		if (plots == null){
@@ -261,9 +262,6 @@ Command, Previewable, Runnable {
 					ip.setInterpolate(false);
 				ProfilePlot profileP = new ProfilePlot(imp, true);//get the profile
 				RealVector profile = new ArrayRealVector(profileP.getProfile());
-				if (minValueZero) {
-					profile.mapSubtractToSelf(profile.getMinValue());
-				}
 				if (profile==null || profile.getDimension()<2)
 					return;
 
@@ -337,15 +335,16 @@ Command, Previewable, Runnable {
 
 	private void doFit() throws IOException {
 		//Reset the plots window
+		updatePlots(rows,cols);
 		for (int i = 0; i<plots.length; i++) {
-			RealVector xvals = new ArrayRealVector(getLaneProfile(i,subMin).getRow(0));
-			RealVector yvals = new ArrayRealVector(getLaneProfile(i,subMin).getRow(1));
-			RealVector bg    = new ArrayRealVector(yvals.getDimension(), yvals.getMinValue()); 
+			RealVector xvals = new ArrayRealVector(getLaneProfile(i).getRow(0));
+			RealVector yvals = new ArrayRealVector(getLaneProfile(i).getRow(1));
+			RealVector bg    = new ArrayRealVector(); 
 			
 			WeightedObservedPoints obs   = new WeightedObservedPoints(); // All Y
 			BufferedWriter br = new BufferedWriter(new FileWriter("output//Plot"+(i+1)+".csv"));
 			StringBuilder  sb = new StringBuilder();
-			yvals = new ArrayRealVector(yvals).mapSubtractToSelf(yvals.getMinValue());
+			
 			for (int o = 0 ; o<xvals.getDimension(); o++) {
 				obs.add(xvals.getEntry(o), yvals.getEntry(o));
 				sb.append(xvals.getEntry(o) +"\t"+yvals.getEntry(o)+"\n");
@@ -353,65 +352,65 @@ Command, Previewable, Runnable {
 			br.write(sb.toString());
 			br.close();
 			
-			// Tolerances as percentage of the range
-			int    degbg = cd.getTolBG();
+			int    degbg = cd.getDegBG();
+			// Tolerance as percentage of the range
 			double tolpk = cd.getTolPK()*(yvals.getMaxValue()-yvals.getMinValue());
 
-			ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(),tolpk,deg);
+			ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(),tolpk,degBG);
 			RealVector firstGuess = new ArrayRealVector(pg.guess());
 			LeastSquaresProblem problem  = GaussianArrayCurveFitter.
 					create(tolpk,degbg).
 					getProblem(obs.toList());
-
-			LeastSquaresOptimizer.Optimum optimum;
 			
+//			LeastSquaresOptimizer optimizer = GaussianArrayCurveFitter.
+//					create(tolpk,degbg).
+//					getOptimizer();
 			
-			optimum = new LevenbergMarquardtOptimizer()
-					.withCostRelativeTolerance(1e-14)
-					.withOrthoTolerance(1e-14)
-					.withParameterRelativeTolerance(1e-14)
-					.withInitialStepBoundFactor(10.0)
+			LeastSquaresOptimizer.Optimum optimum = new LevenbergMarquardtOptimizer()
+					.withCostRelativeTolerance(1e-12)
+					.withOrthoTolerance(1e-12)
+					.withParameterRelativeTolerance(1e-12)
+					.withInitialStepBoundFactor(100.0)
 					.optimize(problem);
-			System.out.println("RMS: "           + optimum.getRMS());
-			System.out.println("evaluations: "   + optimum.getEvaluations());
-			System.out.println("iterations: "    + optimum.getIterations());
-
-			RealVector pars  = new ArrayRealVector(
-					GaussianArrayCurveFitter.
-					create(tolpk,degbg).
-					fit(obs.toList()));
 			
-			RealVector diff = new ArrayRealVector(pars).subtract(optimum.getPoint());
-			pars = optimum.getPoint();
+//			RealVector pars  = new ArrayRealVector(
+//					GaussianArrayCurveFitter.
+//					create(tolpk,degbg).
+//					fit(obs.toList()));
+			
+//			RealVector diff = new ArrayRealVector(pars).subtract(optimum.getPoint());
+			RealVector pars = optimum.getPoint();
 			
 			// Initial Guess
 			RealVector norms0 = new ArrayRealVector();
 			RealVector means0 = new ArrayRealVector();
-			RealVector sds0   = new ArrayRealVector();
-			RealVector gauss0 = new ArrayRealVector();
-			RealVector poly0  = new ArrayRealVector();
-			
-			RealVector fitted = new ArrayRealVector(); // Train of Gaussians with BG
+
 			// After fitting
 			RealVector norms  = new ArrayRealVector();
 			RealVector means  = new ArrayRealVector();
 			RealVector sds    = new ArrayRealVector();
 			RealVector gauss  = new ArrayRealVector(); // Each Gaussian for plotting
+			RealVector poly   = new ArrayRealVector(); // Each Gaussian for plotting
+			RealVector fitted = new ArrayRealVector(); // Train of Gaussians with BG
+		
+			poly = pars.getSubVector(1, degBG+1);
+			bg  = xvals.map(
+					new PolynomialFunction(poly.toArray()));
+			plots[i].setColor(Color.blue);
+			plots[i].addPoints(xvals.toArray(), bg.toArray(), PlotWindow.LINE);
+			// p[0] + p[1] x^1 + p[2] x^2 + ... + p[n-1] x^n-1
+//			for (int b = 0; b < xvals.getDimension(); b++) {
+//				double polyValue = 0;
+//				for (int p = poly.getMaxIndex(); p > 0; p--) {
+//					polyValue = poly.getEntry(p) + (xvals.getEntry(b) * polyValue);
+//					bg.setEntry(b,polyValue);
+//				}
+//			}
 			
-
-			poly0  = xvals.map(
-					new PolynomialFunction(firstGuess.getSubVector(1, deg+1).toArray()));
-			for (int b=deg+2; b<pars.getDimension(); b+=3) { // plot one gaussian for each peak
+			for (int b = degBG+2; b<pars.getDimension(); b+=3) { // plot one gaussian for each peak
 				// Initial Guess
 				norms0 = norms0.append(firstGuess.getEntry(b));
 				means0 = means0.append(firstGuess.getEntry(b+1));
-				sds0   = sds0  .append(firstGuess.getEntry(b+2));
-				gauss0 = xvals.map(
-						new Gaussian(firstGuess.getEntry(b),
-									 firstGuess.getEntry(b+1),
-									 firstGuess.getEntry(b+2)));					
-//				plots[i].setColor(Color.blue);
-//				plots[i].addPoints(xvals.toArray(), gauss0.toArray(), PlotWindow.LINE);
 				
 				// After fitting
 				norms = norms.append(pars.getEntry(b));
@@ -421,34 +420,40 @@ Command, Previewable, Runnable {
 						new Gaussian(pars.getEntry(b),
 									 pars.getEntry(b+1),
 									 pars.getEntry(b+2)));
+				gauss = gauss.add(bg); // add the background Polynomial
 				plots[i].setColor(Color.red);
 				plots[i].addPoints(xvals.toArray(), gauss.toArray(), PlotWindow.LINE);
 			}
 			fitted = xvals.map(new GaussianArrayBackGround(norms, means, sds, 
-														   firstGuess.getSubVector(1, deg+1)));
+									pars.getSubVector(0, degBG + 2)));
+			
 			plots[i].setColor(Color.blue);
 			plots[i].addPoints(means0.toArray(), norms0.toArray(), PlotWindow.CROSS);
-			plots[i].setColor(Color.red);
-			plots[i].addPoints(means.toArray(),  norms.toArray(),  PlotWindow.CIRCLE);
+
 			plots[i].setColor(Color.green);
-			plots[i].addPoints(xvals.toArray(), fitted.toArray(), PlotWindow.LINE);
-			String parStrN = String.format("Lane %1$d-parN: ", i+1);
-			String parStrM = String.format("Lane %1$d-parM: ", i+1);
-			String parStrS = String.format("Lane %1$d-parS: ", i+1);
+			plots[i].addPoints(xvals.toArray(),  fitted.toArray(), PlotWindow.LINE);
+//			String parStrN = String.format("Lane %1$d-parN: ", i+1);
+//			String parStrM = String.format("Lane %1$d-parM: ", i+1);
+//			String parStrS = String.format("Lane %1$d-parS: ", i+1);
+//			String parStrP = String.format("Lane %1$d-parS: ", i+1);
 			
-			for (double d : norms.toArray()) 	
-				parStrN += String.format("%1$.2f, ", d);
-			for (double d : means.toArray())
-				parStrM += String.format("%1$.2f, ", d);
-			for (double d : sds  .toArray())
-				parStrS += String.format("%1$.2f, ", d);
+//			for (double d : norms.toArray()) 	
+//				parStrN += String.format("%1$.2f, ", d);
+//			for (double d : means.toArray())
+//				parStrM += String.format("%1$.2f, ", d);
+//			for (double d : sds  .toArray())
+//				parStrS += String.format("%1$.2f, ", d);
+//			for (double d : poly  .toArray())
+//				parStrP += String.format("%1$.2f, ", d);
 
-			System.out.println(parStrN.substring(0,parStrN.length()-2));
-			System.out.println(parStrM.substring(0,parStrM.length()-2));
-			System.out.println(parStrS.substring(0,parStrS.length()-2));
+//			System.out.println(parStrN.substring(0,parStrN.length()-2));
+//			System.out.println(parStrM.substring(0,parStrM.length()-2));
+//			System.out.println(parStrS.substring(0,parStrS.length()-2));
+//			System.out.println(parStrP.substring(0,parStrP.length()-2));
+			System.out.println(String.format("Lane %1$d, RMS: %2$.2f", i+1, optimum.getRMS()));
+//			System.out.println("evaluations: "   + optimum.getEvaluations());
+//			System.out.println("iterations: "    + optimum.getIterations());
 
-			plots[i].setColor(Color.blue);
-			plots[i].addPoints(xvals.toArray(), bg.toArray(), PlotWindow.LINE);
 			plots[i].setLimitsToFit(true);
 		}	
 	}
@@ -468,7 +473,7 @@ Command, Previewable, Runnable {
 	}
 
 	public void cancel() {
-		cd.dispose();
+		cd.dispose(); // fix
 		log.info("Gauss Fit terminated.");
 		return;
 	}
@@ -485,15 +490,11 @@ Command, Previewable, Runnable {
 		int IH = imp.getWidth();
 
 		// Default lane size/offset (Just center 4 lanes in the image)
-		int nLanes = 8;
 		int LW     = (int) Math.round(0.9*IW/nLanes);
 		int LH     = (int) Math.round(IH*0.9);
 		int LSp    = (int) Math.round((IW-LW*nLanes)/(nLanes+1));
 		int LHOff  = LSp;
 		int LVOff  = (IH-LH)/2;
-
-		int    degBG = 2;    // Background polynomial degree
-		double tolPK = 0.03;
 
 		private JPanel     textPanel;
 		private JLabel     labelNLanes;
@@ -672,7 +673,7 @@ Command, Previewable, Runnable {
 			//IJ.wait(50);
 			//delay to make sure the roi has been updated
 			plots = null;
-			updatePlots(rows,cols,subMin);
+			updatePlots(rows,cols);
 		}
 
 		private void reDrawROIs(ImagePlus image, int lw, int lh, int lsp, int lhoff, int lvoff) {
@@ -705,7 +706,7 @@ Command, Previewable, Runnable {
 			return nLanes;
 		}
 
-		public int getTolBG(){
+		public int getDegBG(){
 			try {
 				degBG =  Integer.parseInt(textDegBG.getText().trim());
 				return degBG;
@@ -752,10 +753,10 @@ Command, Previewable, Runnable {
 					// TODO Auto-generated catch block
 					e1.printStackTrace();
 				}
-				updatePlots(rows,cols,subMin);
+				updatePlots(rows,cols);
 				chkBoxBands.setEnabled(true);
 			}
-			if (e.getSource().equals(buttonMeasure)){
+			if (e.getSource().equals(buttonCancel)){
 				cleanup();
 				cancel();
 			}
