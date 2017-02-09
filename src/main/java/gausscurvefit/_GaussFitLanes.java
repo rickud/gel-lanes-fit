@@ -22,6 +22,8 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GridBagLayout;
+import java.awt.GridLayout;
 import java.awt.Point;
 import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
@@ -50,6 +52,7 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
 import org.apache.commons.math4.analysis.function.Gaussian;
+import org.apache.commons.math4.analysis.integration.TrapezoidIntegrator;
 import org.apache.commons.math4.analysis.polynomials.PolynomialFunction;
 import org.apache.commons.math4.fitting.WeightedObservedPoints;
 import org.apache.commons.math4.fitting.leastsquares.LeastSquaresOptimizer;
@@ -59,6 +62,7 @@ import org.apache.commons.math4.linear.ArrayRealVector;
 import org.apache.commons.math4.linear.MatrixUtils;
 import org.apache.commons.math4.linear.RealMatrix;
 import org.apache.commons.math4.linear.RealVector;
+import org.apache.commons.math4.util.FastMath;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.command.Previewable;
@@ -81,6 +85,8 @@ import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 import ij.io.Opener;
 import ij.measure.Calibration;
+import ij.measure.ResultsTable;
+import ij.plugin.filter.Analyzer;
 import ij.plugin.frame.RoiManager;
 import ij.process.ColorProcessor;
 import ij.process.ImageProcessor;
@@ -93,10 +99,11 @@ import net.imagej.ops.OpService;
 
 
 
+
 @Plugin(type = Command.class, headless = true,
 menuPath = "Plugins>Gel Tools>Gauss Fit")
 public class _GaussFitLanes implements 
-Command, Previewable, Runnable {
+				Command, Previewable, Runnable {
 
 	@Parameter
 	private LogService log;
@@ -120,15 +127,15 @@ Command, Previewable, Runnable {
 	private static OpService ops;
 
 	// Default Parameters
-	private Thread mainThread;           //thread for plotting (in the background)
-	private Thread plotThread;           //thread for plotting (in the background)
-	private boolean setup = true;
-	private boolean doFit;               //tells the background thread to update
-	ImagePlus imp;
-	private Plot[] plots; 
+	private Thread    mainThread;           //thread for plotting (in the background)
+	private Thread    plotThread;           //thread for plotting (in the background)
+	private boolean   setup = true;
+	private boolean   doFit;               //tells the background thread to update
 	
-
+	private Plot[]    plots; 
+	private ImagePlus imp;
 	private ImagePlus    plotImage = new ImagePlus();
+	
 	private RoiManager   roiMan = new RoiManager();
 	private CustomDialog cd;
 	
@@ -142,7 +149,8 @@ Command, Previewable, Runnable {
 		
 	public void init() {
 		imp = IJ.getImage();
-		roiMan = RoiManager.getInstance(); 
+		roiMan = RoiManager.getInstance();
+		roiMan.setVisible(false);
 		if(roiMan==null) { 
 			roiMan = new RoiManager(true); 
 		} 
@@ -201,7 +209,9 @@ Command, Previewable, Runnable {
 	}
 
 	/** Profile data from Roi, ready for fitting 
-	 *  (null if not possible) */
+	 *  (null if not possible) 
+	 *  @param laneRoi
+	 */ 
 	private RealMatrix getLaneProfile(int laneRoi) {
 		if (roiMan.getCount() == 0) return null;
 		roiMan.select(laneRoi);
@@ -246,6 +256,8 @@ Command, Previewable, Runnable {
 	
 	/**
 	 * Method for Output plot collage
+	 * @param rows number of rows of plots in the montage
+	 * @param cols number of columns of plots in the montage
 	 * */
 	private void updatePlots(int rows, int cols){
 		if (roiMan.getCount() == 0) return;
@@ -333,39 +345,31 @@ Command, Previewable, Runnable {
 		if (plotImage.getRoi()!=null) plotImage.deleteRoi();
 	}
 
-	private void doFit() throws IOException {
+	private void doFit() {
 		//Reset the plots window
 		updatePlots(rows,cols);
+		ResultsTable rt = Analyzer.getResultsTable();
+		
 		for (int i = 0; i<plots.length; i++) {
 			RealVector xvals = new ArrayRealVector(getLaneProfile(i).getRow(0));
 			RealVector yvals = new ArrayRealVector(getLaneProfile(i).getRow(1));
-			RealVector bg    = new ArrayRealVector(); 
-			
-			WeightedObservedPoints obs   = new WeightedObservedPoints(); // All Y
-			BufferedWriter br = new BufferedWriter(new FileWriter("output//Plot"+(i+1)+".csv"));
-			StringBuilder  sb = new StringBuilder();
-			
-			for (int o = 0 ; o<xvals.getDimension(); o++) {
-				obs.add(xvals.getEntry(o), yvals.getEntry(o));
-				sb.append(xvals.getEntry(o) +"\t"+yvals.getEntry(o)+"\n");
-			}
-			br.write(sb.toString());
-			br.close();
+			RealVector bg    = new ArrayRealVector();
 			
 			int    degbg = cd.getDegBG();
 			// Tolerance as percentage of the range
 			double tolpk = cd.getTolPK()*(yvals.getMaxValue()-yvals.getMinValue());
+			
+			WeightedObservedPoints obs   = new WeightedObservedPoints(); // All Y
+			for (int o = 0 ; o<xvals.getDimension(); o++) {
+				obs.add(xvals.getEntry(o), yvals.getEntry(o));
+			}
 
-			ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(),tolpk,degBG);
+			ParameterGuesser pg   = new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(),tolpk,degBG);
 			RealVector firstGuess = new ArrayRealVector(pg.guess());
 			LeastSquaresProblem problem  = GaussianArrayCurveFitter.
 					create(tolpk,degbg).
 					getProblem(obs.toList());
-			
-//			LeastSquaresOptimizer optimizer = GaussianArrayCurveFitter.
-//					create(tolpk,degbg).
-//					getOptimizer();
-			
+	
 			LeastSquaresOptimizer.Optimum optimum = new LevenbergMarquardtOptimizer()
 					.withCostRelativeTolerance(1e-12)
 					.withOrthoTolerance(1e-12)
@@ -373,13 +377,9 @@ Command, Previewable, Runnable {
 					.withInitialStepBoundFactor(100.0)
 					.optimize(problem);
 			
-//			RealVector pars  = new ArrayRealVector(
-//					GaussianArrayCurveFitter.
-//					create(tolpk,degbg).
-//					fit(obs.toList()));
-			
-//			RealVector diff = new ArrayRealVector(pars).subtract(optimum.getPoint());
 			RealVector pars = optimum.getPoint();
+			System.out.println(String.format(
+						"Lane %1$d, RMS: %2$.2f", i+1, optimum.getRMS()));
 			
 			// Initial Guess
 			RealVector norms0 = new ArrayRealVector();
@@ -398,14 +398,6 @@ Command, Previewable, Runnable {
 					new PolynomialFunction(poly.toArray()));
 			plots[i].setColor(Color.blue);
 			plots[i].addPoints(xvals.toArray(), bg.toArray(), PlotWindow.LINE);
-			// p[0] + p[1] x^1 + p[2] x^2 + ... + p[n-1] x^n-1
-//			for (int b = 0; b < xvals.getDimension(); b++) {
-//				double polyValue = 0;
-//				for (int p = poly.getMaxIndex(); p > 0; p--) {
-//					polyValue = poly.getEntry(p) + (xvals.getEntry(b) * polyValue);
-//					bg.setEntry(b,polyValue);
-//				}
-//			}
 			
 			for (int b = degBG+2; b<pars.getDimension(); b+=3) { // plot one gaussian for each peak
 				// Initial Guess
@@ -429,35 +421,40 @@ Command, Previewable, Runnable {
 			
 			plots[i].setColor(Color.blue);
 			plots[i].addPoints(means0.toArray(), norms0.toArray(), PlotWindow.CROSS);
-
-			plots[i].setColor(Color.green);
+			plots[i].setColor(new Color(0, 128, 0));
 			plots[i].addPoints(xvals.toArray(),  fitted.toArray(), PlotWindow.LINE);
-//			String parStrN = String.format("Lane %1$d-parN: ", i+1);
-//			String parStrM = String.format("Lane %1$d-parM: ", i+1);
-//			String parStrS = String.format("Lane %1$d-parS: ", i+1);
-//			String parStrP = String.format("Lane %1$d-parS: ", i+1);
-			
-//			for (double d : norms.toArray()) 	
-//				parStrN += String.format("%1$.2f, ", d);
-//			for (double d : means.toArray())
-//				parStrM += String.format("%1$.2f, ", d);
-//			for (double d : sds  .toArray())
-//				parStrS += String.format("%1$.2f, ", d);
-//			for (double d : poly  .toArray())
-//				parStrP += String.format("%1$.2f, ", d);
-
-//			System.out.println(parStrN.substring(0,parStrN.length()-2));
-//			System.out.println(parStrM.substring(0,parStrM.length()-2));
-//			System.out.println(parStrS.substring(0,parStrS.length()-2));
-//			System.out.println(parStrP.substring(0,parStrP.length()-2));
-			System.out.println(String.format("Lane %1$d, RMS: %2$.2f", i+1, optimum.getRMS()));
-//			System.out.println("evaluations: "   + optimum.getEvaluations());
-//			System.out.println("iterations: "    + optimum.getIterations());
-
 			plots[i].setLimitsToFit(true);
+			RealVector peakAreas = doIntegrate(xvals, norms, means, sds);
+			// Print the Results Table
+			
+			if (rt == null) {
+			        rt = new ResultsTable();
+			        Analyzer.setResultsTable(rt);
+			}
+			for (int pp =0; pp < norms.getDimension(); pp++){
+				rt.incrementCounter();
+				rt.addValue("Lane", i);
+				rt.addValue("Band", pp);
+				rt.addValue("Distance", means.getEntry(pp));
+				rt.addValue("Amplitude", norms.getEntry(pp));
+				rt.addValue("FWHM", 2*sds.getEntry(pp)*FastMath.sqrt(2*FastMath.log(2)));
+				rt.addValue("Area", peakAreas.getEntry(pp));
+			}
+			rt.show("Results");
 		}	
 	}
 
+	private RealVector doIntegrate(RealVector xvals, RealVector norms, RealVector means, RealVector sds) {
+		RealVector areas = new ArrayRealVector();
+		for (int i = 0; i < norms.getDimension(); i++) {
+			TrapezoidIntegrator ti = new TrapezoidIntegrator();
+			areas = areas.append(ti.integrate(Integer.MAX_VALUE, 
+							new Gaussian(norms.getEntry(i),means.getEntry(i),sds.getEntry(i)),
+							xvals.getMinValue(), xvals.getMaxValue()));
+		}
+		return areas;
+	}
+	
 	
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
@@ -511,6 +508,10 @@ Command, Previewable, Runnable {
 		private JButton   buttonMeasure;
 		private JButton   buttonCancel;
 		private JCheckBox chkBoxBands;
+		
+		private JPanel     settingsPanel;
+		private JPanel     degPanel;
+		private JPanel     tolPanel;
 		private JLabel     labelDegBG;
 		private JLabel     labelTolPK;
 		private JTextField textDegBG;
@@ -545,34 +546,48 @@ Command, Previewable, Runnable {
 			sliderVOff = makeTitledSlider("Vertical Offset ( "+ LVOff +" px )",   Color.black, 0, (int) Math.round(IH*0.9), LVOff);
 			sliderPanel.add(sliderVOff);
 
-			buttonPanel = new JPanel();
-			buttonPanel.setLayout(new BoxLayout(buttonPanel, BoxLayout.X_AXIS));
+			buttonPanel   = new JPanel();
+			buttonPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
 			buttonCancel  = new JButton("Cancel");
-			buttonCancel.addActionListener(this);
+			buttonCancel.addActionListener(this);		
+			buttonPanel.add(buttonCancel);
 			buttonMeasure = new JButton("Measure");
 			buttonMeasure.addActionListener(this);
 			buttonPanel.add(buttonMeasure);
-			chkBoxBands = new JCheckBox("Show Bands");
-			chkBoxBands.addItemListener(this);
-			chkBoxBands.setSelected(false);
-			
-			chkBoxBands.setEnabled(false);
-			buttonPanel.add(chkBoxBands);
-			labelDegBG = new JLabel("Deg BG");
-			labelTolPK = new JLabel("Tol PK");
-			textDegBG  = new JTextField(3); textDegBG.setText("" + degBG);
-			textTolPK  = new JTextField(3); textTolPK.setText("" + tolPK);
-			buttonPanel.add(labelDegBG);
-			buttonPanel.add(textDegBG);
-			buttonPanel.add(textTolPK);
-			buttonPanel.add(labelTolPK);
 
+			
+
+			settingsPanel = new JPanel();
+			degPanel      = new JPanel();
+			tolPanel      = new JPanel();
+			labelDegBG    = new JLabel("Deg BG");
+			labelTolPK    = new JLabel("Tol PK");
+			textDegBG     = new JTextField(3); textDegBG.setText("" + degBG);
+			textTolPK     = new JTextField(3); textTolPK.setText("" + tolPK);
+			chkBoxBands   = new JCheckBox("Show Bands");
+
+			degPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
+			degPanel.add(labelDegBG);
+			degPanel.add(textDegBG);
+			tolPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
+			tolPanel.add(labelTolPK);
+			tolPanel.add(textTolPK);
+			chkBoxBands.addItemListener(this);
+			chkBoxBands.setSelected(false);			
+			chkBoxBands.setEnabled(false);
+			
+			settingsPanel.setLayout(new GridLayout(10,1));
+			settingsPanel.add(degPanel);
+			settingsPanel.add(tolPanel);
+			settingsPanel.add(chkBoxBands);
+			
 			dialogPanel = new JPanel();
 			dialogPanel.setBackground(Color.lightGray);
 			dialogPanel.setLayout(new BorderLayout());
-			dialogPanel.add(textPanel,   BorderLayout.NORTH);
-			dialogPanel.add(sliderPanel, BorderLayout.CENTER);
-			dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
+			dialogPanel.add(textPanel,     BorderLayout.NORTH);
+			dialogPanel.add(sliderPanel,   BorderLayout.CENTER);
+			dialogPanel.add(settingsPanel, BorderLayout.EAST);
+			dialogPanel.add(buttonPanel,   BorderLayout.SOUTH);
 
 			frame.addWindowListener(new WindowAdapter() {
 				public void windowClosing(WindowEvent e) {
@@ -747,12 +762,7 @@ Command, Previewable, Runnable {
 		@Override
 		public void actionPerformed(ActionEvent e) {
 			if (e.getSource().equals(buttonMeasure)){
-				try {
-					doFit();
-				} catch (IOException e1) {
-					// TODO Auto-generated catch block
-					e1.printStackTrace();
-				}
+				doFit();
 				updatePlots(rows,cols);
 				chkBoxBands.setEnabled(true);
 			}
