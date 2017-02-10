@@ -22,7 +22,6 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
-import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Point;
 import java.awt.Toolkit;
@@ -32,9 +31,9 @@ import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.io.BufferedWriter;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.stream.IntStream;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -51,22 +50,24 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
-import org.apache.commons.math4.analysis.function.Gaussian;
-import org.apache.commons.math4.analysis.integration.TrapezoidIntegrator;
-import org.apache.commons.math4.analysis.polynomials.PolynomialFunction;
-import org.apache.commons.math4.fitting.WeightedObservedPoints;
-import org.apache.commons.math4.fitting.leastsquares.LeastSquaresOptimizer;
-import org.apache.commons.math4.fitting.leastsquares.LeastSquaresProblem;
-import org.apache.commons.math4.fitting.leastsquares.LevenbergMarquardtOptimizer;
-import org.apache.commons.math4.linear.ArrayRealVector;
-import org.apache.commons.math4.linear.MatrixUtils;
-import org.apache.commons.math4.linear.RealMatrix;
-import org.apache.commons.math4.linear.RealVector;
-import org.apache.commons.math4.util.FastMath;
+import org.apache.commons.lang.ArrayUtils;
+import org.apache.commons.math.analysis.function.Gaussian;
+import org.apache.commons.math.analysis.integration.TrapezoidIntegrator;
+import org.apache.commons.math.analysis.polynomials.PolynomialFunction;
+import org.apache.commons.math.fitting.WeightedObservedPoints;
+import org.apache.commons.math.fitting.leastsquares.LeastSquaresOptimizer;
+import org.apache.commons.math.fitting.leastsquares.LeastSquaresProblem;
+import org.apache.commons.math.fitting.leastsquares.LevenbergMarquardtOptimizer;
+import org.apache.commons.math.linear.ArrayRealVector;
+import org.apache.commons.math.linear.MatrixUtils;
+import org.apache.commons.math.linear.RealMatrix;
+import org.apache.commons.math.linear.RealVector;
+import org.apache.commons.math.util.FastMath;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
 import org.scijava.command.Previewable;
 import org.scijava.convert.ConvertService;
+import org.scijava.display.DisplayService;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
@@ -85,17 +86,19 @@ import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 import ij.io.Opener;
 import ij.measure.Calibration;
-import ij.measure.ResultsTable;
-import ij.plugin.filter.Analyzer;
 import ij.plugin.frame.RoiManager;
 import ij.process.ColorProcessor;
 import ij.process.ImageProcessor;
 import ij.util.Tools;
 import io.scif.services.DatasetIOService;
 import net.imagej.DatasetService;
-import net.imagej.ImageJ;
 import net.imagej.display.ImageDisplayService;
 import net.imagej.ops.OpService;
+import net.imagej.table.DefaultGenericTable;
+import net.imagej.table.DoubleColumn;
+import net.imagej.table.GenericColumn;
+import net.imagej.table.IntColumn;
+import net.imagej.table.TableDisplay;
 
 
 
@@ -106,13 +109,13 @@ public class _GaussFitLanes implements
 				Command, Previewable, Runnable {
 
 	@Parameter
-	private LogService log;
+	private static LogService log;
 
 	@Parameter
 	private StatusService statusServ;
 
 	@Parameter
-	private DatasetService datasetServ;
+	private static DatasetService datasetServ;
 
 	@Parameter
 	private DatasetIOService datasetIOServ;
@@ -121,7 +124,10 @@ public class _GaussFitLanes implements
 	private ConvertService convertServ;
 
 	@Parameter
-	private ImageDisplayService imgServ;
+	private ImageDisplayService imgDisplay;
+
+	@Parameter
+	private static DisplayService display;
 
 	@Parameter
 	private static OpService ops;
@@ -134,7 +140,7 @@ public class _GaussFitLanes implements
 	
 	private Plot[]    plots; 
 	private ImagePlus imp;
-	private ImagePlus    plotImage = new ImagePlus();
+	private ImagePlus plotImage = new ImagePlus();
 	
 	private RoiManager   roiMan = new RoiManager();
 	private CustomDialog cd;
@@ -244,7 +250,7 @@ public class _GaussFitLanes implements
 			}
 		} else if (roi.getType() == Roi.RECTANGLE) {
 			if (cal != null) {
-				xInc = roi.getBounds().getHeight()*cal.pixelHeight/(y.getMaxIndex());
+				xInc = roi.getBounds().getHeight()*cal.pixelHeight/(y.getDimension());
 			}
 		} else return null;
 		
@@ -348,9 +354,19 @@ public class _GaussFitLanes implements
 	private void doFit() {
 		//Reset the plots window
 		updatePlots(rows,cols);
-		ResultsTable rt = Analyzer.getResultsTable();
+		
+		// Results Table Colums
+		ArrayList<String>  colLane      = new ArrayList<String>();
+		ArrayList<Integer> colBand      = new ArrayList<Integer>();
+		RealVector         colDistance  = new ArrayRealVector();
+		RealVector         colAmplitude = new ArrayRealVector();
+		RealVector         colFWHM      = new ArrayRealVector();
+		RealVector         colArea      = new ArrayRealVector();
 		
 		for (int i = 0; i<plots.length; i++) {
+			if (log.getLevel()==0)
+				log.initialize();
+			
 			RealVector xvals = new ArrayRealVector(getLaneProfile(i).getRow(0));
 			RealVector yvals = new ArrayRealVector(getLaneProfile(i).getRow(1));
 			RealVector bg    = new ArrayRealVector();
@@ -378,7 +394,7 @@ public class _GaussFitLanes implements
 					.optimize(problem);
 			
 			RealVector pars = optimum.getPoint();
-			System.out.println(String.format(
+			log.info(String.format(
 						"Lane %1$d, RMS: %2$.2f", i+1, optimum.getRMS()));
 			
 			// Initial Guess
@@ -425,23 +441,38 @@ public class _GaussFitLanes implements
 			plots[i].addPoints(xvals.toArray(),  fitted.toArray(), PlotWindow.LINE);
 			plots[i].setLimitsToFit(true);
 			RealVector peakAreas = doIntegrate(xvals, norms, means, sds);
-			// Print the Results Table
 			
-			if (rt == null) {
-			        rt = new ResultsTable();
-			        Analyzer.setResultsTable(rt);
-			}
-			for (int pp =0; pp < norms.getDimension(); pp++){
-				rt.incrementCounter();
-				rt.addValue("Lane", i);
-				rt.addValue("Band", pp);
-				rt.addValue("Distance", means.getEntry(pp));
-				rt.addValue("Amplitude", norms.getEntry(pp));
-				rt.addValue("FWHM", 2*sds.getEntry(pp)*FastMath.sqrt(2*FastMath.log(2)));
-				rt.addValue("Area", peakAreas.getEntry(pp));
-			}
-			rt.show("Results");
-		}	
+			colLane.add("Lane " +(i+1));
+			for (int rr = 1; rr < peakAreas.getDimension(); rr++) 
+				colLane.add("");
+			colBand     .addAll(Arrays.asList(ArrayUtils.toObject(
+								IntStream.rangeClosed(1, peakAreas.getDimension()).toArray())));
+			colDistance  = colDistance .append(means);
+			colAmplitude = colAmplitude.append(norms);
+			colFWHM      = colFWHM.append(sds.mapMultiplyToSelf(2*FastMath.sqrt(2*FastMath.log(2))));
+			colArea      = colArea.append(peakAreas);
+		}
+		
+		GenericColumn c1 = new GenericColumn ("");
+		IntColumn     c2 = new IntColumn     ("Band");
+		DoubleColumn  c3 = new DoubleColumn  ("Distance");
+		DoubleColumn  c4 = new DoubleColumn  ("Amplitude");
+		DoubleColumn  c5 = new DoubleColumn  ("FWHM");
+		DoubleColumn  c6 = new DoubleColumn  ("Area");
+		c1.addAll(colLane);
+		c2.addAll(colBand);
+		c3.fill  (colDistance .toArray());
+		c4.fill  (colAmplitude.toArray());
+		c5.fill  (colFWHM     .toArray());
+		c6.fill  (colArea     .toArray());
+		DefaultGenericTable rt = new DefaultGenericTable();
+		rt.add(c1); 
+		rt.add(c2); 
+		rt.add(c3); 
+		rt.add(c4); rt.add(c5); rt.add(c6);
+		TableDisplay tableDisplay = (TableDisplay) display.createDisplay("Results Display", rt);
+		display.setActiveDisplay(tableDisplay);
+		
 	}
 
 	private RealVector doIntegrate(RealVector xvals, RealVector norms, RealVector means, RealVector sds) {
@@ -458,7 +489,7 @@ public class _GaussFitLanes implements
 	
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
-		final ImageJ ij = net.imagej.Main.launch(args);
+		net.imagej.Main.launch(args);
 		ImagePlus imp = new Opener().openImage("src//main//resources//sample//All[01-17-2017].tif");
 		// display it via ImageJ
 		imp.show();
@@ -548,13 +579,12 @@ public class _GaussFitLanes implements
 
 			buttonPanel   = new JPanel();
 			buttonPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
-			buttonCancel  = new JButton("Cancel");
-			buttonCancel.addActionListener(this);		
-			buttonPanel.add(buttonCancel);
 			buttonMeasure = new JButton("Measure");
 			buttonMeasure.addActionListener(this);
 			buttonPanel.add(buttonMeasure);
-
+			buttonCancel  = new JButton("Cancel");
+			buttonCancel.addActionListener(this);		
+			buttonPanel.add(buttonCancel);
 			
 
 			settingsPanel = new JPanel();
