@@ -34,6 +34,7 @@ import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.IOException;
 import java.util.ArrayList;
 
 import javax.swing.BorderFactory;
@@ -52,12 +53,19 @@ import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 
+import net.imagej.Dataset;
 import net.imagej.DatasetService;
+import net.imagej.ImageJ;
+import net.imagej.ImgPlus;
+import net.imagej.display.ImageDisplay;
 import net.imagej.display.ImageDisplayService;
+import net.imagej.display.OverlayService;
 import net.imagej.ops.OpService;
+import net.imagej.overlay.RectangleOverlay;
 import net.imagej.table.DefaultGenericTable;
 import net.imagej.table.DefaultTableDisplay;
 import net.imagej.table.GenericColumn;
+import net.imglib2.type.numeric.RealType;
 
 import org.apache.commons.math3.analysis.function.Gaussian;
 import org.apache.commons.math3.analysis.integration.TrapezoidIntegrator;
@@ -78,12 +86,12 @@ import org.scijava.display.DisplayService;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 import org.scijava.plugin.Plugin;
+import org.scijava.util.Colors;
 
 import gausscurvefit.GaussianArrayCurveFitter.ParameterGuesser;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
-import ij.WindowManager;
 import ij.gui.ImageCanvas;
 import ij.gui.ImageWindow;
 import ij.gui.Line;
@@ -93,7 +101,6 @@ import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 import ij.io.Opener;
 import ij.measure.Calibration;
-import ij.plugin.frame.RoiManager;
 import ij.process.ColorProcessor;
 import ij.process.ImageProcessor;
 import ij.util.Tools;
@@ -103,7 +110,7 @@ import ij.util.Tools;
 public class GaussFitLanes implements Command {
 
 	@Parameter
-	private static LogService log;
+	private LogService log;
 
 	@Parameter
 	private StatusService statusServ;
@@ -112,16 +119,19 @@ public class GaussFitLanes implements Command {
 	private static DatasetService datasetServ;
 
 	@Parameter
-	private DatasetIOService datasetIOServ;
+	private static DatasetIOService datasetIOServ;
 
 	@Parameter
 	private ConvertService convertServ;
 
 	@Parameter
-	private ImageDisplayService imgDisplay;
+	private ImageDisplayService imgDisplayServ;
 
 	@Parameter
-	private static DisplayService display;
+	private OverlayService overlayServ;
+
+	@Parameter
+	private static DisplayService displayServ;
 
 	@Parameter
 	private static OpService ops;
@@ -132,8 +142,10 @@ public class GaussFitLanes implements Command {
 	private boolean setup = true;
 	private boolean doFit; // tells the background thread to update
 	private final ImagePlus plotImage = new ImagePlus();
-	private RoiManager roiMan = new RoiManager();
+	private ArrayList<Roi> rois = new ArrayList<>();
 	private Plot[] plots;
+	private static ImgPlus<? extends RealType<?>> img;
+	private ImageDisplay imageDisplay;
 	private ImagePlus imp;
 	private CustomDialog cd;
 
@@ -145,14 +157,21 @@ public class GaussFitLanes implements Command {
 	private double tolPK = 0.05; // Peak detection tolerance as % of range
 
 	public void init() {
+
 		imp = IJ.getImage();
-		roiMan = RoiManager.getInstance();
-		roiMan.setVisible(false);
-		if (roiMan == null) {
-			roiMan = new RoiManager(true);
+
+		try {
+			Dataset dataset = datasetIOServ.open(
+				"src//main//resources//sample//All[01-17-2017].tif");
+			displayServ.createDisplay(dataset.getName(), dataset);
+			imageDisplay = (ImageDisplay) displayServ.getDisplay(dataset.getName());
+			img = dataset.getImgPlus();
 		}
-		roiMan.runCommand("Show All");
-		roiMan.runCommand("Labels");
+		catch (IOException exc) {
+			// TODO Auto-generated catch block
+			exc.printStackTrace();
+		}
+
 		cd = new CustomDialog("Gel Lanes Gauss Fitting:" + imp.getTitle());
 		IJ.wait(50); // delay to make sure ROIs have updated
 		plotImage.setTitle("Profiles of " + imp.getShortTitle());
@@ -208,12 +227,13 @@ public class GaussFitLanes implements Command {
 	 * @param laneRoi
 	 */
 	private RealMatrix getLaneProfile(final int laneRoi) {
-		if (roiMan.getCount() == 0) return null;
-		roiMan.select(laneRoi);
-		final Roi roi = roiMan.getRoi(laneRoi);
-		final ProfilePlot profileP = new ProfilePlot(imp, true);// get the profile
+		if (rois.size() == 0) return null;
+
+		final Roi roi = rois.get(laneRoi);
+		imp.setRoi(roi);
+		final ProfilePlot profileP = new ProfilePlot(imp, true); // get the profile
 		final RealVector profile = new ArrayRealVector(profileP.getProfile());
-		if (profile == null || profile.getDimension() < 2) return null;
+		if (profile.getDimension() < 2) return null;
 
 		// the following code is mainly for x calibration
 		final Calibration cal = imp.getCalibration();
@@ -257,36 +277,31 @@ public class GaussFitLanes implements Command {
 	 * Method for Output plot collage
 	 */
 	private void updatePlots() {
-		if (roiMan.getCount() == 0) return;
+		if (rois.size() == 0) return;
+
 		final ImageProcessor ip = imp.getProcessor();
-		if (plots == null) {
-			plots = new Plot[roiMan.getCount()];
-			for (int p = 0; p < roiMan.getCount(); p++) {
-				roiMan.select(p);
-				final Roi roi = roiMan.getRoi(p);
+		if (plots == null) { // Plots have been reset
+			plots = new Plot[rois.size()];
+			for (int p = 0; p < rois.size(); p++) {
+				final Roi roi = rois.get(p);;
 				if (ip == null || roi == null) return; // these may change
 																								// asynchronously
-				if (roi.getType() == Roi.LINE) ip.setInterpolate(
-					PlotWindow.interpolate);
-				else ip.setInterpolate(false);
-				final ProfilePlot profileP = new ProfilePlot(imp, true);// get the
-																																// profile
-				final RealVector profile = new ArrayRealVector(profileP.getProfile());
+				final RealVector profile = new ArrayRealVector(getLaneProfile(p).getRow(
+					1));
 				if (profile.getDimension() < 2) return;
 
 				final Calibration cal = imp.getCalibration();
 				String xUnit;
 				if (cal.getUnit() == null) xUnit = "pixels";
 				else xUnit = cal.getUnit();
-				final RealVector x = calibrateX(profile, roi, cal);
+				final RealVector x = new ArrayRealVector(getLaneProfile(p).getRow(0));
 				final String xLabel = "Distance (" + xUnit + ")";
-				final String yLabel = (cal != null && cal.getValueUnit() != null && !cal
-					.getValueUnit().equals("Gray Value")) ? "Value (" + cal
-						.getValueUnit() + ")" : "Value";
+				final String yLabel = (cal.getValueUnit() != null && !cal.getValueUnit()
+					.equals("Gray Value")) ? "Value (" + cal.getValueUnit() + ")"
+						: "Value";
 				plots[p] = new Plot("Lane " + (p + 1), xLabel, yLabel, x.toArray(),
 					profile.toArray());
-				// plots[p].addText(plots[p].getTitle(),
-				// plots[p].getSize().getWidth()/5, plots[p].getSize().getHeight()/2);
+
 				final double fixedMin = ProfilePlot.getFixedMin();
 				final double fixedMax = ProfilePlot.getFixedMax();
 				if (fixedMin != 0 || fixedMax != 0) {
@@ -346,7 +361,7 @@ public class GaussFitLanes implements Command {
 
 	private void doFit() {
 		// Reset the plots window
-		updatePlots();
+		if (plots == null) updatePlots();
 
 		// Results Table Colums
 		final ArrayList<String> colLane = new ArrayList<>();
@@ -449,6 +464,8 @@ public class GaussFitLanes implements Command {
 				FastMath.log(2))));
 			colArea = colArea.append(peakAreas);
 		}
+
+		updatePlots(); // without resetting or re-reading lanes
 		final String[] headers = { "", "Band", "Distance", "Amplitude", "FWHM",
 			"Area" };
 		GenericColumn[] tableCol = new GenericColumn[headers.length];
@@ -466,9 +483,9 @@ public class GaussFitLanes implements Command {
 		}
 		for (int cc = 0; cc < headers.length; cc++)
 			rt.add(tableCol[cc]);
-		final DefaultTableDisplay tableDisplay = (DefaultTableDisplay) display
+		final DefaultTableDisplay tableDisplay = (DefaultTableDisplay) displayServ
 			.createDisplay("Results Display", rt);
-		display.setActiveDisplay(tableDisplay);
+		displayServ.setActiveDisplay(tableDisplay);
 	}
 
 	private RealVector doIntegrate(final RealVector xvals, final RealVector norms,
@@ -486,7 +503,8 @@ public class GaussFitLanes implements Command {
 
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
-		net.imagej.Main.launch(args);
+		ImageJ ij = net.imagej.Main.launch(args);
+
 		final ImagePlus imp = new Opener().openImage(
 			"src//main//resources//sample//All[01-17-2017].tif");
 		// display it via ImageJ
@@ -494,7 +512,7 @@ public class GaussFitLanes implements Command {
 		// wrap it into an ImgLib image (no copying)
 		// final Img image = ImagePlusAdapter.wrap(imp);
 		// display it via ImgLib using ImageJ
-		// ImageJFunctions.show( image );
+		// ImageJFunctions.show(image);
 
 	}
 
@@ -646,7 +664,7 @@ public class GaussFitLanes implements Command {
 			final ImageCanvas canvas = iwin.getCanvas();
 			canvas.requestFocus();
 			frame.setVisible(true);
-			reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff);
+			reDrawROIs(LW, LH, LSp, LHOff, LVOff);
 		}
 
 		public void cleanup() {
@@ -721,28 +739,38 @@ public class GaussFitLanes implements Command {
 				final String str = "Vertical Offset ( " + LVOff + " px )";
 				setSliderTitle(sliderVOff, Color.black, str);
 			}
-			reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff);
+			reDrawROIs(LW, LH, LSp, LHOff, LVOff);
 			// IJ.wait(50);
 			// delay to make sure the roi has been updated
 		}
 
-		private void reDrawROIs(final ImagePlus image, final int lw, final int lh,
-			final int lsp, final int lhoff, final int lvoff)
-		{
-			if (!WindowManager.getCurrentImage().equals(image)) {
-				WindowManager.setTempCurrentImage(image);
-			}
-			if (imp.getRoi() != null || roiMan.getCount() != 0) {
-				roiMan.reset();
-				imp.deleteRoi();
-			}
+		private void reDrawROIs(int lw, int lh, int lsp, int lhoff, int lvoff) {
+//			if (!WindowManager.getCurrentImage().equals(image)) {
+//				displayServ.setActiveDisplay(imageDisplay);
+//			}
+//			if (imageDisplay.getInfo() != null || rois.size() != 0) {
+//				rois = null;
+//				imp.deleteRoi();
+//			}
 			nLanes = getNLanes();
+			ArrayList<RectangleOverlay> overlays = new ArrayList<>();
+
 			for (int i = 0; i < nLanes; i++) {
-				final Roi roi = new Roi(lhoff + lw * i + lsp * i, lvoff, lw, lh);
-				// roi.setFillColor(new Color(r/255,g/255,b/255,alpha));
-				roiMan.addRoi(roi);
+				Roi roi = new Roi(lhoff + lw * i + lsp * i, lvoff, lw, lh);
+				rois.add(roi);
+				RectangleOverlay ol = new RectangleOverlay(imageDisplay.getContext());
+				ol.setOrigin(lhoff + lw * i + lsp * i, 0);
+				ol.setOrigin(lvoff, 1);
+				ol.setExtent(lw, 0);
+				ol.setExtent(lh, 1);
+				ol.setLineColor(Colors.YELLOW);
+				ol.setLineWidth(2);
+				ol.setFillColor(Colors.YELLOW);
+				ol.setAlpha(128);
+				overlays.add(ol);
 			}
-			plots = null;
+			overlayServ.addOverlays(imageDisplay, overlays);
+			plots = null; // Reset the profile plots
 			updatePlots();
 		}
 
@@ -775,27 +803,27 @@ public class GaussFitLanes implements Command {
 			}
 		}
 
-		boolean isRoi() {
-			if (imp == null) return false;
-			final Roi roi = imp.getRoi();
-			if (roi == null) return false;
-			return roi.getType() == Roi.LINE || roi.getType() == Roi.RECTANGLE;
-		}
+//		boolean isRoi() {
+//			if (imp == null) return false;
+//			final Roi roi = imp.getRoi();
+//			if (roi == null) return false;
+//			return roi.getType() == Roi.LINE || roi.getType() == Roi.RECTANGLE;
+//		}
 
 		// TextField Listeners
 		@Override
 		public void changedUpdate(final DocumentEvent e) {
-			reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff);
+			reDrawROIs(LW, LH, LSp, LHOff, LVOff);
 		}
 
 		@Override
 		public void removeUpdate(final DocumentEvent e) {
-			reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff);
+			reDrawROIs(LW, LH, LSp, LHOff, LVOff);
 		}
 
 		@Override
 		public void insertUpdate(final DocumentEvent e) {
-			reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff);
+			reDrawROIs(LW, LH, LSp, LHOff, LVOff);
 		}
 
 		// Measure Button
