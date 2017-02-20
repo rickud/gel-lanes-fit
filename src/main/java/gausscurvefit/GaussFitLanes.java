@@ -37,16 +37,23 @@ import java.awt.event.MouseEvent;
 import java.awt.event.MouseMotionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
+import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JRadioButton;
 import javax.swing.JSlider;
 import javax.swing.JTextField;
 import javax.swing.SwingConstants;
@@ -140,7 +147,7 @@ public class GaussFitLanes implements Command {
 
 	private Plot[] plots;
 	private ImagePlus imp;
-	private CustomDialog cd;
+	private MainDialog cd;
 
 	private final int rows = 2; // Number of plot Rows in display
 	private final int cols = 2; // Number of plot Rows in display
@@ -151,7 +158,8 @@ public class GaussFitLanes implements Command {
 
 	public void init() {
 		imp = IJ.getImage();
-		cd = new CustomDialog("Gel Lanes Gauss Fitting:" + imp.getTitle());
+		about();
+		cd = new MainDialog("Gel Lanes Gauss Fitting: " + imp.getTitle());
 		IJ.wait(50); // delay to make sure ROIs have updated
 		plotImage.setTitle("Profiles of " + imp.getShortTitle());
 		updatePlots();
@@ -287,27 +295,16 @@ public class GaussFitLanes implements Command {
 			}
 		}
 		// Construct the plot image
-		int selectedBG = -1;
-		int unselectedBG = -25000;
+		final Color selectedBG = new Color(255,218,185);
+		final Color unselectedBG = Color.white;
 		for (int pp = 0; pp < plots.length; pp++) {
-			ImageProcessor plotProcessor = plots[pp].getProcessor().convertToRGB();
-			Object pixs = plotProcessor.getPixels();
 			if (pp == cd.getPlotSelected()) {
-				for (int x = 0; x < plotProcessor.getWidth(); x++) {
-					for (int y = 0; y < plotProcessor.getHeight(); y++) {
-						if (plotProcessor.get(x, y) == unselectedBG) {
-							plotProcessor.set(x, y, selectedBG);
-						}
-					}
-				}
+				plots[pp].setBackgroundColor(selectedBG);
+				plots[pp].updateImage();
 			}
 			else if (pp == cd.getPlotPreviouslySelected()) {
-				for (int x = 0; x < plotProcessor.getWidth(); x++) {
-					for (int y = 0; y < plotProcessor.getHeight(); y++) {
-						if (plotProcessor.get(x, y) == selectedBG) plotProcessor.set(x, y,
-							unselectedBG);
-					}
-				}
+				plots[pp].setBackgroundColor(unselectedBG);
+				plots[pp].updateImage();
 			}
 		}
 
@@ -329,11 +326,12 @@ public class GaussFitLanes implements Command {
 				plotsHeight);
 			for (int c = 0; c < cols; c++) {
 				for (int r = 0; r < rows; r++) {
-					if (c * rows + r < plots.length) {
+					if (pg * cols * rows + (c * rows + r) < plots.length) {
 						plotsMontage.insert(plots[pg * cols * rows + (c * rows + r)]
 							.getProcessor(), // here NP
 							plotSpacing + c * (plotSpacing + plotW), plotSpacing + r *
 								(plotSpacing + plotH));
+						
 						plotsMontage.drawString(plots[pg * cols * rows + (c * rows + r)]
 							.getTitle(), plotSpacing + plotW / 2 + c * (plotSpacing + plotW),
 							plotSpacing + plotH / 5 + r * (plotSpacing + plotH),
@@ -361,7 +359,7 @@ public class GaussFitLanes implements Command {
 
 	private void doFit() {
 		// Reset the plots window
-		if (plots == null) updatePlots();
+		plots = null; updatePlots();
 
 		// Results Table Colums
 		final ArrayList<String> colLane = new ArrayList<>();
@@ -504,6 +502,27 @@ public class GaussFitLanes implements Command {
 		return areas;
 	}
 
+	public void about() {
+		Properties prop = new Properties();
+		InputStream input = null;
+
+		try {
+			input = new FileInputStream("src//main//resources//about.properties");
+			prop.load(input);
+			System.out.println("Gauss Fit - v"+prop.getProperty("version"));
+		} catch (IOException ex) {
+			ex.printStackTrace();
+		} finally {
+			if (input != null) {
+				try {
+					input.close();
+				} catch (IOException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+	}
+	
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		ImageJ ij = net.imagej.Main.launch(args);
@@ -521,7 +540,7 @@ public class GaussFitLanes implements Command {
 	}
 
 	@SuppressWarnings("serial")
-	class CustomDialog extends JFrame implements ActionListener, ChangeListener,
+	class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		DocumentListener, ItemListener, MouseMotionListener
 	{
 
@@ -540,7 +559,12 @@ public class GaussFitLanes implements Command {
 		private int LVOff = (IH - LH) / 2;
 
 		private ArrayList<Roi> rois = new ArrayList<>();
-
+		
+		private JPanel roiButtonsPanel;
+		private JRadioButton buttonAuto;
+		private JRadioButton buttonManual;
+		private ButtonGroup roiButtons;
+		
 		private JPanel textPanel;
 		private JLabel labelNLanes;
 		private JTextField textNLanes;
@@ -568,7 +592,7 @@ public class GaussFitLanes implements Command {
 		private JPanel dialogPanel;
 		private final JFrame frame;
 
-		public CustomDialog(String string) {
+		public MainDialog(String string) {
 			frame = new JFrame(string);
 			showMainDialog();
 		}
@@ -576,24 +600,34 @@ public class GaussFitLanes implements Command {
 		private void showMainDialog() {
 			imp.getCanvas().addMouseMotionListener(this);
 
-			final TitledBorder tb = new TitledBorder(BorderFactory
-				.createEtchedBorder(),
-				// empty,
-				"", TitledBorder.CENTER, TitledBorder.BELOW_TOP, new Font("Sans",
-					Font.PLAIN, 11));
+			roiButtonsPanel = new JPanel();
+			buttonAuto = new JRadioButton("Automatic Rectangle Selection");
+			buttonAuto.setActionCommand("Auto");
+			buttonAuto.setSelected(true);
+			buttonAuto.addActionListener(this);
+			buttonManual = new JRadioButton("Manual Rectangle Selection");
+			buttonManual.setActionCommand("Manual");
+			buttonManual.addActionListener(this);
+			roiButtons = new ButtonGroup();
+			roiButtonsPanel.setLayout(new BoxLayout(roiButtonsPanel, BoxLayout.Y_AXIS));
+			roiButtons.add(buttonAuto);
+			roiButtons.add(buttonManual);
+			roiButtonsPanel.add(buttonAuto);
+			roiButtonsPanel.add(buttonManual);
+			roiButtonsPanel.setBorder(new TitledBorder(BorderFactory.createEtchedBorder(), "Lane Selection", TitledBorder.CENTER, TitledBorder.BELOW_TOP, new Font("Sans", Font.PLAIN, 11)));
+			
+			sliderPanel = new JPanel();
 			textPanel = new JPanel();
 			textPanel.setLayout(new FlowLayout(FlowLayout.LEADING));
-
 			textNLanes = new JTextField(3);
 			textNLanes.setText("" + nLanes);
 			textNLanes.setVisible(true);
 			textNLanes.getDocument().addDocumentListener(this);
 			textPanel.add(textNLanes);
-
 			labelNLanes = new JLabel("Number of Lanes");
 			textPanel.add(labelNLanes);
-
-			sliderPanel = new JPanel();
+			sliderPanel.add(textPanel);
+			
 			sliderPanel.setLayout(new BoxLayout(sliderPanel, BoxLayout.Y_AXIS));
 			sliderW = makeTitledSlider("Width ( " + LW + " px )", Color.black, 1, IW /
 				4, LW);
@@ -647,9 +681,9 @@ public class GaussFitLanes implements Command {
 			settingsPanel.add(chkBoxBands);
 
 			dialogPanel = new JPanel();
-			dialogPanel.setBackground(Color.lightGray);
+			dialogPanel.setBackground(Color.darkGray);
 			dialogPanel.setLayout(new BorderLayout());
-			dialogPanel.add(textPanel, BorderLayout.NORTH);
+			dialogPanel.add(roiButtonsPanel, BorderLayout.NORTH);
 			dialogPanel.add(sliderPanel, BorderLayout.CENTER);
 			dialogPanel.add(settingsPanel, BorderLayout.EAST);
 			dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
@@ -857,6 +891,13 @@ public class GaussFitLanes implements Command {
 					d.close();
 				this.dispose();
 				log.info("Gauss Fit terminated.");
+			}
+			
+			if (e.getSource().equals(buttonAuto)) {
+				sliderPanel.setVisible(true);
+			}
+			if (e.getSource().equals(buttonManual)) {
+				sliderPanel.setVisible(false);
 			}
 		}
 

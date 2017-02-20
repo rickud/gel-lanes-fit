@@ -115,7 +115,14 @@
 			<url>https://github.com/rickud/gauss-curve-fit</url>
 		</repository>
 	</repositories>
-	
+	<build>
+      <resources>
+        <resource>
+          <directory>src/main/resources</directory>
+          <filtering>true</filtering>
+        </resource>
+      </resources>   
+    </build>
 	<dependencies>
 		<dependency>
 			<groupId>net.imagej</groupId>
