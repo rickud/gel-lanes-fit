@@ -27,13 +27,12 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
 import java.awt.Point;
-import java.awt.Rectangle;
-import java.awt.Toolkit;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ItemEvent;
 import java.awt.event.ItemListener;
 import java.awt.event.MouseEvent;
+import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -49,7 +48,6 @@ import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
-import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -104,6 +102,7 @@ import ij.gui.Plot;
 import ij.gui.PlotWindow;
 import ij.gui.ProfilePlot;
 import ij.gui.Roi;
+import ij.gui.RoiListener;
 import ij.io.Opener;
 import ij.measure.Calibration;
 import ij.process.ColorProcessor;
@@ -151,7 +150,7 @@ public class GaussFitLanes implements Command {
 
 	private final int rows = 2; // Number of plot Rows in display
 	private final int cols = 2; // Number of plot Rows in display
-	private int nLanes = 4;
+	private int nLanes = 18;
 
 	private int degBG = 3; // Order of Background Polynomial
 	private double tolPK = 0.05; // Peak detection tolerance as % of range
@@ -164,22 +163,18 @@ public class GaussFitLanes implements Command {
 		plotImage.setTitle("Profiles of " + imp.getShortTitle());
 		updatePlots();
 		plotImage.show();
-		if (plotImage.getRoi() != null) plotImage.deleteRoi();
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
 		final ImageWindow pwin = plotImage.getWindow();
-		if (iwin == null || pwin == null) return;
-		final Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
+		if (iwin == null || pwin == null || cd == null) return;
+
 		final Dimension imageSize = iwin.getSize();
-		final Dimension dialogSize = pwin.getSize();
 		final Point imageLoc = iwin.getLocation();
-		int x = imageLoc.x + imageSize.width + 30;
-		if (x + dialogSize.width > screen.width) x = screen.width -
-			dialogSize.width;
-		pwin.setLocation(x, imageLoc.y);
-		final ImageCanvas canvas = iwin.getCanvas();
-		canvas.requestFocus();
-		pwin.setVisible(true);
+
+		iwin.setLocation(0, 100);
+		pwin.setLocation(imageSize.width + 30, imageLoc.y);
+		iwin.getCanvas().requestFocus();
+
 		// thread for plotting in the background
 		plotThread = new Thread(this, "Dynamic Plots");
 		plotThread.setPriority(Math.max(plotThread.getPriority() - 3,
@@ -219,7 +214,7 @@ public class GaussFitLanes implements Command {
 		final ProfilePlot profileP = new ProfilePlot(imp, true); // get the profile
 		final RealVector profile = new ArrayRealVector(profileP.getProfile());
 		if (profile.getDimension() < 2) return null;
-
+		imp.killRoi();
 		// the following code is mainly for x calibration
 		final Calibration cal = imp.getCalibration();
 		final RealVector x = calibrateX(profile, roi, cal);
@@ -295,7 +290,7 @@ public class GaussFitLanes implements Command {
 			}
 		}
 		// Construct the plot image
-		final Color selectedBG = new Color(255,218,185);
+		final Color selectedBG = new Color(255, 218, 185);
 		final Color unselectedBG = Color.white;
 		for (int pp = 0; pp < plots.length; pp++) {
 			if (pp == cd.getPlotSelected()) {
@@ -309,7 +304,7 @@ public class GaussFitLanes implements Command {
 		}
 
 		int pages = Math.floorDiv(plots.length, rows * cols);
-		if (Math.floorMod(plots.length, rows * cols) != 0) pages++;
+		if (FastMath.floorMod(plots.length, rows * cols) != 0) pages++;
 
 		final int plotSpacing = 5; // black border
 		final int plotW = plots[0].getProcessor().getWidth();
@@ -331,7 +326,7 @@ public class GaussFitLanes implements Command {
 							.getProcessor(), // here NP
 							plotSpacing + c * (plotSpacing + plotW), plotSpacing + r *
 								(plotSpacing + plotH));
-						
+
 						plotsMontage.drawString(plots[pg * cols * rows + (c * rows + r)]
 							.getTitle(), plotSpacing + plotW / 2 + c * (plotSpacing + plotW),
 							plotSpacing + plotH / 5 + r * (plotSpacing + plotH),
@@ -353,13 +348,28 @@ public class GaussFitLanes implements Command {
 				i + 1) + "-" + (rows * cols * i + rows * cols), pageMontages[i], i);
 		}
 		plotImage.setStack(plotStack);
+		if (cd.getPlotSelected() != -1) {
+			int n = 0;
+			if (FastMath.floorMod(cd.getPlotSelected(), plots.length) == 0) n =
+				(int) FastMath.floor((double) cd.getPlotSelected() / plots.length *
+					plotImage.getImageStackSize());
+			else n = (int) FastMath.floor((double) cd.getPlotSelected() /
+				plots.length * plotImage.getImageStackSize()) + 1;
+			double fl = cd.getPlotSelected() / plots.length * plotImage
+				.getImageStackSize();
+			int s = plotImage.getImageStackSize();
+			int p = cd.getPlotSelected();
+			int l = plots.length;
+			plotImage.setSlice(n);
+		}
 		plotImage.updateImage();
-		if (plotImage.getRoi() != null) plotImage.deleteRoi();
+		if (plotImage.getRoi() != null) plotImage.killRoi();
 	}
 
 	private void doFit() {
 		// Reset the plots window
-		plots = null; updatePlots();
+		plots = null;
+		updatePlots();
 
 		// Results Table Colums
 		final ArrayList<String> colLane = new ArrayList<>();
@@ -509,20 +519,23 @@ public class GaussFitLanes implements Command {
 		try {
 			input = new FileInputStream("src//main//resources//about.properties");
 			prop.load(input);
-			System.out.println("Gauss Fit - v"+prop.getProperty("version"));
-		} catch (IOException ex) {
+			System.out.println("Gauss Fit - v" + prop.getProperty("version"));
+		}
+		catch (IOException ex) {
 			ex.printStackTrace();
-		} finally {
+		}
+		finally {
 			if (input != null) {
 				try {
 					input.close();
-				} catch (IOException e) {
+				}
+				catch (IOException e) {
 					e.printStackTrace();
 				}
 			}
 		}
 	}
-	
+
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		ImageJ ij = net.imagej.Main.launch(args);
@@ -530,6 +543,7 @@ public class GaussFitLanes implements Command {
 			"src//main//resources//sample//All[01-17-2017].tif");
 		// display it via ImageJ
 		iPlus.show();
+		iPlus.getCanvas().setLocation(0, 100);
 		// wrap it into an ImgLib image (no copying)
 		// final Img image = ImagePlusAdapter.wrap(imp);
 		// display it via ImgLib using ImageJ
@@ -541,7 +555,8 @@ public class GaussFitLanes implements Command {
 
 	@SuppressWarnings("serial")
 	class MainDialog extends JFrame implements ActionListener, ChangeListener,
-		DocumentListener, ItemListener, MouseMotionListener
+		DocumentListener, ItemListener, MouseMotionListener, RoiListener,
+		MouseListener
 	{
 
 		private int roiSelected = -1;
@@ -552,19 +567,19 @@ public class GaussFitLanes implements Command {
 		private int IH = imp.getWidth();
 
 		// Default lane size/offset (Just center 4 lanes in the image)
-		private int LW = (int) Math.round(0.9 * IW / nLanes);
+		private int LW = 10; // (int) Math.round(0.9 * IW / nLanes);
 		private int LH = (int) Math.round(IH * 0.9);
 		private int LSp = Math.round((IW - LW * nLanes) / (nLanes + 1));
 		private int LHOff = LSp;
 		private int LVOff = (IH - LH) / 2;
 
 		private ArrayList<Roi> rois = new ArrayList<>();
-		
+
 		private JPanel roiButtonsPanel;
 		private JRadioButton buttonAuto;
 		private JRadioButton buttonManual;
 		private ButtonGroup roiButtons;
-		
+
 		private JPanel textPanel;
 		private JLabel labelNLanes;
 		private JTextField textNLanes;
@@ -594,11 +609,12 @@ public class GaussFitLanes implements Command {
 
 		public MainDialog(String string) {
 			frame = new JFrame(string);
-			showMainDialog();
+			setupMainDialog();
 		}
 
-		private void showMainDialog() {
+		private void setupMainDialog() {
 			imp.getCanvas().addMouseMotionListener(this);
+			imp.getCanvas().addMouseListener(this);
 
 			roiButtonsPanel = new JPanel();
 			buttonAuto = new JRadioButton("Automatic Rectangle Selection");
@@ -609,13 +625,16 @@ public class GaussFitLanes implements Command {
 			buttonManual.setActionCommand("Manual");
 			buttonManual.addActionListener(this);
 			roiButtons = new ButtonGroup();
-			roiButtonsPanel.setLayout(new BoxLayout(roiButtonsPanel, BoxLayout.Y_AXIS));
+			roiButtonsPanel.setLayout(new BoxLayout(roiButtonsPanel,
+				BoxLayout.Y_AXIS));
 			roiButtons.add(buttonAuto);
 			roiButtons.add(buttonManual);
 			roiButtonsPanel.add(buttonAuto);
 			roiButtonsPanel.add(buttonManual);
-			roiButtonsPanel.setBorder(new TitledBorder(BorderFactory.createEtchedBorder(), "Lane Selection", TitledBorder.CENTER, TitledBorder.BELOW_TOP, new Font("Sans", Font.PLAIN, 11)));
-			
+			roiButtonsPanel.setBorder(new TitledBorder(BorderFactory
+				.createEtchedBorder(), "Lane Selection", TitledBorder.CENTER,
+				TitledBorder.BELOW_TOP, new Font("Sans", Font.PLAIN, 11)));
+
 			sliderPanel = new JPanel();
 			textPanel = new JPanel();
 			textPanel.setLayout(new FlowLayout(FlowLayout.LEADING));
@@ -627,7 +646,7 @@ public class GaussFitLanes implements Command {
 			labelNLanes = new JLabel("Number of Lanes");
 			textPanel.add(labelNLanes);
 			sliderPanel.add(textPanel);
-			
+
 			sliderPanel.setLayout(new BoxLayout(sliderPanel, BoxLayout.Y_AXIS));
 			sliderW = makeTitledSlider("Width ( " + LW + " px )", Color.black, 1, IW /
 				4, LW);
@@ -701,21 +720,11 @@ public class GaussFitLanes implements Command {
 			frame.setResizable(true);
 			frame.validate();
 			frame.pack();
-
-			final ImageWindow iwin = imp.getWindow();
-			if (iwin == null) return;
-			final Dimension screen = Toolkit.getDefaultToolkit().getScreenSize();
-			final Dimension imageSize = iwin.getSize();
-			final Dimension dialogSize = frame.getSize();
-			final Point imageLoc = iwin.getLocation();
-			int x = imageLoc.x + imageSize.width + 10;
-			if (x + dialogSize.width > screen.width) x = screen.width -
-				dialogSize.width;
-			frame.setLocation(x, imageLoc.y);
-			final ImageCanvas canvas = iwin.getCanvas();
-			canvas.requestFocus();
 			frame.setVisible(true);
-			reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff, -1);
+
+			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
+			reDrawROIs(imp, -1);
+			imp.killRoi();
 		}
 
 		public void cleanup() {
@@ -747,76 +756,57 @@ public class GaussFitLanes implements Command {
 			return slider;
 		}
 
-		private void setSliderTitle(final JSlider slider, final Color color,
-			final String str)
-		{
-			// Border empty = BorderFactory.createTitledBorder(
-			// BorderFactory.createEmptyBorder() );
-			final TitledBorder tb = new TitledBorder(BorderFactory
-				.createEtchedBorder(), // empty,
-				"", TitledBorder.CENTER, TitledBorder.BELOW_TOP, new Font("Sans",
-					Font.PLAIN, 11));
-			tb.setTitleJustification(TitledBorder.LEFT);
+		private void setSliderTitle(final JSlider slider, final String str) {
+			TitledBorder tb = (TitledBorder) slider.getBorder();
 			tb.setTitle(str);
-			tb.setTitleColor(color);
 			slider.setBorder(tb);
 		}
 
-		@Override
-		public synchronized void stateChanged(final ChangeEvent e) {
-			final JSlider slider = (JSlider) e.getSource();
-			if (slider == sliderW) {
-				LW = sliderW.getValue();
-				final String str = "Width ( " + LW + " px )";
-				setSliderTitle(sliderW, Color.black, str);
+		private void setSliderPanelEnabled(boolean enabled) {
+			if (enabled) {
+				textNLanes.setEnabled(true);
+				sliderW.setEnabled(true);
+				sliderH.setEnabled(true);
+				sliderSp.setEnabled(true);
+				sliderHOff.setEnabled(true);
+				sliderVOff.setEnabled(true);
 			}
-			else if (slider == sliderH) {
-				LH = sliderH.getValue();
-				final String str = "Height ( " + LH + " px )";
-				setSliderTitle(sliderH, Color.black, str);
+			else {
+				textNLanes.setEnabled(false);
+				sliderW.setEnabled(false);
+				sliderH.setEnabled(false);
+				sliderSp.setEnabled(false);
+				sliderHOff.setEnabled(false);
+				sliderVOff.setEnabled(false);
 			}
-			else if (slider == sliderSp) {
-				LSp = sliderSp.getValue();
-				final String str = "Spacing ( " + LSp + " px )";
-				setSliderTitle(sliderSp, Color.black, str);
-			}
-			else if (slider == sliderHOff) {
-				LHOff = sliderHOff.getValue();
-				final String str = "Horizontal Offset ( " + LHOff + " px )";
-				setSliderTitle(sliderHOff, Color.black, str);
-			}
-			else if (slider == sliderVOff) {
-				LVOff = sliderVOff.getValue();
-				final String str = "Vertical Offset ( " + LVOff + " px )";
-				setSliderTitle(sliderVOff, Color.black, str);
-			}
-			reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff, -1);
-			plots = null; // need to recalculate the profiles
-			updatePlots();
 		}
 
-		private void reDrawROIs(ImagePlus imgPlus, double lw, double lh, double lsp,
-			double lhoff, double lvoff, int selected)
-		{
-			nLanes = getNLanes();
-			imgPlus.setOverlay(null);
+		private void reDrawROIs(ImagePlus imgPlus, int inRoi) {
 			Overlay overlay = new Overlay();
-			rois = new ArrayList<>();
-			if (selected == -1) imgPlus.killRoi();
-			for (int i = 0; i < nLanes; i++) {
-				Roi roi = new Roi(lhoff + lw * i + lsp * i, lvoff, lw, lh);
-				if (i == selected) {
+			for (Roi roi : rois) {
+				if (rois.indexOf(roi) == inRoi) {
 					roi.setStrokeColor(Color.YELLOW);
-					imgPlus.setRoi(roi);
+					roi.setStrokeWidth(3);
+					if (buttonManual.isSelected() && inRoi != -1) imgPlus.setRoi(roi);
 				}
 				else {
+					roi.setStrokeWidth(1);
 					roi.setStrokeColor(Color.RED);
-					overlay.add(roi);
 				}
-				rois.add(roi);
+				overlay.add(roi);
+				if (buttonAuto.isSelected()) imgPlus.killRoi();
 			}
 			imgPlus.setOverlay(overlay);
-			imgPlus.updateAndDraw();
+		}
+
+		private void resetAutoROIs(int lw, int lh, int lsp, int lhoff, int lvoff,
+			int nlanes)
+		{
+			rois = new ArrayList<>();
+			for (int i = 0; i < nlanes; i++) {
+				Roi roi = new Roi(lhoff + lw * i + lsp * i, lvoff, lw, lh);
+				rois.add(roi);
+			}
 		}
 
 		public int getNLanes() {
@@ -860,20 +850,66 @@ public class GaussFitLanes implements Command {
 			return plotPreviouslySelected;
 		}
 
+		@Override
+		public synchronized void stateChanged(final ChangeEvent e) {
+			final JSlider slider = (JSlider) e.getSource();
+			if (slider == sliderW) {
+				LW = sliderW.getValue();
+				final String str = "Width ( " + LW + " px )";
+				setSliderTitle(sliderW, str);
+			}
+			else if (slider == sliderH) {
+				LH = sliderH.getValue();
+				final String str = "Height ( " + LH + " px )";
+				setSliderTitle(sliderH, str);
+			}
+			else if (slider == sliderSp) {
+				LSp = sliderSp.getValue();
+				final String str = "Spacing ( " + LSp + " px )";
+				setSliderTitle(sliderSp, str);
+			}
+			else if (slider == sliderHOff) {
+				LHOff = sliderHOff.getValue();
+				final String str = "Horizontal Offset ( " + LHOff + " px )";
+				setSliderTitle(sliderHOff, str);
+			}
+			else if (slider == sliderVOff) {
+				LVOff = sliderVOff.getValue();
+				final String str = "Vertical Offset ( " + LVOff + " px )";
+				setSliderTitle(sliderVOff, str);
+			}
+			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
+			reDrawROIs(imp, -1);
+			plots = null; // need to recalculate the profiles
+			updatePlots();
+		}
+
 		// TextField Listeners
 		@Override
 		public void changedUpdate(final DocumentEvent e) {
-			reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff, -1);
+			nLanes = getNLanes();
+			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
+			reDrawROIs(imp, -1);
+			plots = null; // need to recalculate the profiles
+			updatePlots();
 		}
 
 		@Override
 		public void removeUpdate(final DocumentEvent e) {
-			reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff, -1);
+			nLanes = getNLanes();
+			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
+			reDrawROIs(imp, -1);
+			plots = null; // need to recalculate the profiles
+			updatePlots();
 		}
 
 		@Override
 		public void insertUpdate(final DocumentEvent e) {
-			reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff, -1);
+			nLanes = getNLanes();
+			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
+			reDrawROIs(imp, -1);
+			plots = null; // need to recalculate the profiles
+			updatePlots();
 		}
 
 		// Buttons
@@ -892,12 +928,12 @@ public class GaussFitLanes implements Command {
 				this.dispose();
 				log.info("Gauss Fit terminated.");
 			}
-			
+
 			if (e.getSource().equals(buttonAuto)) {
-				sliderPanel.setVisible(true);
+				setSliderPanelEnabled(true);
 			}
 			if (e.getSource().equals(buttonManual)) {
-				sliderPanel.setVisible(false);
+				setSliderPanelEnabled(false);
 			}
 		}
 
@@ -910,8 +946,10 @@ public class GaussFitLanes implements Command {
 
 		@Override
 		public void mouseDragged(MouseEvent e) {
-			// TODO Auto-generated method stub
+			// Add or modify Roi
+			if (buttonManual.isSelected()) {
 
+			}
 		}
 
 		@Override
@@ -919,26 +957,81 @@ public class GaussFitLanes implements Command {
 			statusServ.showStatus("[" + e.getX() + ":" + e.getY() + "]");
 			int roiCurrent = -1; // None selected
 			for (Roi r : rois) {
-				Rectangle rect = r.getBounds();
 				int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
 				int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
-				int x0 = (int) rect.getMinX();
-				int y0 = (int) rect.getMinY();
-				int xm = (int) rect.getMaxX();
-				int ym = (int) rect.getMaxY();
-
-				if (x >= x0 && x <= xm && y >= y0 && y <= ym) {
-					roiCurrent = rois.indexOf(r);
-				}
+				if (r.contains(x, y)) roiCurrent = rois.indexOf(r);
 			}
 			if (roiCurrent != roiSelected) {
 				roiSelected = roiCurrent;
 				plotPreviouslySelected = plotSelected;
 				plotSelected = roiCurrent;
-				// This doesn't change the profiles, so do not set plots=null
-				reDrawROIs(imp, LW, LH, LSp, LHOff, LVOff, roiSelected);
+				if (buttonAuto.isSelected()) resetAutoROIs(LW, LH, LSp, LHOff, LVOff,
+					nLanes);
+				reDrawROIs(imp, roiCurrent);
+				// This does not change the profiles, so do not set plots=null
 				updatePlots();
 			}
 		}
+
+		@Override
+		public void mouseClicked(MouseEvent e) {
+			// Remove Roi
+			if (buttonManual.isSelected()) {
+				int roiCurrent = -1;
+				for (Roi r : rois) {
+					int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
+					int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
+					if (r.contains(x, y)) {
+						roiCurrent = rois.indexOf(r);
+						rois.remove(roiCurrent);
+					}
+				}
+				if (roiCurrent != -1) {
+					plots = null;
+					reDrawROIs(imp, roiCurrent);
+					updatePlots();
+				}
+			}
+		}
+
+		@Override
+		public void mousePressed(MouseEvent e) {
+
+		}
+
+		@Override
+		public void mouseReleased(MouseEvent e) {
+
+		}
+
+		@Override
+		public void mouseEntered(MouseEvent e) {
+			// TODO Auto-generated method stub
+
+		}
+
+		@Override
+		public void mouseExited(MouseEvent e) {
+			// TODO Auto-generated method stub
+
+		}
+
+		@Override
+		public void roiModified(ImagePlus imPlus, int id) {
+			if (!buttonManual.isSelected()) {
+				buttonManual.setSelected(true);
+				setSliderPanelEnabled(false);
+			}
+			if (id == 3) {
+				if (roiSelected == -1) rois.add(imPlus.getRoi());
+				else rois.set(roiSelected, imPlus.getRoi());
+				plots = null;
+				reDrawROIs(imp, roiSelected);
+				updatePlots();
+			}
+			System.out.println(imPlus.getTitle() + ": sel(" + roiSelected + "); ID(" +
+				id + ")");
+		}
+
 	}
 }
