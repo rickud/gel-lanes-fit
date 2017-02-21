@@ -349,18 +349,7 @@ public class GaussFitLanes implements Command {
 		}
 		plotImage.setStack(plotStack);
 		if (cd.getPlotSelected() != -1) {
-			int n = 0;
-			if (FastMath.floorMod(cd.getPlotSelected(), plots.length) == 0) n =
-				(int) FastMath.floor((double) cd.getPlotSelected() / plots.length *
-					plotImage.getImageStackSize());
-			else n = (int) FastMath.floor((double) cd.getPlotSelected() /
-				plots.length * plotImage.getImageStackSize()) + 1;
-			double fl = cd.getPlotSelected() / plots.length * plotImage
-				.getImageStackSize();
-			int s = plotImage.getImageStackSize();
-			int p = cd.getPlotSelected();
-			int l = plots.length;
-			plotImage.setSlice(n);
+			plotImage.setSlice((int) FastMath.floor((double) cd.getPlotSelected() / (rows*cols)) + 1);
 		}
 		plotImage.updateImage();
 		if (plotImage.getRoi() != null) plotImage.killRoi();
@@ -787,7 +776,10 @@ public class GaussFitLanes implements Command {
 				if (rois.indexOf(roi) == inRoi) {
 					roi.setStrokeColor(Color.YELLOW);
 					roi.setStrokeWidth(3);
-					if (buttonManual.isSelected() && inRoi != -1) imgPlus.setRoi(roi);
+					if (buttonManual.isSelected() && inRoi != -1) {
+						imgPlus.setRoi(roi);
+						Roi.addRoiListener(this);
+					}
 				}
 				else {
 					roi.setStrokeWidth(1);
@@ -954,23 +946,25 @@ public class GaussFitLanes implements Command {
 
 		@Override
 		public void mouseMoved(MouseEvent e) {
-			statusServ.showStatus("[" + e.getX() + ":" + e.getY() + "]");
-			int roiCurrent = -1; // None selected
-			for (Roi r : rois) {
-				int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
-				int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
-				if (r.contains(x, y)) roiCurrent = rois.indexOf(r);
-			}
-			if (roiCurrent != roiSelected) {
-				roiSelected = roiCurrent;
-				plotPreviouslySelected = plotSelected;
-				plotSelected = roiCurrent;
-				if (buttonAuto.isSelected()) resetAutoROIs(LW, LH, LSp, LHOff, LVOff,
-					nLanes);
-				reDrawROIs(imp, roiCurrent);
-				// This does not change the profiles, so do not set plots=null
-				updatePlots();
-			}
+			
+				statusServ.showStatus("[" + e.getX() + ":" + e.getY() + "]");
+				int roiCurrent = -1; // None selected
+				for (Roi r : rois) {
+					int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
+					int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
+					if (r.contains(x, y)) roiCurrent = rois.indexOf(r);
+				}
+				if (roiCurrent != roiSelected) {
+					roiSelected = roiCurrent;
+					plotPreviouslySelected = plotSelected;
+					plotSelected = roiCurrent;
+					if (buttonAuto.isSelected()) resetAutoROIs(LW, LH, LSp, LHOff, LVOff,
+							nLanes);
+					reDrawROIs(imp, roiCurrent);
+					// This does not change the profiles, so do not set plots=null
+					updatePlots();
+				}
+			
 		}
 
 		@Override
@@ -1018,10 +1012,6 @@ public class GaussFitLanes implements Command {
 
 		@Override
 		public void roiModified(ImagePlus imPlus, int id) {
-			if (!buttonManual.isSelected()) {
-				buttonManual.setSelected(true);
-				setSliderPanelEnabled(false);
-			}
 			if (id == 3) {
 				if (roiSelected == -1) rois.add(imPlus.getRoi());
 				else rois.set(roiSelected, imPlus.getRoi());
