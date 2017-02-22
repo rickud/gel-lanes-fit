@@ -529,12 +529,13 @@ public class GaussFitLanes implements Command {
 		InputStream input = null;
 
 		try {
-			input = new FileInputStream("src//main//resources//about.properties");
+			input = new FileInputStream("about.properties");
 			prop.load(input);
 			System.out.println("Gauss Fit - v" + prop.getProperty("version"));
 		}
 		catch (IOException ex) {
-			ex.printStackTrace();
+			// ex.printStackTrace();
+			System.out.println("Gauss Fit - v[unknown]");
 		}
 		finally {
 			if (input != null) {
@@ -1071,7 +1072,6 @@ public class GaussFitLanes implements Command {
 		@Override
 		public void mouseClicked(MouseEvent e) {
 			if (e.getClickCount() == 2) {
-				System.out.println("M 2-clicked");
 				if (!auto && !roiSelected.equals("none") && !selectionUpdate) {
 					// Remove Roi
 					Roi roi = md.getRoi(roiSelected);
@@ -1089,8 +1089,8 @@ public class GaussFitLanes implements Command {
 							roi = roiIter.next();
 							if (roi.contains(x, y)) {
 								roiIter.remove();
-								System.out.println(imp.getTitle() + ": sel(" + roiSelected +
-									"); REMOVED");
+								System.out.println(imp.getTitle() + ": " + roiSelected +
+									" - REMOVED");
 							}
 						}
 						plots = null;
@@ -1103,7 +1103,6 @@ public class GaussFitLanes implements Command {
 
 		@Override
 		public void mousePressed(MouseEvent e) {
-			System.out.println("M pressed");
 			if (!auto) selectionUpdate = true;
 		}
 
@@ -1118,7 +1117,6 @@ public class GaussFitLanes implements Command {
 					{
 
 						if (roiSelected.equals("none")) {
-							System.out.println("Add");
 							// Creating New ROI
 							// Find an available integer for lane name
 							int i = 0;
@@ -1140,6 +1138,8 @@ public class GaussFitLanes implements Command {
 								}
 							}
 							rois.add(roiNew);
+							System.out.println(imp.getTitle() + ": " + roiSelected +
+								" - ADDED");
 						}
 						else {
 							System.out.println("Modify");
@@ -1151,6 +1151,8 @@ public class GaussFitLanes implements Command {
 									if (roi.getName().equals(roiSelected)) {
 										roiNew.setName(roi.getName());
 										rois.set(rois.indexOf(roi), roiNew);
+										System.out.println(imp.getTitle() + ": " + roiSelected +
+											" - RESIZED/MOVED");
 										break;
 									}
 								}
