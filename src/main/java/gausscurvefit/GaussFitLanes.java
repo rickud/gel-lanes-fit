@@ -40,6 +40,9 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
@@ -94,6 +97,7 @@ import gausscurvefit.GaussianArrayCurveFitter.ParameterGuesser;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
+import ij.gui.GenericDialog;
 import ij.gui.ImageCanvas;
 import ij.gui.ImageWindow;
 import ij.gui.Line;
@@ -102,7 +106,7 @@ import ij.gui.Plot;
 import ij.gui.PlotWindow;
 import ij.gui.ProfilePlot;
 import ij.gui.Roi;
-import ij.gui.RoiListener;
+import ij.gui.TextRoi;
 import ij.io.Opener;
 import ij.measure.Calibration;
 import ij.process.ColorProcessor;
@@ -144,13 +148,13 @@ public class GaussFitLanes implements Command {
 	private boolean doFit; // tells the background thread to update
 	private final ImagePlus plotImage = new ImagePlus();
 
-	private Plot[] plots;
+	private ArrayList<Plot> plots;
 	private ImagePlus imp;
-	private MainDialog cd;
+	private MainDialog md;
 
 	private final int rows = 2; // Number of plot Rows in display
 	private final int cols = 2; // Number of plot Rows in display
-	private int nLanes = 18;
+	private int nLanes = 8;
 
 	private int degBG = 3; // Order of Background Polynomial
 	private double tolPK = 0.05; // Peak detection tolerance as % of range
@@ -158,7 +162,7 @@ public class GaussFitLanes implements Command {
 	public void init() {
 		imp = IJ.getImage();
 		about();
-		cd = new MainDialog("Gel Lanes Gauss Fitting: " + imp.getTitle());
+		md = new MainDialog("Gel Lanes Gauss Fitting: " + imp.getTitle());
 		IJ.wait(50); // delay to make sure ROIs have updated
 		plotImage.setTitle("Profiles of " + imp.getShortTitle());
 		updatePlots();
@@ -166,7 +170,7 @@ public class GaussFitLanes implements Command {
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
 		final ImageWindow pwin = plotImage.getWindow();
-		if (iwin == null || pwin == null || cd == null) return;
+		if (iwin == null || pwin == null || md == null) return;
 
 		final Dimension imageSize = iwin.getSize();
 		final Point imageLoc = iwin.getLocation();
@@ -204,12 +208,10 @@ public class GaussFitLanes implements Command {
 	/**
 	 * Profile data from Roi, ready for fitting (null if not possible)
 	 *
-	 * @param laneRoi
+	 * @param roi
 	 */
-	private RealMatrix getLaneProfile(final int laneRoi) {
-		if (cd.getRois().size() == 0) return null;
-
-		final Roi roi = cd.getRois().get(laneRoi);
+	private RealMatrix getLaneProfile(final Roi roi) {
+		if (md.getRois().size() == 0) return null;
 		imp.setRoi(roi);
 		final ProfilePlot profileP = new ProfilePlot(imp, true); // get the profile
 		final RealVector profile = new ArrayRealVector(profileP.getProfile());
@@ -257,100 +259,115 @@ public class GaussFitLanes implements Command {
 	 * Method for Output plot collage
 	 */
 	private void updatePlots() {
-		if (cd.getRois().size() == 0) return;
+		if (md.getRois().size() == 0) return;
 
 		if (plots == null) { // Plots have been reset
-			plots = new Plot[cd.getRois().size()]; // 1 plot per lane
-			for (int p = 0; p < cd.getRois().size(); p++) {
-				final Roi roi = cd.getRois().get(p);
-				if (roi == null) return; // these may change
-																	// asynchronously
-				final RealVector profile = new ArrayRealVector(getLaneProfile(p).getRow(
-					1));
-				if (profile.getDimension() < 2) return;
+			plots = new ArrayList<>();
 
-				final Calibration cal = imp.getCalibration();
-				String xUnit;
-				if (cal.getUnit() == null) xUnit = "pixels";
-				else xUnit = cal.getUnit();
-				final RealVector x = new ArrayRealVector(getLaneProfile(p).getRow(0));
-				final String xLabel = "Distance (" + xUnit + ")";
-				final String yLabel = (cal.getValueUnit() != null && !cal.getValueUnit()
-					.equals("Gray Value")) ? "Value (" + cal.getValueUnit() + ")"
-						: "Value";
-				plots[p] = new Plot("Lane " + (p + 1), xLabel, yLabel, x.toArray(),
-					profile.toArray());
+			Iterator<Roi> roisIter1 = md.getRois().iterator();
+			while (roisIter1.hasNext()) {
+				final Roi roi = roisIter1.next();
+				if (roi != null) {
+					final RealVector profile = new ArrayRealVector(getLaneProfile(roi)
+						.getRow(1));
+					if (profile.getDimension() < 2) return;
 
-				final double fixedMin = ProfilePlot.getFixedMin();
-				final double fixedMax = ProfilePlot.getFixedMax();
-				if (fixedMin != 0 || fixedMax != 0) {
-					final double[] a = Tools.getMinMax(x.toArray());
-					plots[p].setLimits(a[0], a[1], fixedMin, fixedMax);
+					final Calibration cal = imp.getCalibration();
+					String xUnit;
+					if (cal.getUnit() == null) xUnit = "pixels";
+					else xUnit = cal.getUnit();
+					final RealVector x = new ArrayRealVector(getLaneProfile(roi).getRow(
+						0));
+					final String xLabel = "Distance (" + xUnit + ")";
+					final String yLabel = (cal.getValueUnit() != null && !cal
+						.getValueUnit().equals("Gray Value")) ? "Value (" + cal
+							.getValueUnit() + ")" : "Value";
+					Plot plot = new Plot(roi.getName(), xLabel, yLabel, x.toArray(),
+						profile.toArray());
+
+					final double fixedMin = ProfilePlot.getFixedMin();
+					final double fixedMax = ProfilePlot.getFixedMax();
+					if (fixedMin != 0 || fixedMax != 0) {
+						final double[] a = Tools.getMinMax(x.toArray());
+						plot.setLimits(a[0], a[1], fixedMin, fixedMax);
+					}
+					plots.add(plot);
 				}
 			}
 		}
 		// Construct the plot image
 		final Color selectedBG = new Color(255, 218, 185);
 		final Color unselectedBG = Color.white;
-		for (int pp = 0; pp < plots.length; pp++) {
-			if (pp == cd.getPlotSelected()) {
-				plots[pp].setBackgroundColor(selectedBG);
-				plots[pp].updateImage();
+		Iterator<Plot> plotIter = plots.iterator();
+		while (plotIter.hasNext()) {
+			Plot plot = plotIter.next();
+			if (plot.getTitle().equals(md.getPlotSelected())) {
+				plot.setBackgroundColor(selectedBG);
 			}
-			else if (pp == cd.getPlotPreviouslySelected()) {
-				plots[pp].setBackgroundColor(unselectedBG);
-				plots[pp].updateImage();
+			else if (plot.getTitle().equals(md.getPlotPreviouslySelected())) {
+				plot.setBackgroundColor(unselectedBG);
 			}
+			plot.updateImage();
 		}
 
-		int pages = Math.floorDiv(plots.length, rows * cols);
-		if (FastMath.floorMod(plots.length, rows * cols) != 0) pages++;
-
 		final int plotSpacing = 5; // black border
-		final int plotW = plots[0].getProcessor().getWidth();
-		final int plotH = plots[0].getProcessor().getHeight();
+		final int plotW = plots.get(0).getProcessor().getWidth();
+		final int plotH = plots.get(0).getProcessor().getHeight();
 		final int plotsWidth = plotSpacing + cols * (plotW + plotSpacing);
 		final int plotsHeight = plotSpacing + rows * (plotH + plotSpacing);
-		final ImageProcessor blank = plots[0].getProcessor().duplicate();
+		final ImageProcessor blank = plots.get(0).getProcessor().duplicate();
 		IJ.setForegroundColor(255, 255, 255);
 		blank.fill();
 
-		final ImageProcessor[] pageMontages = new ImageProcessor[pages];
-		for (int pg = 0; pg < pages; pg++) {
+		if (plots.size() != md.getRois().size() || plots == null) {
+			System.out.println(plots.size() + " plots, " + md.getRois().size() +
+				" rois");
+			return;
+		}
+		final ArrayList<ImageProcessor> pageMontages = new ArrayList<>();
+		plotIter = plots.iterator();
+		int psel = 0; // selected page
+		while (plotIter.hasNext()) {
 			final ImageProcessor plotsMontage = new ColorProcessor(plotsWidth,
 				plotsHeight);
+			Plot subplot;
+			ImageProcessor subplotProcessor;
+			String subplotTitle;
 			for (int c = 0; c < cols; c++) {
 				for (int r = 0; r < rows; r++) {
-					if (pg * cols * rows + (c * rows + r) < plots.length) {
-						plotsMontage.insert(plots[pg * cols * rows + (c * rows + r)]
-							.getProcessor(), // here NP
-							plotSpacing + c * (plotSpacing + plotW), plotSpacing + r *
-								(plotSpacing + plotH));
-
-						plotsMontage.drawString(plots[pg * cols * rows + (c * rows + r)]
-							.getTitle(), plotSpacing + plotW / 2 + c * (plotSpacing + plotW),
-							plotSpacing + plotH / 5 + r * (plotSpacing + plotH),
-							Color.LIGHT_GRAY);
+					if (plotIter.hasNext()) {
+						subplot = plotIter.next();
+						subplotProcessor = subplot.getProcessor();
+						subplotTitle = subplot.getTitle();
 					}
 					else {
-						plotsMontage.insert(blank, plotSpacing + c * (plotSpacing + plotW),
-							plotSpacing + r * (plotSpacing + plotH));
+						subplotProcessor = blank;
+						subplotTitle = "";
 					}
+					plotsMontage.insert(subplotProcessor, plotSpacing + c * (plotSpacing +
+						plotW), plotSpacing + r * (plotSpacing + plotH));
+
+					plotsMontage.drawString(subplotTitle, plotSpacing + plotW / 2 + c *
+						(plotSpacing + plotW), plotSpacing + plotH / 5 + r * (plotSpacing +
+							plotH), Color.LIGHT_GRAY);
+
+					if (subplotTitle.equals(md.getPlotSelected())) psel = pageMontages
+						.size() + 1;
 				}
 			}
-			pageMontages[pg] = plotsMontage;
+			pageMontages.add(plotsMontage);
 		}
-		plotImage.setProcessor(pageMontages[0]);
+		plotImage.setProcessor(pageMontages.get(0));
 		final ImageStack plotStack = plotImage.createEmptyStack();
-
-		for (int i = 0; i < pageMontages.length; i++) {
-			if (pageMontages[i] != null) plotStack.addSlice("Lanes " + (rows * cols *
-				i + 1) + "-" + (rows * cols * i + rows * cols), pageMontages[i], i);
+		Iterator<ImageProcessor> montageIter = pageMontages.iterator();
+		int p = 0;
+		while (montageIter.hasNext()) {
+			plotStack.addSlice("Lanes " + (rows * cols * p + 1) + "-" + (rows * cols *
+				p + rows * cols), montageIter.next(), p);
+			p++;
 		}
 		plotImage.setStack(plotStack);
-		if (cd.getPlotSelected() != -1) {
-			plotImage.setSlice((int) FastMath.floor((double) cd.getPlotSelected() / (rows*cols)) + 1);
-		}
+		if (!md.getPlotSelected().equals("none")) plotImage.setSlice(psel);
 		plotImage.updateImage();
 		if (plotImage.getRoi() != null) plotImage.killRoi();
 	}
@@ -360,7 +377,7 @@ public class GaussFitLanes implements Command {
 		plots = null;
 		updatePlots();
 
-		// Results Table Colums
+		// Results Table Columns
 		final ArrayList<String> colLane = new ArrayList<>();
 		final ArrayList<Integer> colBand = new ArrayList<>();
 		RealVector colDistance = new ArrayRealVector();
@@ -368,16 +385,22 @@ public class GaussFitLanes implements Command {
 		RealVector colFWHM = new ArrayRealVector();
 		RealVector colArea = new ArrayRealVector();
 
-		for (int i = 0; i < plots.length; i++) {
+		Iterator<Plot> plotIter = plots.iterator();
+		int progress = 1;
+		while (plotIter.hasNext()) {
+			Plot plot = plotIter.next();
 			if (log.getLevel() == 0) log.initialize();
 
-			final RealVector xvals = new ArrayRealVector(getLaneProfile(i).getRow(0));
-			final RealVector yvals = new ArrayRealVector(getLaneProfile(i).getRow(1));
+			Roi roi = md.getRoi(plot.getTitle());
+			final RealVector xvals = new ArrayRealVector(getLaneProfile(roi).getRow(
+				0));
+			final RealVector yvals = new ArrayRealVector(getLaneProfile(roi).getRow(
+				1));
 			RealVector bg = new ArrayRealVector();
 
-			final int degbg = cd.getDegBG();
+			final int degbg = md.getDegBG();
 			// Tolerance as percentage of the range
-			final double tolpk = cd.getTolPK() * (yvals.getMaxValue() - yvals
+			final double tolpk = md.getTolPK() * (yvals.getMaxValue() - yvals
 				.getMinValue());
 
 			final WeightedObservedPoints obs = new WeightedObservedPoints(); // All Y
@@ -416,8 +439,8 @@ public class GaussFitLanes implements Command {
 
 			bg = xvals.map(new PolynomialFunction(poly.getSubVector(1, degBG + 1)
 				.toArray()));
-			plots[i].setColor(Color.blue);
-			plots[i].addPoints(xvals.toArray(), bg.toArray(), PlotWindow.LINE);
+			plot.setColor(Color.blue);
+			plot.addPoints(xvals.toArray(), bg.toArray(), PlotWindow.LINE);
 
 			for (int b = degBG + 2; b < pars.getDimension(); b += 3) {
 				// Initial Guess
@@ -432,22 +455,22 @@ public class GaussFitLanes implements Command {
 				gauss = xvals.map(new Gaussian(pars.getEntry(b), pars.getEntry(b + 1),
 					pars.getEntry(b + 2)));
 				gauss = gauss.add(bg); // add the background Polynomial
-				plots[i].setColor(Color.red);
-				plots[i].addPoints(xvals.toArray(), gauss.toArray(), PlotWindow.LINE);
+				plot.setColor(Color.red);
+				plot.addPoints(xvals.toArray(), gauss.toArray(), PlotWindow.LINE);
 			}
 			fitted = xvals.map(new GaussianArrayBG(norms, means, sds, poly));
 			guessed = xvals.map(new GaussianArrayBG(norms0, means0, sds0, poly0));
 
-			plots[i].setColor(Color.blue);
-			plots[i].addPoints(means0.toArray(), norms0.toArray(), PlotWindow.CROSS);
-			plots[i].setColor(new Color(0, 128, 0));
-			plots[i].addPoints(xvals.toArray(), fitted.toArray(), PlotWindow.LINE);
-			plots[i].setLimitsToFit(true);
+			plot.setColor(Color.blue);
+			plot.addPoints(means0.toArray(), norms0.toArray(), PlotWindow.CROSS);
+			plot.setColor(new Color(0, 128, 0));
+			plot.addPoints(xvals.toArray(), fitted.toArray(), PlotWindow.LINE);
+			plot.setLimitsToFit(true);
 
 			final RealVector peakAreas = doIntegrate(xvals, norms, means, sds);
 
 			// Prepare columns for Results Table
-			colLane.add("Lane " + (i + 1));
+			colLane.add(plot.getTitle());
 			colBand.add(1);
 			for (int rr = 1; rr < peakAreas.getDimension(); rr++) {
 				colLane.add("");
@@ -459,10 +482,10 @@ public class GaussFitLanes implements Command {
 				FastMath.log(2))));
 			colArea = colArea.append(peakAreas);
 
-			final String output = String.format("Lane %1$d, RMS: %2$.2f; ", i + 1,
+			final String output = String.format(plot.getTitle() + ", RMS: %1$.2f; ",
 				optimum.getRMS());
 			log.info(output);
-			statusServ.showProgress(i, plots.length);
+			statusServ.showProgress(++progress, plots.size());
 		}
 
 		updatePlots(); // without resetting or re-reading lanes
@@ -544,22 +567,23 @@ public class GaussFitLanes implements Command {
 
 	@SuppressWarnings("serial")
 	class MainDialog extends JFrame implements ActionListener, ChangeListener,
-		DocumentListener, ItemListener, MouseMotionListener, RoiListener,
-		MouseListener
+		DocumentListener, ItemListener, MouseMotionListener, MouseListener
 	{
 
-		private int roiSelected = -1;
-		private int plotSelected = -1;
-		private int plotPreviouslySelected = -1;
+		private boolean auto = true; // AUTO Lane size mode is ON
+		private boolean selectionUpdate = false; // active updating is off
+		private String roiSelected = "none";
+		private String plotSelected = "none";
+		private String plotPreviouslySelected = "none";
 
 		private int IW = imp.getWidth();
 		private int IH = imp.getWidth();
 
 		// Default lane size/offset (Just center 4 lanes in the image)
-		private int LW = 10; // (int) Math.round(0.9 * IW / nLanes);
-		private int LH = (int) Math.round(IH * 0.9);
+		private int LW = (int) Math.round(0.8 * IW / nLanes);
+		private int LH = (int) Math.round(IH * 0.8);
 		private int LSp = Math.round((IW - LW * nLanes) / (nLanes + 1));
-		private int LHOff = LSp;
+		private int LHOff = LSp / 2;
 		private int LVOff = (IH - LH) / 2;
 
 		private ArrayList<Roi> rois = new ArrayList<>();
@@ -621,7 +645,7 @@ public class GaussFitLanes implements Command {
 			roiButtonsPanel.add(buttonAuto);
 			roiButtonsPanel.add(buttonManual);
 			roiButtonsPanel.setBorder(new TitledBorder(BorderFactory
-				.createEtchedBorder(), "Lane Selection", TitledBorder.CENTER,
+				.createEtchedBorder(), "Lane Selection", TitledBorder.LEADING,
 				TitledBorder.BELOW_TOP, new Font("Sans", Font.PLAIN, 11)));
 
 			sliderPanel = new JPanel();
@@ -712,22 +736,27 @@ public class GaussFitLanes implements Command {
 			frame.setVisible(true);
 
 			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
-			reDrawROIs(imp, -1);
+			reDrawROIs(imp, "none");
 			imp.killRoi();
 		}
 
 		public void cleanup() {
 			// Remove Listeners on imp
-			// imp.removeImageListener(listener);
+			imp.getCanvas().removeMouseListener(this);
+			imp.getCanvas().removeMouseMotionListener(this);
+		}
 
+		private boolean askUser(String question) {
+			GenericDialog gd = new GenericDialog("WARNING!");
+			gd.addMessage(question);
+			gd.showDialog();
+			if (gd.wasOKed()) return true;
+			return false;
 		}
 
 		private JSlider makeTitledSlider(final String string, final Color color,
 			final int minVal, final int maxVal, final int val)
 		{
-			// Border empty = BorderFactory.createTitledBorder(
-			// BorderFactory.createEmptyBorder() );
-
 			final JSlider slider = new JSlider(SwingConstants.HORIZONTAL, minVal,
 				maxVal, val);
 			final TitledBorder tb = new TitledBorder(BorderFactory
@@ -770,22 +799,71 @@ public class GaussFitLanes implements Command {
 			}
 		}
 
-		private void reDrawROIs(ImagePlus imgPlus, int inRoi) {
+		private void reDrawROIs(ImagePlus imgPlus, String roiName) {
+			if (!auto) {
+				// HouseKeeping: Sort the rois based on name and remove null elements
+				final Comparator<Roi> nameComparator = new Comparator<Roi>() {
+
+					@Override
+					public int compare(Roi r1, Roi r2) {
+						if (r1 == null && r2 == null) {
+							return 0;
+						}
+						if (r1 == null) {
+							return -1;
+						}
+						if (r2 == null) {
+							return 1;
+						}
+						int n1 = Integer.parseInt(r1.getName().substring(5));
+						int n2 = Integer.parseInt(r2.getName().substring(5));
+						int comp = Integer.compare(n1, n2);
+						if (comp != 0) {
+							return comp;
+						}
+						return 0;
+					}
+				};
+				Collections.sort(rois, nameComparator);
+				Iterator<Roi> roisIter = rois.iterator();
+				int nullIndex = 0;
+				while (roisIter.hasNext()) {
+					if (roisIter.next() == null) break;
+					nullIndex++;
+				}
+				rois = new ArrayList<>(rois.subList(0, nullIndex));
+			}
 			Overlay overlay = new Overlay();
-			for (Roi roi : rois) {
-				if (rois.indexOf(roi) == inRoi) {
+			Iterator<Roi> roiIter = rois.iterator();
+			while (roiIter.hasNext()) {
+				Roi roi = roiIter.next();
+				String label = roi.getName().substring(5);
+				Font font = new Font("SansSerif", Font.BOLD, 20);
+				TextRoi labelRoi = new TextRoi(0, 0, label, font);
+				labelRoi.setAntialiased(true);
+				double lh = font.getSize() * 1.4;
+				double lw = font.getSize() * 1.4;
+				double rh = roi.getBounds().getHeight();
+				double rw = roi.getBounds().getWidth();
+				double x0 = roi.getBounds().getX();
+				double y0 = roi.getBounds().getY();
+				if (lh > rh || lw > rw) labelRoi.setLocation(x0 + 0.1 * lw, y0 + rh +
+					1.1 * lh);
+				else labelRoi.setLocation(x0 + 0.2 * lw, y0 + rh - 1.1 * lh);
+				if (roi.getName().equals(roiName)) {
 					roi.setStrokeColor(Color.YELLOW);
 					roi.setStrokeWidth(3);
-					if (buttonManual.isSelected() && inRoi != -1) {
+					if (buttonManual.isSelected() && !roiName.equals("none")) {
 						imgPlus.setRoi(roi);
-						Roi.addRoiListener(this);
 					}
 				}
 				else {
 					roi.setStrokeWidth(1);
 					roi.setStrokeColor(Color.RED);
+					labelRoi.setFillColor(Color.RED);
 				}
 				overlay.add(roi);
+				overlay.add(labelRoi);
 				if (buttonAuto.isSelected()) imgPlus.killRoi();
 			}
 			imgPlus.setOverlay(overlay);
@@ -797,6 +875,7 @@ public class GaussFitLanes implements Command {
 			rois = new ArrayList<>();
 			for (int i = 0; i < nlanes; i++) {
 				Roi roi = new Roi(lhoff + lw * i + lsp * i, lvoff, lw, lh);
+				roi.setName("Lane " + (i + 1));
 				rois.add(roi);
 			}
 		}
@@ -834,11 +913,20 @@ public class GaussFitLanes implements Command {
 			return rois;
 		}
 
-		public int getPlotSelected() {
+		public Roi getRoi(String title) {
+			Iterator<Roi> roiIter = rois.iterator();
+			while (roiIter.hasNext()) {
+				Roi roi = roiIter.next();
+				if (roi.getName().equals(title)) return roi;
+			}
+			return null;
+		}
+
+		public String getPlotSelected() {
 			return plotSelected;
 		}
 
-		public int getPlotPreviouslySelected() {
+		public String getPlotPreviouslySelected() {
 			return plotPreviouslySelected;
 		}
 
@@ -871,7 +959,7 @@ public class GaussFitLanes implements Command {
 				setSliderTitle(sliderVOff, str);
 			}
 			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
-			reDrawROIs(imp, -1);
+			reDrawROIs(imp, "none");
 			plots = null; // need to recalculate the profiles
 			updatePlots();
 		}
@@ -881,7 +969,7 @@ public class GaussFitLanes implements Command {
 		public void changedUpdate(final DocumentEvent e) {
 			nLanes = getNLanes();
 			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
-			reDrawROIs(imp, -1);
+			reDrawROIs(imp, "none");
 			plots = null; // need to recalculate the profiles
 			updatePlots();
 		}
@@ -890,7 +978,7 @@ public class GaussFitLanes implements Command {
 		public void removeUpdate(final DocumentEvent e) {
 			nLanes = getNLanes();
 			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
-			reDrawROIs(imp, -1);
+			reDrawROIs(imp, "none");
 			plots = null; // need to recalculate the profiles
 			updatePlots();
 		}
@@ -899,7 +987,7 @@ public class GaussFitLanes implements Command {
 		public void insertUpdate(final DocumentEvent e) {
 			nLanes = getNLanes();
 			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
-			reDrawROIs(imp, -1);
+			reDrawROIs(imp, "none");
 			plots = null; // need to recalculate the profiles
 			updatePlots();
 		}
@@ -911,6 +999,7 @@ public class GaussFitLanes implements Command {
 				doFit();
 				chkBoxBands.setEnabled(true);
 			}
+
 			if (e.getSource().equals(buttonCancel)) {
 				cleanup();
 				plotImage.getWindow().close();
@@ -922,11 +1011,22 @@ public class GaussFitLanes implements Command {
 			}
 
 			if (e.getSource().equals(buttonAuto)) {
-				setSliderPanelEnabled(true);
+				if (!auto) { // NOT already AUTO
+					if (askUser(
+						"When switching to AUTO mode, the current lane selections will be reset!"))
+					{
+						auto = true;
+						setSliderPanelEnabled(true);
+					}
+					else buttonManual.setSelected(true);
+				}
 			}
+
 			if (e.getSource().equals(buttonManual)) {
+				auto = false;
 				setSliderPanelEnabled(false);
 			}
+
 		}
 
 		@Override
@@ -938,64 +1038,131 @@ public class GaussFitLanes implements Command {
 
 		@Override
 		public void mouseDragged(MouseEvent e) {
-			// Add or modify Roi
-			if (buttonManual.isSelected()) {
 
-			}
 		}
 
 		@Override
 		public void mouseMoved(MouseEvent e) {
-			
-				statusServ.showStatus("[" + e.getX() + ":" + e.getY() + "]");
-				int roiCurrent = -1; // None selected
-				for (Roi r : rois) {
+			statusServ.showStatus("[" + e.getX() + ":" + e.getY() + "]");
+			if (!selectionUpdate) {
+				String roiCurrent = "none"; // None selected
+				// Local copy for iteration
+				Iterator<Roi> roisIter = rois.iterator();
+				while (roisIter.hasNext()) {
+					Roi roi = roisIter.next();
 					int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
 					int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
-					if (r.contains(x, y)) roiCurrent = rois.indexOf(r);
+					if (roi.contains(x, y)) roiCurrent = roi.getName();
 				}
-				if (roiCurrent != roiSelected) {
+				if (roiCurrent.equals("none") && imp.getRoi() != null) imp.killRoi();
+				if (!roiCurrent.equals(roiSelected)) {
 					roiSelected = roiCurrent;
 					plotPreviouslySelected = plotSelected;
 					plotSelected = roiCurrent;
 					if (buttonAuto.isSelected()) resetAutoROIs(LW, LH, LSp, LHOff, LVOff,
-							nLanes);
+						nLanes);
 					reDrawROIs(imp, roiCurrent);
 					// This does not change the profiles, so do not set plots=null
 					updatePlots();
 				}
-			
+			}
 		}
 
 		@Override
 		public void mouseClicked(MouseEvent e) {
-			// Remove Roi
-			if (buttonManual.isSelected()) {
-				int roiCurrent = -1;
-				for (Roi r : rois) {
-					int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
-					int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
-					if (r.contains(x, y)) {
-						roiCurrent = rois.indexOf(r);
-						rois.remove(roiCurrent);
+			if (e.getClickCount() == 2) {
+				System.out.println("M 2-clicked");
+				if (!auto && !roiSelected.equals("none") && !selectionUpdate) {
+					// Remove Roi
+					Roi roi = md.getRoi(roiSelected);
+					if (roi == null) return;
+					if (roi.isHandle(e.getX(), e.getY()) != -1) {
+						// might be dragging existing roi
+						return;
 					}
-				}
-				if (roiCurrent != -1) {
-					plots = null;
-					reDrawROIs(imp, roiCurrent);
-					updatePlots();
+
+					if (askUser("Delete " + roiSelected + "?")) {
+						int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
+						int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
+						Iterator<Roi> roiIter = rois.iterator();
+						while (roiIter.hasNext()) {
+							roi = roiIter.next();
+							if (roi.contains(x, y)) {
+								roiIter.remove();
+								System.out.println(imp.getTitle() + ": sel(" + roiSelected +
+									"); REMOVED");
+							}
+						}
+						plots = null;
+						reDrawROIs(imp, "none");
+						updatePlots();
+					}
 				}
 			}
 		}
 
 		@Override
 		public void mousePressed(MouseEvent e) {
-
+			System.out.println("M pressed");
+			if (!auto) selectionUpdate = true;
 		}
 
 		@Override
 		public void mouseReleased(MouseEvent e) {
+			// Add or modify Roi
+			if (buttonManual.isSelected()) {
+				if (selectionUpdate) {
+					Roi roiNew = imp.getRoi();
+					if (roiNew != null && roiNew.getBounds().getWidth() * roiNew
+						.getBounds().getHeight() > 100)
+					{
 
+						if (roiSelected.equals("none")) {
+							System.out.println("Add");
+							// Creating New ROI
+							// Find an available integer for lane name
+							int i = 0;
+							while (++i <= rois.size() + 1) {
+								Iterator<Roi> roisIter = rois.iterator();
+								boolean contains = false;
+								while (roisIter.hasNext()) {
+									if (i == Integer.parseInt(roisIter.next().getName().substring(
+										5)))
+									{
+										contains = true;
+										break;
+									}
+								}
+								if (!contains) {
+									roiNew.setName("Lane " + i);
+									roiSelected = roiNew.getName();
+									break;
+								}
+							}
+							rois.add(roiNew);
+						}
+						else {
+							System.out.println("Modify");
+							// Moving/Resizing a specific ROI
+							Iterator<Roi> roisIter = rois.iterator();
+							while (roisIter.hasNext()) {
+								Roi roi = roisIter.next();
+								if (roi != null) {
+									if (roi.getName().equals(roiSelected)) {
+										roiNew.setName(roi.getName());
+										rois.set(rois.indexOf(roi), roiNew);
+										break;
+									}
+								}
+							}
+						}
+						plots = null;
+						reDrawROIs(imp, roiSelected);
+						updatePlots();
+					}
+				}
+			}
+			selectionUpdate = false;
 		}
 
 		@Override
@@ -1009,19 +1176,5 @@ public class GaussFitLanes implements Command {
 			// TODO Auto-generated method stub
 
 		}
-
-		@Override
-		public void roiModified(ImagePlus imPlus, int id) {
-			if (id == 3) {
-				if (roiSelected == -1) rois.add(imPlus.getRoi());
-				else rois.set(roiSelected, imPlus.getRoi());
-				plots = null;
-				reDrawROIs(imp, roiSelected);
-				updatePlots();
-			}
-			System.out.println(imPlus.getTitle() + ": sel(" + roiSelected + "); ID(" +
-				id + ")");
-		}
-
 	}
 }
