@@ -4,3 +4,4 @@
 /target/
 /.classpath
 /.apt_generated/
+/pom.properties

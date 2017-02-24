@@ -745,6 +745,7 @@ public class GaussFitLanes implements Command {
 			// Remove Listeners on imp
 			imp.getCanvas().removeMouseListener(this);
 			imp.getCanvas().removeMouseMotionListener(this);
+			imp.setOverlay(null);
 		}
 
 		private boolean askUser(String question) {
