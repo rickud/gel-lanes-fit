@@ -5,3 +5,5 @@
 /.classpath
 /.apt_generated/
 /pom.properties
+/hs_err_pid4280.log
+/test.txt

@@ -1,6 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0"
-	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
 	xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
 		http://maven.apache.org/xsd/maven-4.0.0.xsd">
 	<modelVersion>4.0.0</modelVersion>
@@ -8,13 +7,13 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>13.2.1</version>
+		<version>14.0.0</version>
 	</parent>
-	
+
 	<groupId>imagej-plugins</groupId>
 	<artifactId>GaussianFit</artifactId>
 	<version>1.0.2-SNAPHOT</version>
-	
+
 	<name> Gauss Fit</name>
 	<description>This plugin fits Gaussians around local maxima.</description>
 	<url>https://github.com/rickud/gauss-curve-fit/</url>
@@ -30,12 +29,12 @@
 		</license>
 	</licenses>
 
- 	<properties>
+	<properties>
 		<main-class>_GaussFitLanes</main-class>
 		<scijava.jvm.version>1.8</scijava.jvm.version>
 		<license.licenseName>bsd_2</license.licenseName>
 		<license.copyrightOwners>The University of Texas at Dallas </license.copyrightOwners>
-  	</properties>
+	</properties>
 
 	<developers>
 		<developer>
@@ -56,18 +55,26 @@
 		<contributor>
 			<name>Johannes Schindelin</name>
 			<url>http://imagej.net/User:Schindelin</url>
-			<roles><role>founder</role></roles>
-			<properties><id>dscho</id></properties>
+			<roles>
+				<role>founder</role>
+			</roles>
+			<properties>
+				<id>dscho</id>
+			</properties>
 		</contributor>
 		<contributor>
 			<name>Olivier Burri</name>
 			<url>http://imagej.net/User:Oburri</url>
-			<properties><id>lacan</id></properties>
+			<properties>
+				<id>lacan</id>
+			</properties>
 		</contributor>
 		<contributor>
 			<name>Mark Hiner</name>
 			<url>http://imagej.net/User:Hinerm</url>
-			<properties><id>hinerm</id></properties>
+			<properties>
+				<id>hinerm</id>
+			</properties>
 		</contributor>
 		<contributor>
 			<name>Jules Maselbas</name>
@@ -75,22 +82,24 @@
 		<contributor>
 			<name>Kota Miura</name>
 			<url>http://imagej.net/User:Miura</url>
-			<properties><id>cmci</id></properties>
+			<properties>
+				<id>cmci</id>
+			</properties>
 		</contributor>
 		<contributor>
 			<name>Yili Zhao</name>
 			<url>http://imagej.net/User:Panovr</url>
-			<properties><id>panovr</id></properties>
+			<properties>
+				<id>panovr</id>
+			</properties>
 		</contributor>
 	</contributors>
-
 	<mailingLists>
 		<mailingList>
 			<name>ImageJ Forum</name>
 			<archive>http://forum.imagej.net/</archive>
 		</mailingList>
 	</mailingLists>
-
 	<scm>
 		<connection>scm:git:git://github.com/rickud/gauss-curve-fit</connection>
 		<developerConnection>scm:git:git@github.com:rickud/gauss-curve-fit</developerConnection>
@@ -104,10 +113,10 @@
 	<ciManagement>
 		<system>None</system>
 	</ciManagement>
-	
+
 	<repositories>
 		<repository>
-				<id>imagej.public</id>
+			<id>imagej.public</id>
 			<url>http://maven.imagej.net/content/groups/public</url>
 		</repository>
 		<repository>
@@ -115,14 +124,20 @@
 			<url>https://github.com/rickud/gauss-curve-fit</url>
 		</repository>
 	</repositories>
+	
 	<build>
-      <resources>
-        <resource>
-          <directory>src/main/resources</directory>
-          <filtering>true</filtering>
-        </resource>
-      </resources>   
-    </build>
+		<resources>
+			<resource>
+				<directory>src/main/resources</directory>
+				<filtering>true</filtering>
+				<includes>
+					<include>sample/*.tif</include>
+					<include>**/*.properties</include>
+				</includes>
+			</resource>
+		</resources>
+	</build>
+	
 	<dependencies>
 		<dependency>
 			<groupId>net.imagej</groupId>
@@ -133,7 +148,5 @@
 			<artifactId>imagej</artifactId>
 		</dependency>
 	</dependencies>
-	
-	
 </project>
 
