@@ -161,7 +161,7 @@ public class GaussFitLanes implements Command {
 
 	private final int rows = 2; // Number of plot Rows in display
 	private final int cols = 2; // Number of plot Rows in display
-	private int nLanes = 8;
+	private int nLanes = 5;
 
 	private int degBG = 3; // Order of Background Polynomial
 	private double tolPK = 0.05; // Peak detection tolerance as % of range
@@ -291,10 +291,8 @@ public class GaussFitLanes implements Command {
 					else xUnit = cal.getUnit();
 					final RealVector x = new ArrayRealVector(getLaneProfile(roi).getRow(
 						0));
-					final String xLabel = "Distance (" + xUnit + ")";
-					final String yLabel = (cal.getValueUnit() != null && !cal
-						.getValueUnit().equals("Gray Value")) ? "Value (" + cal
-							.getValueUnit() + ")" : "Value";
+					final String xLabel = "Distance (px)";
+					final String yLabel = "16-bit Value";
 					final Plot plot = new Plot(roi.getName(), xLabel, yLabel, x.toArray(),
 						profile.toArray());
 
@@ -384,6 +382,7 @@ public class GaussFitLanes implements Command {
 		plotImage.setStack(plotStack);
 		if (!md.getPlotSelected().equals("none")) plotImage.setSlice(psel);
 		plotImage.updateImage();
+		plotImage.show();
 		if (plotImage.getRoi() != null) plotImage.killRoi();
 	}
 
@@ -409,6 +408,9 @@ public class GaussFitLanes implements Command {
 		RealVector colAmplitude = new ArrayRealVector();
 		RealVector colFWHM = new ArrayRealVector();
 		RealVector colArea = new ArrayRealVector();
+		RealVector colDistance_g = new ArrayRealVector();
+		RealVector colAmplitude_g = new ArrayRealVector();
+		RealVector colFWHM_g = new ArrayRealVector();
 
 		final Iterator<Plot> plotIter = plots.iterator();
 		int progress = 1;
@@ -492,7 +494,9 @@ public class GaussFitLanes implements Command {
 			plot.setColor(new Color(0, 128, 0));
 			plot.addPoints(xvals.toArray(), fitted.toArray(), PlotWindow.LINE);
 			plot.setLimitsToFit(true);
-
+			
+			// FIXME: Add Legend to the plots
+			// plot.setLegend("Original \tFitted \tGaussian ", Plot.LEGEND_TRANSPARENT+Plot.TOP_RIGHT);
 			final RealVector peakAreas = doIntegrate(xvals, norms, means, sds);
 
 			// Prepare columns for Results Table
@@ -507,7 +511,11 @@ public class GaussFitLanes implements Command {
 			colFWHM = colFWHM.append(sds.mapMultiplyToSelf(2 * FastMath.sqrt(2 *
 				FastMath.log(2))));
 			colArea = colArea.append(peakAreas);
-
+			colDistance_g = colDistance_g.append(means0);
+			colAmplitude_g = colAmplitude_g.append(norms0);
+			colFWHM_g = colFWHM_g.append(sds0.mapMultiplyToSelf(2 * FastMath.sqrt(2 *
+				FastMath.log(2))));
+			
 			final String output = String.format(plot.getTitle() + ", RMS: %1$.2f; ",
 				optimum.getRMS());
 			log.info(output);
@@ -516,7 +524,7 @@ public class GaussFitLanes implements Command {
 
 		updatePlots(); // without resetting or re-reading lanes
 		final String[] headers = { "", "Band", "Distance", "Amplitude", "FWHM",
-			"Area" };
+			"Area", "D_guess", "A_guess", "FWHM_guess"};
 		final GenericColumn[] tableCol = new GenericColumn[headers.length];
 		final DefaultGenericTable rt = new DefaultGenericTable();
 
@@ -529,6 +537,9 @@ public class GaussFitLanes implements Command {
 			tableCol[3].add(String.format("%1$.1f", colAmplitude.getEntry(rr)));
 			tableCol[4].add(String.format("%1$.2f", colFWHM.getEntry(rr)));
 			tableCol[5].add(String.format("%1$.1f", colArea.getEntry(rr)));
+			tableCol[6].add(String.format("%1$.1f", colDistance_g.getEntry(rr)));
+			tableCol[7].add(String.format("%1$.1f", colAmplitude_g.getEntry(rr)));
+			tableCol[8].add(String.format("%1$.2f", colFWHM_g.getEntry(rr)));
 		}
 		for (int cc = 0; cc < headers.length; cc++)
 			rt.add(tableCol[cc]);
@@ -618,7 +629,7 @@ public class GaussFitLanes implements Command {
 		private String plotPreviouslySelected = "none";
 
 		private final int IW = imp.getWidth();
-		private final int IH = imp.getWidth();
+		private final int IH = imp.getHeight();
 
 		// Default lane size/offset (Just center 4 lanes in the image)
 		private int LW = (int) Math.round(0.8 * IW / nLanes);
@@ -1145,8 +1156,8 @@ public class GaussFitLanes implements Command {
 							roi = roiIter.next();
 							if (roi.contains(x, y)) {
 								roiIter.remove();
-								System.out.println(imp.getTitle() + ": " + roiSelected +
-									" - REMOVED");
+//								System.out.println(imp.getTitle() + ": " + roiSelected +
+//									" - REMOVED");
 							}
 						}
 						plots = null;
@@ -1194,11 +1205,11 @@ public class GaussFitLanes implements Command {
 								}
 							}
 							rois.add(roiNew);
-							System.out.println(imp.getTitle() + ": " + roiSelected +
-								" - ADDED");
+//							System.out.println(imp.getTitle() + ": " + roiSelected +
+//								" - ADDED");
 						}
 						else {
-							System.out.println("Modify");
+							// System.out.println("Modify");
 							// Moving/Resizing a specific ROI
 							final Iterator<Roi> roisIter = rois.iterator();
 							while (roisIter.hasNext()) {
@@ -1207,8 +1218,8 @@ public class GaussFitLanes implements Command {
 									if (roi.getName().equals(roiSelected)) {
 										roiNew.setName(roi.getName());
 										rois.set(rois.indexOf(roi), roiNew);
-										System.out.println(imp.getTitle() + ": " + roiSelected +
-											" - RESIZED/MOVED");
+										// System.out.println(imp.getTitle() + ": " + roiSelected +
+										//	" - RESIZED/MOVED");
 										break;
 									}
 								}
