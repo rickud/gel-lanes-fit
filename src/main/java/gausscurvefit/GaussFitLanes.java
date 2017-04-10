@@ -74,6 +74,9 @@ import net.imagej.table.DefaultGenericTable;
 import net.imagej.table.DefaultTableDisplay;
 import net.imagej.table.GenericColumn;
 
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.math.analysis.UnivariateRealFunction;
+import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.function.Gaussian;
 import org.apache.commons.math3.analysis.integration.TrapezoidIntegrator;
 import org.apache.commons.math3.analysis.polynomials.PolynomialFunction;
@@ -144,26 +147,33 @@ public class GaussFitLanes implements Command {
 	private static OpService ops;
 
 	// Default Parameters
-	private Thread mainThread; // thread for the main window
-	private Thread plotThread; // thread for plotting
+	private Thread mainWindowThread; // thread for the main window
+	private Thread plotThread; 			 // thread for plotting
 
 	private boolean setup = true;
 	private boolean doFit; // tells the background thread to update
 	private boolean fitDone = false;
 
 	private final ImagePlus plotImage = new ImagePlus();
-	private ArrayList<Plot> plots;
+	private ArrayList<MyPlot> plots = new ArrayList<>();
+	private Color vLineColor = Color.RED;
+	private Color profileColor = Color.BLACK;
+	private Color gaussColor = Color.RED;
+	private Color bgColor = Color.BLUE;
+	private Color fittedColor = new Color(0, 180, 0);
+	
 	private ImagePlus imp;
 	private MainDialog md;
 	private String version;
 
 	private final int rows = 2; // Number of plot Rows in display
 	private final int cols = 2; // Number of plot Rows in display
-	private int nLanes = 5;
-
+	private int nLanes = 5; 
 	private int degBG = 3; // Order of Background Polynomial
 	private double tolPK = 0.05; // Peak detection tolerance as % of range
 
+	
+	
 	public void init() {
 		final double SW = IJ.getScreenSize().getWidth();
 		final double SH = IJ.getScreenSize().getHeight();
@@ -174,7 +184,9 @@ public class GaussFitLanes implements Command {
 			.getTitle());
 		IJ.wait(50); // delay to make sure ROIs have updated
 		plotImage.setTitle("Profiles of " + imp.getShortTitle());
-		updatePlots();
+		for (int p : getAllLaneNumbers()) updateProfile(p);
+		plotsMontage();
+		
 		plotImage.show();
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
@@ -215,12 +227,28 @@ public class GaussFitLanes implements Command {
 		}
 	}
 
+	private int[] getAllLaneNumbers() {
+		ArrayList<Roi> rois =   md.getRois();
+		Iterator<Roi> roisIter = rois.iterator();
+		int[] laneNumbers = new int[rois.size()];
+		int i = 0;
+		while (roisIter.hasNext()) {
+			Roi roi = roisIter.next();
+			if (roi != null) {
+				String name  = roi.getName();
+				laneNumbers[i] = Integer.parseInt(name.substring(5));
+				i++;
+			}
+		}
+		return ArrayUtils.subarray(laneNumbers, 0, i);
+	}
+
 	/**
 	 * Profile data from Roi, ready for fitting (null if not possible)
 	 *
 	 * @param roi
 	 */
-	private RealMatrix getLaneProfile(final Roi roi) {
+	private DataSeries getLaneProfile(final Roi roi) {
 		if (md.getRois().size() == 0) return null;
 		imp.setRoi(roi);
 		final ProfilePlot profileP = new ProfilePlot(imp, true); // get the profile
@@ -230,67 +258,91 @@ public class GaussFitLanes implements Command {
 		double y0 = roi.getBounds().getMinY();
 		double[] y = new double[profile.getDimension()];
 		for (int p = 0;  p < y.length; p++) y[p] = y0 + p;
-		final RealMatrix output = MatrixUtils.createRealMatrix(new double[][] {y, profile.toArray()});
-		return output;
+		return new DataSeries("Lane Profile", DataSeries.PROFILE, new ArrayRealVector(y), profile, Color.BLACK);
 	}
 
-	/**
-	 * Method for Output plot collage
-	 */
-	private void updatePlots() {
-		if (md.getRois().size() == 0) return;
-
-		if (plots == null) { // Plots have been reset
-			fitDone = false;
-			plots = new ArrayList<>();
-
-			final Iterator<Roi> roisIter1 = md.getRois().iterator();
-			while (roisIter1.hasNext()) {
-				final Roi roi = roisIter1.next();
-				if (roi != null) {
-					final RealVector profile = new ArrayRealVector(getLaneProfile(roi)
-						.getRow(1));
-					if (profile.getDimension() < 2) return;
-					final RealVector x = new ArrayRealVector(getLaneProfile(roi).getRow(
-						0));
-					final String xLabel = "Distance (px)";
-					final String yLabel = "16-bit Value";
-					final Plot plot = new Plot(roi.getName(), xLabel, yLabel, x.toArray(),
-						profile.toArray());
-
-					final double fixedMin = ProfilePlot.getFixedMin();
-					final double fixedMax = ProfilePlot.getFixedMax();
-					if (fixedMin != 0 || fixedMax != 0) {
-						final double[] a = Tools.getMinMax(x.toArray());
-						plot.setLimits(a[0], a[1], fixedMin, fixedMax);
-					}
-					plots.add(plot);
-				}
+	
+	private void updateProfile(int laneNumber) {
+		final Roi roi = md.getRoi("Lane " + laneNumber);
+		if (roi != null) {
+			//Plot the profiles
+			final DataSeries profile = getLaneProfile(roi);
+			
+			final String xLabel = "Distance (px)";
+			final String yLabel = "Grayscale Value";
+			MyPlot newPlot = new MyPlot(roi.getName(), xLabel, yLabel);
+			newPlot.addDataSeries(profile);
+			newPlot.updatePlot();
+			
+			Iterator<MyPlot> plotIter = plots.iterator();
+			while (plotIter.hasNext()) {
+				MyPlot plot = plotIter.next();
+				if (plot.getNumber() == newPlot.getNumber()) plotIter.remove();
 			}
+			plots.add(newPlot);
 		}
-
-		// Construct the plot image
-		if (plots == null) return;
-		final Color selectedBG = new Color(255, 218, 185);
-		final Color unselectedBG = Color.white;
-		Iterator<Plot> plotIter = plots.iterator();
+	}
+	
+	private void setVLine(int laneNumber, double x) {
+		Iterator<MyPlot> plotIter = plots.iterator();
 		while (plotIter.hasNext()) {
-			final Plot plot = plotIter.next();
-			if (plot.getTitle().equals(md.getPlotSelected())) {
-				plot.setBackgroundColor(selectedBG);
-			}
-			else if (plot.getTitle().equals(md.getPlotPreviouslySelected())) {
-				plot.setBackgroundColor(unselectedBG);
-			}
-			plot.updateImage();
+			MyPlot plot = plotIter.next();
+			boolean vline = false;
+			if (plot.getNumber() == laneNumber) {
+				double[] minmax = plot.getDataMinMax();
+				RealVector xvals = new ArrayRealVector(new double[] {x, x});
+				RealVector yvals = new ArrayRealVector(new double[] {minmax[2], minmax[3]});
+				DataSeries l = new DataSeries("", DataSeries.VLINE, xvals, yvals, vLineColor);
+				for (DataSeries d : plot.getDataSeries()) {
+					if (d.getType() == DataSeries.VLINE) {
+						d.setX(xvals.toArray()); 
+						d.setY(yvals.toArray());
+						vline = true; break;
+					}
+				}
+				if (!vline) {
+					plot.setSelected(true);
+					plot.addDataSeries(l); 
+				}
+				plot.updatePlot();
+				break;
+			} 
 		}
-
+	}
+	
+	private void removeVLine(int laneNumber) {
+		Iterator<MyPlot> plotIter = plots.iterator();
+		while (plotIter.hasNext()) {
+			MyPlot plot = plotIter.next();
+			if (plot.getNumber() == laneNumber) {
+				for (DataSeries d : plot.getDataSeries()) {
+					if (d.getType() == DataSeries.VLINE) {
+						 plot.removeDataSeries(d);
+						 plot.setSelected(false);
+						 plot.updatePlot();
+						 break;
+					}
+				}
+				break;
+			} 
+		}
+	}
+	
+			
+	
+	
+	/**
+	 * Method to output plot collage to plotImage
+	 */
+	private void plotsMontage(){
+		// Construct the plot image
 		final int plotSpacing = 5; // black border
-		final int plotW = plots.get(0).getProcessor().getWidth();
-		final int plotH = plots.get(0).getProcessor().getHeight();
+		ImageProcessor plot0 = plots.get(0).getPlot().getProcessor(); 
+		final int plotW = plot0.getWidth();
+		final int plotH = plot0.getHeight();
 		final int plotsWidth = plotSpacing + cols * (plotW + plotSpacing);
 		final int plotsHeight = plotSpacing + rows * (plotH + plotSpacing);
-		final ImageProcessor blank = plots.get(0).getProcessor().duplicate();
+		final ImageProcessor blank = plot0.duplicate();
 		IJ.setForegroundColor(255, 255, 255);
 		blank.fill();
 
@@ -300,7 +352,7 @@ public class GaussFitLanes implements Command {
 			return;
 		}
 		final ArrayList<ImageProcessor> pageMontages = new ArrayList<>();
-		plotIter = plots.iterator();
+		Iterator<MyPlot> plotIter = plots.iterator();
 		int psel = 0; // selected page
 		while (plotIter.hasNext()) {
 			final ImageProcessor plotsMontage = new ColorProcessor(plotsWidth,
@@ -308,10 +360,12 @@ public class GaussFitLanes implements Command {
 			Plot subplot;
 			ImageProcessor subplotProcessor;
 			String subplotTitle;
-			for (int c = 0; c < cols; c++) {
-				for (int r = 0; r < rows; r++) {
+			for (int r = 0; r < rows; r++) {
+				for (int c = 0; c < cols; c++) {
 					if (plotIter.hasNext()) {
-						subplot = plotIter.next();
+						subplot = plotIter.next().getPlot();
+						if (subplot.getProcessor() == null) 
+							System.out.println("Stop!");
 						subplotProcessor = subplot.getProcessor();
 						subplotTitle = subplot.getTitle();
 					}
@@ -326,7 +380,7 @@ public class GaussFitLanes implements Command {
 						(plotSpacing + plotW), plotSpacing + plotH / 5 + r * (plotSpacing +
 							plotH), Color.LIGHT_GRAY);
 
-					if (subplotTitle.equals(md.getPlotSelected())) psel = pageMontages
+					if (subplotTitle.equals(md.getRoiSelected())) psel = pageMontages
 						.size() + 1;
 				}
 			}
@@ -342,25 +396,25 @@ public class GaussFitLanes implements Command {
 			p++;
 		}
 		plotImage.setStack(plotStack);
-		if (!md.getPlotSelected().equals("none")) plotImage.setSlice(psel);
+		if (!md.getRoiSelected().equals("none")) plotImage.setSlice(psel);
 		plotImage.updateImage();
 		plotImage.show();
 		if (plotImage.getRoi() != null) plotImage.killRoi();
 	}
+	
+	
 
-	private void doFit() {
+	private ArrayList<ArrayList<DataSeries>> doFit() {
 		final String warning =
 			"The current plots will be reset and the current fitting data will be lost.";
 
 		if (fitDone) {
 			if (md.askUser(warning)) {
 				// Reset the plots window
-				plots = null;
-				updatePlots();
 				if (displayServ.getDisplay("Results Display") != null) displayServ
 					.getDisplay("Results Display").close();
 			}
-			else return;
+			else return null;
 		}
 
 		// Results Table Columns
@@ -373,20 +427,17 @@ public class GaussFitLanes implements Command {
 		RealVector colDistance_g = new ArrayRealVector();
 		RealVector colAmplitude_g = new ArrayRealVector();
 		RealVector colFWHM_g = new ArrayRealVector();
-
-		final Iterator<Plot> plotIter = plots.iterator();
+		
+		ArrayList<ArrayList<DataSeries>> outputData = new ArrayList<>();
+		ArrayList<Roi> rois = md.getRois();
+		final Iterator<Roi> roiIter = rois.iterator();
 		int progress = 1;
-		while (plotIter.hasNext()) {
-			final Plot plot = plotIter.next();
-			if (log.getLevel() == 0) log.initialize();
-
-			final Roi roi = md.getRoi(plot.getTitle());
-			final RealVector xvals = new ArrayRealVector(getLaneProfile(roi).getRow(
-				0));
-			final RealVector yvals = new ArrayRealVector(getLaneProfile(roi).getRow(
-				1));
-			RealVector bg = new ArrayRealVector();
-
+		while (roiIter.hasNext()) {
+			final Roi roi = roiIter.next();
+			DataSeries profile = getLaneProfile(roi);
+			final RealVector xvals = new ArrayRealVector(profile.getX());
+			final RealVector yvals = new ArrayRealVector(profile.getY());
+			ArrayList<DataSeries> funout = new ArrayList<>();
 			final int degbg = md.getDegBG();
 			// Tolerance as percentage of the range
 			final double tolpk = md.getTolPK() * (yvals.getMaxValue() - yvals
@@ -412,25 +463,15 @@ public class GaussFitLanes implements Command {
 			RealVector norms0 = new ArrayRealVector();
 			RealVector means0 = new ArrayRealVector();
 			RealVector sds0 = new ArrayRealVector();
-			RealVector poly0 = new ArrayRealVector();
 
 			// After fitting
 			RealVector norms = new ArrayRealVector();
 			RealVector means = new ArrayRealVector();
 			RealVector sds = new ArrayRealVector();
-			RealVector gauss = new ArrayRealVector(); // Each Gaussian for plotting
-			RealVector poly = new ArrayRealVector(); // Polynomial for plotting
-			RealVector fitted = new ArrayRealVector(); // Train of Gaussians with BG
-			RealVector guessed = new ArrayRealVector();
-
-			poly = pars.getSubVector(0, degBG + 2);
-			poly0 = firstGuess.getSubVector(0, degBG + 2);
-
-			bg = xvals.map(new PolynomialFunction(poly.getSubVector(1, degBG + 1)
-				.toArray()));
-			plot.setColor(Color.blue);
-			plot.addPoints(xvals.toArray(), bg.toArray(), PlotWindow.LINE);
-
+			RealVector poly = pars.getSubVector(0, degBG + 2);
+					
+			PolynomialFunction bg = new PolynomialFunction(poly.getSubVector(1, degBG + 1).toArray());
+			funout.add(new DataSeries("Background", DataSeries.BACKGROUND, xvals, bg, Color.BLUE));
 			for (int b = degBG + 2; b < pars.getDimension(); b += 3) {
 				// Initial Guess
 				norms0 = norms0.append(firstGuess.getEntry(b));
@@ -441,28 +482,21 @@ public class GaussFitLanes implements Command {
 				norms = norms.append(pars.getEntry(b));
 				means = means.append(pars.getEntry(b + 1));
 				sds = sds.append(pars.getEntry(b + 2));
-				gauss = xvals.map(new Gaussian(pars.getEntry(b), pars.getEntry(b + 1),
-					pars.getEntry(b + 2)));
-				gauss = gauss.add(bg); // add the background Polynomial
-				plot.setColor(Color.red);
-				plot.addPoints(xvals.toArray(), gauss.toArray(), PlotWindow.LINE);
 			}
-			fitted = xvals.map(new GaussianArrayBG(norms, means, sds, poly));
-			guessed = xvals.map(new GaussianArrayBG(norms0, means0, sds0, poly0));
+			
+			for (int gg = 1; gg < norms.getDimension(); gg++) {
+				Gaussian gauss = new Gaussian(norms.getEntry(gg), means.getEntry(gg), sds.getEntry(gg));
+				UnivariateFunction[] functs = {bg, gauss};
+				funout.add(new DataSeries("Band " + gg, DataSeries.GAUSS_BG, xvals, functs, Color.RED));
+			}
+			GaussianArrayBG fitted = new GaussianArrayBG(norms, means, sds, poly);
+			funout.add(new DataSeries("Fit", DataSeries.FITTED, xvals, fitted, new Color(100, 100, 10)) );
+			outputData.add(funout);
 
-			plot.setColor(Color.blue);
-			plot.addPoints(means0.toArray(), norms0.toArray(), PlotWindow.CROSS);
-			plot.setColor(new Color(0, 128, 0));
-			plot.addPoints(xvals.toArray(), fitted.toArray(), PlotWindow.LINE);
-			plot.setLimitsToFit(true);
-
-			// FIXME: Add Legend to the plots
-			// plot.setLegend("Original \tFitted \tGaussian ",
-			// Plot.LEGEND_TRANSPARENT+Plot.TOP_RIGHT);
 			final RealVector peakAreas = doIntegrate(xvals, norms, means, sds);
 
 			// Prepare columns for Results Table
-			colLane.add(plot.getTitle());
+			colLane.add(roi.getName());
 			colBand.add(1);
 			for (int rr = 1; rr < peakAreas.getDimension(); rr++) {
 				colLane.add("");
@@ -478,13 +512,12 @@ public class GaussFitLanes implements Command {
 			colFWHM_g = colFWHM_g.append(sds0.mapMultiplyToSelf(2 * FastMath.sqrt(2 *
 				FastMath.log(2))));
 
-			final String output = String.format(plot.getTitle() + ", RMS: %1$.2f; ",
+			final String output = String.format(roi.getName() + ", RMS: %1$.2f; ",
 				optimum.getRMS());
 			log.info(output);
-			statusServ.showProgress(++progress, plots.size());
+			statusServ.showProgress(++progress, rois.size());
 		}
 
-		updatePlots(); // without resetting or re-reading lanes
 		final String[] headers = { "", "Band", "Distance", "Amplitude", "FWHM",
 			"Area", "Dist. G.", "Amp. G.", "FWHM G." };
 		final GenericColumn[] tableCol = new GenericColumn[headers.length];
@@ -529,8 +562,10 @@ public class GaussFitLanes implements Command {
 			System.out.println("Exception");
 		}
 		fitDone = true;
+		return outputData;
 	}
 
+	
 	private RealVector doIntegrate(final RealVector xvals, final RealVector norms,
 		final RealVector means, final RealVector sds)
 	{
@@ -544,6 +579,7 @@ public class GaussFitLanes implements Command {
 		return areas;
 	}
 
+	
 	/**
 	 *
 	 */
@@ -562,6 +598,7 @@ public class GaussFitLanes implements Command {
 		}
 	}
 
+	
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
@@ -576,9 +613,188 @@ public class GaussFitLanes implements Command {
 		// ImageJFunctions.show(image);
 		// Launch the "OpenImage" command.
 		ij.command().run(GaussFitLanes.class, true);
-
 	}
+	
+	
+	class MyPlot implements Comparable<MyPlot> {
+		private Plot plot;
+		private final Color selectedBG = new Color(240, 240, 240);
+		private final Color unselectedBG = Color.white;
+		private boolean selected = false;
+		private int number;
+		private String title;
+		private String xLabel;
+		private String yLabel;
+		private ArrayList<DataSeries> data = new ArrayList<>();
+		double xmin;
+		double xmax;
+		double ymin;
+		double ymax;
+		
+		public MyPlot(String title, String xLabel, String yLabel) {
+			this.title = title;
+			this.xLabel = xLabel;
+			this.yLabel = yLabel;
+			this.number = Integer.parseInt(title.substring(5));
+		}
+	
+		public void updatePlot() {
+			Plot newPlot = new Plot(title, xLabel, yLabel);
+			newPlot.useTemplate(plot, Plot.COPY_LABELS+Plot.COPY_LEGEND+Plot.COPY_SIZE);
+			if (plot != null) plot.dispose();
+			plot = newPlot;
+			if (selected) plot.setBackgroundColor(selectedBG);
+			else plot.setBackgroundColor(unselectedBG);
+			for (DataSeries d : data) {
+				plot.setColor(d.getColor());
+				plot.addPoints(d.getX(), d.getY(), Plot.LINE);
+			}
+			plot.setLimitsToFit(true);
+		}
+		
+		private void sortDataSeries() {
+			Collections.sort(data);
+			Iterator<DataSeries> dataIter = data.iterator();
+			int nullIndex = 0;
+			xmin = Double.MAX_VALUE; xmax = Double.MIN_VALUE;
+			ymin = Double.MAX_VALUE; ymax = Double.MIN_VALUE;
+			while (dataIter.hasNext()) {
+				DataSeries d = dataIter.next();
+				if (d == null) break;
+				double xmin2, xmax2, ymin2, ymax2;
+				RealVector x = new ArrayRealVector(d.getX());
+				RealVector y = new ArrayRealVector(d.getY());
+				xmin2 = x.getMinValue(); xmax2=x.getMaxValue();
+				ymin2 = y.getMinValue(); ymax2=y.getMaxValue();
+				if (xmin2 < xmin) xmin = xmin2; if (xmax2 > xmax) xmax = xmax2;
+				if (ymin2 < ymin) ymin = ymin2; if (ymax2 > ymax) ymax = ymax2;			
+				nullIndex++;
+			}
+			data = new ArrayList<>(data.subList(0, nullIndex));
+		}
+		
+		public void addDataSeries(DataSeries d) {
+			data.add(d);
+			sortDataSeries();
+		}
+		
+		public void addDataSeries(ArrayList<DataSeries> d) {
+			data.addAll(d);
+			sortDataSeries();
+		}
+		
+		public void removeDataSeries(DataSeries d) {
+			data.remove(d);
+			sortDataSeries();
+		}
+		
+		public ArrayList<DataSeries> getDataSeries() {
+			return data;
+		}
+		
+		public Plot getPlot() {
+			return plot;
+		}
+		
+		public int getNumber() {
+			return number;
+		}
+		public double[] getDataMinMax() {
+			return new double[] {xmin, xmax, ymin, ymax};
+		}
+		public void setSelected(boolean s) {
+			selected = s;
+		}
+		
+		@Override
+		public int compareTo(MyPlot p) {
+			return (number - p.getNumber());
+		}	
+	}
+	
+	class DataSeries implements Comparable<DataSeries> {
+		private Color color; // Plot color
+		private RealVector x; 
+		private RealVector y;
+		private String name; // Name for Legend
+		private int type; // Type of function
+		
+		final static int VLINE = 0;
+		final static int PROFILE = 1;
+		final static int BACKGROUND = 2;
+		final static int GAUSS_BG = 3;
+		final static int FITTED = 4;
+		
+		 
+		public DataSeries(final String name, final int type, final RealVector x, final RealVector y, final Color color) {
+			this.name = name;
+			this.type = type;
+			this.x=x;
+			this.y=y;
+			this.color=color;
+			if (x.getDimension()==2 && x.getEntry(0)==x.getEntry(1)){
+				this.type = VLINE;
+			} else
+				this.type = PROFILE;
+		}
+		
+		public DataSeries(final String name, final int type, final RealVector x, final UnivariateFunction[] function, final Color color) {
+			this.name = name;
+			this.type = type;
+			this.x = x;
+			this.color = color;
+			for (int i = 0; i < function.length; i++) {
+				if (i == 0) {
+					this.y = new ArrayRealVector(x.map(function[i]));
+				} else {
+					this.y = y.add(x.map(function[i]));
+				}
+			}
+		}
+		
+		public DataSeries(final String name, final int type, final RealVector x, final UnivariateFunction function,
+			final Color color) {
+			this.name = name;
+			this.type = type;
+			this.x = x;
+			this.color = color;
+			this.y = new ArrayRealVector(x.map(function));
+		}
+		
+		public int getType() {
+			return type;
+		}
 
+		public double[] getX() {
+			return x.toArray();
+		}
+		
+		public double[] getY() {
+			return y.toArray();
+		}
+		
+		public Color getColor() {
+			return color;
+		}
+		
+		public String getName() {
+			return name;
+		}
+		
+		public void setX(double[] x){
+			this.x = new ArrayRealVector(x);
+		}
+		
+		public void setY(double[] y){
+			this.y = new ArrayRealVector(y);
+		}
+		
+		@Override
+		public int compareTo(DataSeries d) {
+			return (type - d.getType());
+		}
+	}
+	
 	@SuppressWarnings("serial")
 	class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		DocumentListener, ItemListener, MouseMotionListener, MouseListener,
@@ -590,8 +806,7 @@ public class GaussFitLanes implements Command {
 		
 		
 		private String roiSelected = "none";
-		private String plotSelected = "none";
-		private String plotPreviouslySelected = "none";
+		private String roiPreviouslySelected = "none";
 
 		private final int IW = imp.getWidth();
 		private final int IH = imp.getHeight();
@@ -911,6 +1126,16 @@ public class GaussFitLanes implements Command {
 				rois.add(roi);
 			}
 		}
+		
+		private void changeLaneNumber() {
+			nLanes = getNLanes();
+			if (nLanes == -1) return;
+			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
+			reDrawROIs(imp, "none");
+			plots = new ArrayList<>();
+			for (int i = 1; i <= nLanes; i++) updateProfile(i);
+			plotsMontage();
+		}
 
 		public int getNLanes() {
 			try {
@@ -961,12 +1186,12 @@ public class GaussFitLanes implements Command {
 			return null;
 		}
 
-		public String getPlotSelected() {
-			return plotSelected;
+		public String getRoiSelected() {
+			return roiSelected;
 		}
 
-		public String getPlotPreviouslySelected() {
-			return plotPreviouslySelected;
+		public String getRoiPreviouslySelected() {
+			return roiPreviouslySelected;
 		}
 
 		@Override
@@ -999,42 +1224,37 @@ public class GaussFitLanes implements Command {
 			}
 			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
 			reDrawROIs(imp, "none");
-			plots = null; // need to recalculate the profiles
-			updatePlots();
+			plots = new ArrayList<>();
+			for (int i = 1; i <= nLanes; i++) updateProfile(i);
+			plotsMontage();
 		}
 
 		// TextField Listeners
 		@Override
 		public void changedUpdate(final DocumentEvent e) {
-			nLanes = getNLanes();
-			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
-			reDrawROIs(imp, "none");
-			plots = null; // need to recalculate the profiles
-			updatePlots();
+			changeLaneNumber();
 		}
 
 		@Override
 		public void removeUpdate(final DocumentEvent e) {
-			nLanes = getNLanes();
-			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
-			reDrawROIs(imp, "none");
-			plots = null; // need to recalculate the profiles
-			updatePlots();
+			changeLaneNumber();
 		}
 
 		@Override
 		public void insertUpdate(final DocumentEvent e) {
-			nLanes = getNLanes();
-			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
-			reDrawROIs(imp, "none");
-			plots = null; // need to recalculate the profiles
-			updatePlots();
+			changeLaneNumber();
 		}
 
 		@Override
 		public void actionPerformed(final ActionEvent e) {
 			if (e.getSource().equals(buttonMeasure)) {
-				doFit();
+				ArrayList<ArrayList<DataSeries>> fitted = doFit();
+				for (ArrayList<DataSeries> f : fitted) {
+					MyPlot plot = plots.get(fitted.indexOf(f));
+					plot.addDataSeries(f);
+					plot.updatePlot();
+				}
+				plotsMontage();
 				chkBoxBands.setEnabled(true);
 			}
 
@@ -1079,28 +1299,40 @@ public class GaussFitLanes implements Command {
 		@Override
 		public void mouseMoved(final MouseEvent e) {
 			if (e.getSource() == imp.getCanvas()) {
-				statusServ.showStatus("[" + e.getX() + ":" + e.getY() + "]");
+				final int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
+				final int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
+				statusServ.showStatus("[" + x + ":" + y + "]");
 				if (!selectionUpdate) {
 					String roiCurrent = "none"; // None selected
-					// Local copy for iteration
+					int roiN = 0;
 					final Iterator<Roi> roisIter = rois.iterator();
 					while (roisIter.hasNext()) {
 						final Roi roi = roisIter.next();
-						final int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
-						final int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
-						if (roi.contains(x, y)) roiCurrent = roi.getName();
+						if (roi.contains(x, y)) { 
+							roiCurrent = roi.getName(); // This selected
+							roiN = Integer.parseInt(roiCurrent.substring(5));
+						}
 					}
-					if (roiCurrent.equals("none") && imp.getRoi() != null) imp.killRoi();
-					if (!roiCurrent.equals(roiSelected)) {
+							
+					if (!(roiCurrent.equals(roiSelected))) {
+						roiPreviouslySelected = roiSelected;
 						roiSelected = roiCurrent;
-						plotPreviouslySelected = plotSelected;
-						plotSelected = roiCurrent;
-						if (buttonAuto.isSelected()) resetAutoROIs(LW, LH, LSp, LHOff,
-							LVOff, nLanes);
 						reDrawROIs(imp, roiCurrent);
-						// This does not change the profiles, so do not set plots=null
-						updatePlots();
-					}
+						if (!roiPreviouslySelected.equals("none")) {
+							int roiPN = Integer.parseInt(roiPreviouslySelected.substring(5));
+							removeVLine(roiPN);
+						}
+						plotsMontage();
+						
+						if (roiCurrent.equals("none")) {
+							if (imp.getRoi() != null) imp.killRoi();						
+						}
+					} else {
+						if (!roiSelected.equals("none")) {
+							setVLine(roiN, y);
+							plotsMontage();
+						}
+					}				
 				}
 			}
 		}
@@ -1110,10 +1342,10 @@ public class GaussFitLanes implements Command {
 			if (e.getClickCount() == 2) {
 				if (!auto && !roiSelected.equals("none") && !selectionUpdate) {
 					// Remove Roi
-					Roi roi = md.getRoi(roiSelected);
-					if (roi == null) return;
-					if (roi.isHandle(e.getX(), e.getY()) != -1) {
-						// might be dragging existing roi
+					final Roi roiRemove = md.getRoi(roiSelected);
+					if (roiRemove == null) return;
+					if (roiRemove.isHandle(e.getX(), e.getY()) != -1) {
+						// Might be dragging existing roi
 						return;
 					}
 
@@ -1122,16 +1354,22 @@ public class GaussFitLanes implements Command {
 						final int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
 						final Iterator<Roi> roiIter = rois.iterator();
 						while (roiIter.hasNext()) {
-							roi = roiIter.next();
+							Roi roi = roiIter.next();
 							if (roi.contains(x, y)) {
 								roiIter.remove();
 								// System.out.println(imp.getTitle() + ": " + roiSelected +
 								// " - REMOVED");
 							}
 						}
-						plots = null;
 						reDrawROIs(imp, "none");
-						updatePlots();
+						final Iterator<Roi> roiIter2 = rois.iterator();
+						plots = new ArrayList<>();
+						while (roiIter2.hasNext()) {
+							Roi roi2 = roiIter2.next();
+							int laneNumber = Integer.parseInt(roi2.getName().substring(5));
+							updateProfile(laneNumber);
+						}
+						plotsMontage();
 					}
 				}
 			}
@@ -1187,16 +1425,19 @@ public class GaussFitLanes implements Command {
 									if (roi.getName().equals(roiSelected)) {
 										roiNew.setName(roi.getName());
 										rois.set(rois.indexOf(roi), roiNew);
-										// System.out.println(imp.getTitle() + ": " + roiSelected +
-										// " - RESIZED/MOVED");
 										break;
 									}
 								}
 							}
 						}
-						plots = null;
 						reDrawROIs(imp, roiSelected);
-						updatePlots();
+						final Iterator<Roi> roiIter2 = rois.iterator();
+						plots = new ArrayList<>();
+						while (roiIter2.hasNext()) {
+							Roi roi = roiIter2.next();					
+							updateProfile(Integer.parseInt(roi.getName().substring(5)));
+						}
+						plotsMontage();
 					}
 				}
 			}
@@ -1218,8 +1459,12 @@ public class GaussFitLanes implements Command {
 		@Override
 		public void mouseWheelMoved(final MouseWheelEvent e) {
 			if (e.getSource() == imp.getCanvas() && imp.getImageStackSize() > 1) {
-				plots = null; // need to recalculate the profiles
-				updatePlots();
+				final Iterator<Roi> roiIter = rois.iterator();
+				while (roiIter.hasNext()) {
+					Roi roi = roiIter.next();					
+					updateProfile(Integer.parseInt(roi.getName().substring(5)));
+				}
+				plotsMontage();
 			}
 		}
 	}
