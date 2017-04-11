@@ -151,7 +151,7 @@ public class GaussFitLanes implements Command {
 	private Thread plotThread; 			 // thread for plotting
 
 	private boolean setup = true;
-	private boolean doFit; // tells the background thread to update
+	private boolean doPlot; // tells the background thread to update
 	private boolean fitDone = false;
 
 	private final ImagePlus plotImage = new ImagePlus();
@@ -265,8 +265,10 @@ public class GaussFitLanes implements Command {
 	private void updateProfile(int laneNumber) {
 		final Roi roi = md.getRoi("Lane " + laneNumber);
 		if (roi != null) {
+			fitDone = false;
 			//Plot the profiles
 			final DataSeries profile = getLaneProfile(roi);
+			profile.setColor(profileColor);
 			
 			final String xLabel = "Distance (px)";
 			final String yLabel = "Grayscale Value";
@@ -328,9 +330,6 @@ public class GaussFitLanes implements Command {
 		}
 	}
 	
-			
-	
-	
 	/**
 	 * Method to output plot collage to plotImage
 	 */
@@ -348,7 +347,7 @@ public class GaussFitLanes implements Command {
 
 		if (plots.size() != md.getRois().size() || plots == null) {
 			System.out.println(plots.size() + " plots, " + md.getRois().size() +
-				" rois");
+				" rois"); // Sanity check
 			return;
 		}
 		final ArrayList<ImageProcessor> pageMontages = new ArrayList<>();
@@ -405,17 +404,7 @@ public class GaussFitLanes implements Command {
 	
 
 	private ArrayList<ArrayList<DataSeries>> doFit() {
-		final String warning =
-			"The current plots will be reset and the current fitting data will be lost.";
 
-		if (fitDone) {
-			if (md.askUser(warning)) {
-				// Reset the plots window
-				if (displayServ.getDisplay("Results Display") != null) displayServ
-					.getDisplay("Results Display").close();
-			}
-			else return null;
-		}
 
 		// Results Table Columns
 		final ArrayList<String> colLane = new ArrayList<>();
@@ -471,7 +460,7 @@ public class GaussFitLanes implements Command {
 			RealVector poly = pars.getSubVector(0, degBG + 2);
 					
 			PolynomialFunction bg = new PolynomialFunction(poly.getSubVector(1, degBG + 1).toArray());
-			funout.add(new DataSeries("Background", DataSeries.BACKGROUND, xvals, bg, Color.BLUE));
+			funout.add(new DataSeries("Background", DataSeries.BACKGROUND, xvals, bg, bgColor));
 			for (int b = degBG + 2; b < pars.getDimension(); b += 3) {
 				// Initial Guess
 				norms0 = norms0.append(firstGuess.getEntry(b));
@@ -487,10 +476,10 @@ public class GaussFitLanes implements Command {
 			for (int gg = 1; gg < norms.getDimension(); gg++) {
 				Gaussian gauss = new Gaussian(norms.getEntry(gg), means.getEntry(gg), sds.getEntry(gg));
 				UnivariateFunction[] functs = {bg, gauss};
-				funout.add(new DataSeries("Band " + gg, DataSeries.GAUSS_BG, xvals, functs, Color.RED));
+				funout.add(new DataSeries("Band " + gg, DataSeries.GAUSS_BG, xvals, functs, gaussColor));
 			}
 			GaussianArrayBG fitted = new GaussianArrayBG(norms, means, sds, poly);
-			funout.add(new DataSeries("Fit", DataSeries.FITTED, xvals, fitted, new Color(100, 100, 10)) );
+			funout.add(new DataSeries("Fit", DataSeries.FITTED, xvals, fitted, fittedColor) );
 			outputData.add(funout);
 
 			final RealVector peakAreas = doIntegrate(xvals, norms, means, sds);
@@ -781,6 +770,13 @@ public class GaussFitLanes implements Command {
 			return name;
 		}
 		
+		/**
+		 * @param profileColor
+		 */
+		public void setColor(Color color) {
+			this.color = color;
+		}
+		
 		public void setX(double[] x){
 			this.x = new ArrayRealVector(x);
 		}
@@ -839,7 +835,6 @@ public class GaussFitLanes implements Command {
 		private JPanel buttonPanel;
 		private JButton buttonMeasure;
 		private JButton buttonClose;
-		private JCheckBox chkBoxBands;
 
 		private JPanel settingsPanel;
 		private JPanel degPanel;
@@ -848,6 +843,9 @@ public class GaussFitLanes implements Command {
 		private JLabel labelTolPK;
 		private JTextField textDegBG;
 		private JTextField textTolPK;
+		private JCheckBox chkBoxBands;
+		private JButton buttonAddPoint;
+		private JButton buttonRemovePoint;
 
 		private JPanel dialogPanel;
 		private final JFrame frame;
@@ -932,6 +930,8 @@ public class GaussFitLanes implements Command {
 			textTolPK = new JTextField(3);
 			textTolPK.setText("" + tolPK);
 			chkBoxBands = new JCheckBox("Show Bands");
+			buttonAddPoint = new JButton("Add Point");
+			buttonRemovePoint = new JButton("Remove Point");
 
 			degPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
 			degPanel.add(labelDegBG);
@@ -942,11 +942,17 @@ public class GaussFitLanes implements Command {
 			chkBoxBands.addItemListener(this);
 			chkBoxBands.setSelected(false);
 			chkBoxBands.setEnabled(false);
+			buttonAddPoint.addActionListener(this);
+			buttonAddPoint.setEnabled(false);
+			buttonRemovePoint.addActionListener(this);
+			buttonRemovePoint.setEnabled(false);
 
 			settingsPanel.setLayout(new GridLayout(10, 1));
 			settingsPanel.add(degPanel);
 			settingsPanel.add(tolPanel);
 			settingsPanel.add(chkBoxBands);
+			settingsPanel.add(buttonAddPoint);
+			settingsPanel.add(buttonRemovePoint);
 
 			dialogPanel = new JPanel();
 			dialogPanel.setBackground(Color.darkGray);
@@ -1248,6 +1254,13 @@ public class GaussFitLanes implements Command {
 		@Override
 		public void actionPerformed(final ActionEvent e) {
 			if (e.getSource().equals(buttonMeasure)) {
+				final String warning =
+						"The current plots will be reset and the current fitting data will be lost.";
+				if (fitDone) {
+					if (!md.askUser(warning)) return;
+				}
+				if (displayServ.getDisplay("Results Display") != null) displayServ
+					.getDisplay("Results Display").close();
 				ArrayList<ArrayList<DataSeries>> fitted = doFit();
 				for (ArrayList<DataSeries> f : fitted) {
 					MyPlot plot = plots.get(fitted.indexOf(f));
@@ -1256,6 +1269,8 @@ public class GaussFitLanes implements Command {
 				}
 				plotsMontage();
 				chkBoxBands.setEnabled(true);
+				buttonAddPoint.setEnabled(true);
+				buttonRemovePoint.setEnabled(true);
 			}
 
 			if (e.getSource().equals(buttonClose)) {
@@ -1280,20 +1295,27 @@ public class GaussFitLanes implements Command {
 				auto = false;
 				setSliderPanelEnabled(false);
 			}
+			
+			if (e.getSource().equals(buttonAddPoint)) {
 
+			}
+			
+			if (e.getSource().equals(buttonRemovePoint)) {
+
+			}
 		}
 
 		@Override
 		public void itemStateChanged(final ItemEvent e) {
 			if (e.getItemSelectable() == chkBoxBands) {
-				// TODO Add feature to show/hide horizontal bars for detected peaks in
-				// original image
+				// TODO Add feature to show/hide horizontal ticks
+				// for detected bands in original image
 			}
 		}
 
 		@Override
 		public void mouseDragged(final MouseEvent e) {
-
+			// Nothing to do
 		}
 
 		@Override
