@@ -213,9 +213,10 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			        peakTol, deg);
 
 			int gaussStart = 1;
+			poly = poly.append(params.getEntry(0));
 			if (deg != -1) {
 				gaussStart = deg + 2;
-				poly = poly.append(params.getSubVector(0, deg + 2));
+				poly = poly.append(params.getSubVector(1, deg + 1));
 			}
 			for (int p = gaussStart; p < params.getDimension(); p += 3) {
 				norm = norm.append(params.getEntry(p));
@@ -308,9 +309,11 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			final double minY = yvals.getMinValue();
 			RealVector polyGuess = new ArrayRealVector();
 			RealVector gaussGuess = new ArrayRealVector();
-			polyGuess = polyGuess.append(deg).append(minY / 2)
+			polyGuess = polyGuess.append(deg);
+			if (deg >= 0)
+				polyGuess = polyGuess.append(minY / 2)
 			        .append(new ArrayRealVector(new double[deg]));
-
+			
 			// Local maxima where the peaks are
 			final int[] maximaIdx = findMaxima(points, tolpk, true);
 

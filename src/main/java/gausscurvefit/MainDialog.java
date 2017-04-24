@@ -15,11 +15,14 @@ import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
 import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
+import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -39,11 +42,13 @@ import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.text.Document;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
+import org.scijava.display.Display;
 import org.scijava.display.DisplayService;
+import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 
 import ij.IJ;
@@ -59,6 +64,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	DocumentListener, ItemListener, MouseMotionListener, MouseListener,
 	MouseWheelListener
 {
+	@Parameter
+	private LogService log;
 
 	@Parameter
 	private DisplayService displayServ;
@@ -129,6 +136,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	{
 		context.inject(this);
 		frame = new JFrame(string);
+		rois = new ArrayList<>();
 		this.imp = imp;
 		setupMainDialog();
 	}
@@ -213,8 +221,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		labelTolPK = new JLabel("Tol PK");
 		textDegBG = new JTextField(3);
 		textDegBG.setText("" + degBG);
+		textDegBG.getDocument().addDocumentListener(this);
 		textTolPK = new JTextField(3);
 		textTolPK.setText("" + tolPK);
+		textTolPK.getDocument().addDocumentListener(this);
 		chkBoxBands = new JCheckBox("Show Bands");
 		buttonAddPoint = new JToggleButton("Add Point");
 		buttonRemovePoint = new JToggleButton("Remove Point");
@@ -254,6 +264,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		frame.validate();
 		frame.pack();
 		frame.setVisible(true);
+		frame.addWindowListener(new WindowAdapter() {
+
+			@Override
+			public void windowClosing(final WindowEvent e) {
+				cleanupAndClose();
+				final List<Display<?>> displays = displayServ.getDisplays();
+				for (final Display<?> d : displays)
+					d.close();
+				log.info("Gauss Fit terminated.");
+			}
+		});
 
 		resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
 		while (rois.size() == 0) {
@@ -424,16 +445,24 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
-	private void changeLaneNumber() {
-		if (fitDone && !askUser(warningFit)) {
-			textNLanes.setText(Integer.toString(nLanes));
-			return;
+	private void changeTextFieldVariable(DocumentEvent e) {
+		final Document textBox = e.getDocument();
+		if (textBox == textNLanes.getDocument()){
+			if (fitDone && !askUser(warningFit)) {
+				textNLanes.setText(Integer.toString(nLanes));
+				return;
+			}
+			nLanes = getNLanes();
+			if (nLanes == -1) return;
+			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
+			reDrawROIs(imp, "none");
+			redoProfilePlots();
+		} else if (textBox == textDegBG.getDocument()) {
+			fitter.setDegBG(getDegBG());
 		}
-		nLanes = getNLanes();
-		if (nLanes == -1) return;
-		resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
-		reDrawROIs(imp, "none");
-		redoProfilePlots();
+		else if (textBox == textTolPK.getDocument()) {
+			fitter.setTolPK(getTolPK());
+		}
 	}
 
 	private void redoProfilePlots() {
@@ -525,7 +554,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				i++;
 			}
 		}
-		return ArrayUtils.subarray(laneNumbers, 0, i);
+		return Arrays.copyOfRange(laneNumbers, 0, i);
 	}
 
 	public String getRoiPreviouslySelected() {
@@ -575,17 +604,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	// TextField Listeners
 	@Override
 	public void changedUpdate(final DocumentEvent e) {
-		changeLaneNumber();
+		changeTextFieldVariable(e);
 	}
 
 	@Override
 	public void removeUpdate(final DocumentEvent e) {
-		changeLaneNumber();
+		changeTextFieldVariable(e);
 	}
 
 	@Override
 	public void insertUpdate(final DocumentEvent e) {
-		changeLaneNumber();
+		changeTextFieldVariable(e);
 	}
 
 	@Override
@@ -676,6 +705,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	@Override
 	public void mouseMoved(final MouseEvent e) {
 		if (e.getSource() == imp.getCanvas()) {
+			if (rois.size() == 0 || plotter == null) return;
 			final int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
 			final int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
 			statusServ.showStatus("[" + x + ":" + y + "]");
@@ -687,7 +717,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 					final Roi roi = roisIter.next();
 					if (roi.contains(x, y)) {
 						roiCurrent = roi.getName(); // This selected
-						roiN = Integer.parseInt(roiCurrent.substring(5));
 					}
 				}
 

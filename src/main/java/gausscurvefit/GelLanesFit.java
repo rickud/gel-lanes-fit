@@ -32,7 +32,6 @@ import net.imagej.ImageJ;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
-import org.scijava.display.Display;
 import org.scijava.display.DisplayService;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
@@ -82,24 +81,11 @@ public class GelLanesFit implements Command {
 		plotter.create(md.getRois());
 		md.setPlotter(plotter);
 		md.setFitter(fitter);
-		md.addWindowListener(new WindowAdapter() {
-
-			@Override
-			public void windowClosing(final WindowEvent e) {
-				md.cleanupAndClose();
-				// frame.dispatchEvent(new WindowEvent(frame,
-				// WindowEvent.WINDOW_CLOSING));
-				final List<Display<?>> displays = displayServ.getDisplays();
-				for (final Display<?> d : displays)
-					d.close();
-				log.info("Gauss Fit terminated.");
-			}
-		});
 		
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
 		final ImageWindow pwin = plotter.getPlotImage().getWindow();
-		if (iwin == null || md == null) return;
+		if (iwin == null) return;
 
 		final Dimension imageSize = iwin.getSize();
 		final Point imageLoc = iwin.getLocation();

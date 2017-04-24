@@ -83,7 +83,7 @@ public class Fitter {
 			for (int o = 0; o < xvals.getDimension(); o++) {
 				obs.add(xvals.getEntry(o), yvals.getEntry(o));
 			}
-	
+			// FIXME: Figure out a way to pass CustomPoint to guesser
 			final ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(
 				obs.toList(), tolpk, degBG);
 			final RealVector firstGuess = new ArrayRealVector(pg.guess());
@@ -239,6 +239,21 @@ public class Fitter {
 				pointsListsIter.remove();
 		}
 		customPoints.add(new CustomPoints(laneNumber));
+	}
+
+	/**
+	 * @param degBG
+	 */
+	public void setDegBG(int degBG) {
+		this.degBG = degBG;		
+	}
+
+	/**
+	 * @param tolPK
+	 */
+	public void setTolPK(double tolPK) {
+		this.tolPK = tolPK;
+		
 	}
 }
 

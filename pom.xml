@@ -30,7 +30,7 @@
 	</licenses>
 
 	<properties>
-		<main-class>_GaussFitLanes</main-class>
+		<main-class>GelLanesFit</main-class>
 		<scijava.jvm.version>1.8</scijava.jvm.version>
 		<license.licenseName>bsd_2</license.licenseName>
 		<license.copyrightOwners>The University of Texas at Dallas </license.copyrightOwners>
