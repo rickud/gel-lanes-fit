@@ -711,7 +711,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			statusServ.showStatus("[" + x + ":" + y + "]");
 			if (!selectionUpdate) { // Not dragging an ROI
 				String roiCurrent = "none"; // None selected
-				int roiN = 0;
 				final Iterator<Roi> roisIter = rois.iterator();
 				while (roisIter.hasNext()) {
 					final Roi roi = roisIter.next();
@@ -735,6 +734,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				else {
 					if (!roiSelected.equals("none")) { // Moving inside same ROI
 						Color lineColor;
+						final int roiN = Integer.parseInt(roiCurrent.substring(
+							5));
 						if (removePoint) lineColor = Plotter.vLineRemovePointColor;
 						else if (addPoint) lineColor = Plotter.vLineAddPointColor;
 						else if (!addPoint && !removePoint) lineColor =
