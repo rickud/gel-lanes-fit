@@ -1,4 +1,3 @@
-
 package gausscurvefit;
 /**
  * Gauss Fit
@@ -70,12 +69,13 @@ public class GelLanesFit implements Command {
 		final double SH = IJ.getScreenSize().getHeight();
 
 		imp = IJ.getImage();
+		String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(".")); 
 		about();
 		final String title = "[v" + version + "] Gel Lanes Gauss Fitting: " + imp
 			.getTitle();
 		final MainDialog md = new MainDialog(context, title, imp);
 
-		final Fitter fitter = new Fitter(context, imp.getTitle(), md.getDegBG(), md
+		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
 			.getTolPK());
 		final Plotter plotter = new Plotter(imp);
 		plotter.create(md.getRois());
