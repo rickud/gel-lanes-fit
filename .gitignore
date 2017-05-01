@@ -3,4 +3,5 @@
 /.classpath
 /target/
 /output/
+/src/main/resources/*.java
 /.settings/

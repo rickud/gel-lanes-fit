@@ -25,7 +25,6 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
-
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
@@ -56,7 +55,6 @@ import org.scijava.display.DisplayService;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 
-import gausscurvefit.Peak;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
@@ -164,7 +162,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		LSp = Math.round((IW - LW * nLanes) / (nLanes + 1));
 		LHOff = LSp / 2;
 		LVOff = (IH - LH) / 2;
-		
+
 		imp.getCanvas().addMouseMotionListener(this);
 		imp.getCanvas().addMouseListener(this);
 		imp.getCanvas().addMouseWheelListener(this);
@@ -202,9 +200,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textPanel.add(labelNLanes);
 		sliderPanel.add(textPanel);
 
-
 		sliderPanel.setLayout(new BoxLayout(sliderPanel, BoxLayout.Y_AXIS));
-		sliderW = makeTitledSlider("Width ( " + LW + " px )", Color.black, 1, IW/nLanes, LW);
+		sliderW = makeTitledSlider("Width ( " + LW + " px )", Color.black, 1, IW /
+			nLanes, LW);
 		sliderPanel.add(sliderW);
 		sliderH = makeTitledSlider("Height ( " + LH + " px )", Color.black, IH / 10,
 			IH, LH);
@@ -453,9 +451,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			overlay.add(labelRoi);
 			if (buttonAuto.isSelected()) imgPlus.killRoi();
 			if (chkBoxBands.isSelected() && fitDone) {
-				//Draw a line where the bands are
-				for (Peak p : fitter.getFittedPeaks(lane)){
-					Roi band = new Line(x0, p.getDistance(), x0+rw, p.getDistance());
+				// Draw a line where the bands are
+				for (final Peak p : fitter.getFittedPeaks(lane)) {
+					final Roi band = new Line(x0, p.getDistance(), x0 + rw, p
+						.getDistance());
 					band.setStrokeColor(roi.getStrokeColor());
 					band.setStrokeWidth(1);
 					overlay.add(band);
@@ -506,10 +505,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonResetCustomPeaks.setEnabled(false);
 		plotter.resetPlots();
 		for (final Roi r : rois) {
-			Rectangle rect = r.getBounds();
-			if (rect.getMinX() <= IW && rect.getMinY() <= IH)
-				plotter.updateProfile(r);
-			}
+			final Rectangle rect = r.getBounds();
+			if (rect.getMinX() <= IW && rect.getMinY() <= IH) plotter.updateProfile(
+				r);
+		}
 		for (final int i : getAllLaneNumbers())
 			fitter.resetCustomPeaks(i);
 		plotter.plotsMontage();
@@ -697,7 +696,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			buttonAddPeak.setEnabled(true);
 			buttonRemovePeak.setEnabled(true);
 			buttonResetCustomPeaks.setEnabled(true);
-			reDrawROIs(imp,"none");
+			reDrawROIs(imp, "none");
 		}
 
 		if (e.getSource().equals(buttonAuto)) {
@@ -737,25 +736,26 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				p.setSelectedBGColor(plotBGColor);
 
 		}
-		
+
 		if (e.getSource().equals(buttonResetCustomPeaks)) {
 			final GenericDialog gd = new GenericDialog("RESET CUSTOM PEAKS");
-			gd.addMessage("Select the plots from which the custom peaks must be removed");
-			int[] lanes = getAllLaneNumbers();
-			int rows = lanes.length;
-			boolean[] defaultValues = new boolean[rows];
-			String[] labels = new String[rows];
-			for (int i : lanes) {
-				labels[i-1] = "Lane " + i;
-				defaultValues[i-1] = false;
+			gd.addMessage(
+				"Select the plots from which the custom peaks must be removed");
+			final int[] lanes = getAllLaneNumbers();
+			final int rows = lanes.length;
+			final boolean[] defaultValues = new boolean[rows];
+			final String[] labels = new String[rows];
+			for (final int i : lanes) {
+				labels[i - 1] = "Lane " + i;
+				defaultValues[i - 1] = false;
 			}
 			gd.addCheckboxGroup(rows, 1, labels, defaultValues);
 			gd.showDialog();
-			if (gd.wasOKed()){
-				for (int i : lanes) {
-					if (gd.getNextBoolean()){
+			if (gd.wasOKed()) {
+				for (final int i : lanes) {
+					if (gd.getNextBoolean()) {
 						fitter.resetCustomPeaks(i);
-						for (MyPlot p : plotter.getPlots()) {
+						for (final MyPlot p : plotter.getPlots()) {
 							if (p.getNumber() == i) {
 								plotter.updateCustomPeaks(i, fitter.getCustomPeaks(i));
 							}
@@ -777,7 +777,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	@Override
 	public void itemStateChanged(final ItemEvent e) {
 		if (e.getItemSelectable() == chkBoxBands) {
-			reDrawROIs(imp,"none");
+			reDrawROIs(imp, "none");
 		}
 	}
 
@@ -821,8 +821,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 						final int roiN = Integer.parseInt(roiCurrent.substring(5));
 						if (removePeak) lineColor = Plotter.vLineRemovePeakColor;
 						else if (addPeak) lineColor = Plotter.vLineAddPeakColor;
-						else if (!addPeak && !removePeak) lineColor =
-							Plotter.vLineRegColor;
+						else if (!addPeak && !removePeak) lineColor = Plotter.vLineRegColor;
 						else {
 							lineColor = Color.white;
 							System.out.println("Something wrong with the booleans");
@@ -838,64 +837,64 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	@Override
 	public void mouseClicked(final MouseEvent e) {
 		if (e.getSource().equals(imp.getCanvas())) {
-		//final int x = imp.getCanvas().offScreenX(e.getX());
-		final int y = imp.getCanvas().offScreenX(e.getY());
-		if (!(addPeak || removePeak) && e.getClickCount() == 2) {
-			if (!auto && !roiSelected.equals("none") && !selectionUpdate) {
-				// Remove Roi
-				final Roi roi = getRoi(roiSelected);
-				if (roi == null || roi.isHandle(e.getX(), e.getY()) != -1) {
-					// Might be dragging existing roi
-					return;
-				}
+			// final int x = imp.getCanvas().offScreenX(e.getX());
+			final int y = imp.getCanvas().offScreenX(e.getY());
+			if (!(addPeak || removePeak) && e.getClickCount() == 2) {
+				if (!auto && !roiSelected.equals("none") && !selectionUpdate) {
+					// Remove Roi
+					final Roi roi = getRoi(roiSelected);
+					if (roi == null || roi.isHandle(e.getX(), e.getY()) != -1) {
+						// Might be dragging existing roi
+						return;
+					}
 
-				if (askUser("Delete " + roiSelected + "?")) {
-					if (fitDone && !askUser(warningFit)) return;
-					final Iterator<Roi> roiIter = rois.iterator();
-					while (roiIter.hasNext()) {
-						final Roi roiRemove = roiIter.next();
-						if (roiRemove.getName().equals(roiSelected)) {
-							roiIter.remove();
-							// System.out.println(imp.getTitle() + ": " + roiSelected +
-							// " - REMOVED");
+					if (askUser("Delete " + roiSelected + "?")) {
+						if (fitDone && !askUser(warningFit)) return;
+						final Iterator<Roi> roiIter = rois.iterator();
+						while (roiIter.hasNext()) {
+							final Roi roiRemove = roiIter.next();
+							if (roiRemove.getName().equals(roiSelected)) {
+								roiIter.remove();
+								// System.out.println(imp.getTitle() + ": " + roiSelected +
+								// " - REMOVED");
+							}
+						}
+						reDrawROIs(imp, "none");
+						redoProfilePlots();
+					}
+				}
+			}
+			else { // ADD/REMOVE custom peak is on
+				if (!roiSelected.equals("none")) {
+					final int lane = Integer.parseInt(roiSelected.substring(5));
+					double intensity = 0;
+					for (final DataSeries d : plotter.getProfiles()) {
+						if (d.getLane() == lane) {
+							final RealVector xvals = new ArrayRealVector(d.getX());
+							final RealVector yvals = new ArrayRealVector(d.getY());
+							// Value on profile closest to the clicked y value in imp
+							intensity = yvals.getEntry(xvals.mapSubtract(y).mapToSelf(
+								new Abs()).getMinIndex());
 						}
 					}
-					reDrawROIs(imp, "none");
-					redoProfilePlots();
+					// Fitter has 1 CustomPeaks object for each plot
+					if (addPeak && !removePeak) { // Add Peak
+						final double sd = askPeak(true, lane, y, intensity);
+						if (sd != 0.0) { // not cancelled
+							fitter.addCustomPeak(lane, new Peak(lane, intensity, y, sd));
+						}
+					}
+					else if (!addPeak && removePeak) { // Remove Peak
+						final double sd = askPeak(false, lane, y, intensity);
+
+						if (sd != 0.0) {
+							fitter.removeCustomPeak(lane, new Peak(lane, intensity, y));
+						}
+					}
+					plotter.updateCustomPeaks(lane, fitter.getCustomPeaks(lane));
+					plotter.plotsMontage();
 				}
 			}
-		}
-		else { // ADD/REMOVE custom peak is on
-			if (!roiSelected.equals("none")) {
-				final int lane = Integer.parseInt(roiSelected.substring(5));
-				double intensity = 0;
-				for (final DataSeries d : plotter.getProfiles()) {
-					if (d.getLane() == lane) {
-						final RealVector xvals = new ArrayRealVector(d.getX());
-						final RealVector yvals = new ArrayRealVector(d.getY());
-						// Value on profile closest to the clicked y value in imp
-						intensity = yvals.getEntry(xvals.mapSubtract(y).mapToSelf(new Abs())
-							.getMinIndex());
-					}
-				}
-				// Fitter has 1 CustomPeaks object for each plot
-				if (addPeak && !removePeak) { // Add Peak
-					final double sd = askPeak(true, lane, y, intensity);
-					if (sd != 0.0) { // not cancelled
-						fitter.addCustomPeak(lane, new Peak(lane, intensity, y, sd));
-					}
-				}
-				else if (!addPeak && removePeak) { // Remove Peak
-					final double sd = askPeak(false, lane, y, intensity);
-					
-					if (sd != 0.0) {
-						fitter.removeCustomPeak(lane, new Peak(lane, intensity, y));
-					}
-				}
-				plotter.updateCustomPeaks(lane, fitter.getCustomPeaks(lane));
-				plotter.plotsMontage();
-			}
-		}
 		}
 	}
 
@@ -909,57 +908,72 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// Add or modify Roi
 		if (buttonManual.isSelected()) {
 			if (selectionUpdate) {
-				if (fitDone && !askUser(warningFit)) return;
 				final Roi roiNew = imp.getRoi();
+				Roi roiCurrent = imp.getRoi();
+				for (final Roi r : rois) {
+					if (r.getName().equals(roiSelected)) {
+						roiCurrent = r;
+					}
+				}
+				// If ROI exists and larger that 100 px
 				if (roiNew != null && roiNew.getBounds().getWidth() * roiNew.getBounds()
 					.getHeight() > 100)
 				{
-					if (roiSelected.equals("none")) {
-						// Creating New ROI
-						// Find an available integer for lane name
-						int i = 0;
-						while (++i <= rois.size() + 1) {
+					// If @roiCurrent is different from @roiNew
+					if (roiCurrent.getBounds().getWidth() != roiNew.getBounds()
+						.getWidth() || roiCurrent.getBounds().getHeight() != roiNew
+							.getBounds().getHeight() || roiCurrent.getBounds()
+								.getMinX() != roiNew.getBounds().getMinX() || roiCurrent
+									.getBounds().getMinY() != roiNew.getBounds().getMinY())
+					{
+						if (fitDone && !askUser(warningFit)) return;
+						if (roiSelected.equals("none")) {
+							// Creating New ROI
+							// Find an available integer for lane name
+							int i = 0;
+							while (++i <= rois.size() + 1) {
+								final Iterator<Roi> roisIter = rois.iterator();
+								boolean contains = false;
+								while (roisIter.hasNext()) {
+									if (i == Integer.parseInt(roisIter.next().getName().substring(
+										5)))
+									{
+										contains = true;
+										break;
+									}
+								}
+								if (!contains) {
+									roiNew.setName("Lane " + i);
+									roiSelected = roiNew.getName();
+									break;
+								}
+							}
+							rois.add(roiNew);
+							// System.out.println(imp.getTitle() + ": " + roiSelected +
+							// " - ADDED");
+						}
+						else {
+							// System.out.println("Modify");
+							// Moving/Resizing a specific ROI
 							final Iterator<Roi> roisIter = rois.iterator();
-							boolean contains = false;
 							while (roisIter.hasNext()) {
-								if (i == Integer.parseInt(roisIter.next().getName().substring(
-									5)))
-								{
-									contains = true;
-									break;
-								}
-							}
-							if (!contains) {
-								roiNew.setName("Lane " + i);
-								roiSelected = roiNew.getName();
-								break;
-							}
-						}
-						rois.add(roiNew);
-						// System.out.println(imp.getTitle() + ": " + roiSelected +
-						// " - ADDED");
-					}
-					else {
-						// System.out.println("Modify");
-						// Moving/Resizing a specific ROI
-						final Iterator<Roi> roisIter = rois.iterator();
-						while (roisIter.hasNext()) {
-							final Roi roi = roisIter.next();
-							if (roi != null) {
-								if (roi.getName().equals(roiSelected)) {
-									roiNew.setName(roi.getName());
-									rois.set(rois.indexOf(roi), roiNew);
-									break;
+								final Roi roi = roisIter.next();
+								if (roi != null) {
+									if (roi.getName().equals(roiSelected)) {
+										roiNew.setName(roi.getName());
+										rois.set(rois.indexOf(roi), roiNew);
+										break;
+									}
 								}
 							}
 						}
+						reDrawROIs(imp, roiSelected);
+						redoProfilePlots();
 					}
-					reDrawROIs(imp, roiSelected);
-					redoProfilePlots();
 				}
+				selectionUpdate = false;
 			}
 		}
-		selectionUpdate = false;
 	}
 
 	@Override
