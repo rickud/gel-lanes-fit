@@ -241,8 +241,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textTolPK.setText("" + tolPK);
 		textTolPK.getDocument().addDocumentListener(this);
 		chkBoxBands = new JCheckBox("Show Bands");
-		buttonAddPeak = new JToggleButton("Add Point");
-		buttonRemovePeak = new JToggleButton("Remove Point");
+		buttonAddPeak = new JToggleButton("Add Peak");
+		buttonRemovePeak = new JToggleButton("Remove Peak");
 		buttonResetCustomPeaks = new JButton("Reset Custom Peaks");
 
 		degPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
@@ -312,17 +312,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		return false;
 	}
 
-	private double askPoint(final boolean add, final int lane, final double y,
+	private double askPeak(final boolean add, final int lane, final double y,
 		final double v)
 	{
 		String title;
 		String action;
 		if (add) {
-			title = "ADD POINT";
+			title = "ADD PEAK";
 			action = "add";
 		}
 		else {
-			title = "REMOVE POINT";
+			title = "REMOVE PEAK";
 			action = "remove";
 		}
 		final GenericDialog gd = new GenericDialog(title);
@@ -337,7 +337,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		gd.showDialog();
 		if (gd.wasOKed()) {
 			if (add) return gd.getNextNumber();
-			return -1.0; // Removing point
+			return -1.0; // Removing peak
 		}
 		return 0.0; // If Dialog Cancelled
 	}
@@ -879,15 +879,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 							.getMinIndex());
 					}
 				}
-				// Fitter has 1 CustomPoints object for each plot
-				if (addPeak && !removePeak) { // Add point
-					final double sd = askPoint(true, lane, y, intensity);
+				// Fitter has 1 CustomPeaks object for each plot
+				if (addPeak && !removePeak) { // Add Peak
+					final double sd = askPeak(true, lane, y, intensity);
 					if (sd != 0.0) { // not cancelled
 						fitter.addCustomPeak(lane, new Peak(lane, intensity, y, sd));
 					}
 				}
-				else if (!addPeak && removePeak) { // Remove point
-					final double sd = askPoint(false, lane, y, intensity);
+				else if (!addPeak && removePeak) { // Remove Peak
+					final double sd = askPeak(false, lane, y, intensity);
 					
 					if (sd != 0.0) {
 						fitter.removeCustomPeak(lane, new Peak(lane, intensity, y));
