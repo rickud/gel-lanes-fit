@@ -312,18 +312,20 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private double askPeak(final boolean add, final int lane, final double y,
 		final double v)
 	{
-		String title;
-		String action;
+		String title, action, message;
 		if (add) {
 			title = "ADD PEAK";
 			action = "add";
+			message = "If the new peak is located less than 5 px away from an exisitng peak, the existing peak will be replaced with the new one.";
 		}
 		else {
 			title = "REMOVE PEAK";
 			action = "remove";
+			message = "The custom peak that is closer to this peak will be removed";
 		}
 		final GenericDialog gd = new GenericDialog(title);
 		gd.addMessage("You are about to " + action + " this peak");
+		gd.addMessage(message);
 		gd.addMessage(String.format("Lane: \t%2d", lane));
 		gd.addMessage(String.format("Distance: \t%10.1f", y));
 		gd.addMessage(String.format("Intensity: \t%.0f", v));
