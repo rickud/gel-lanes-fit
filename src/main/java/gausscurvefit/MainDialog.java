@@ -101,9 +101,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	private int IW, IH, LW, LH, LSp, LHOff, LVOff;
 
-	private int nLanes = 1;
-	private int degBG = 3; // Order of Background Polynomial
-	private double tolPK = 0.1; // Peak detection tolerance as % of range
+	private int nLanes = 3;
+	private int degBG = 2; // Order of Background Polynomial
+	private double tolPK = 0.01; // Peak detection tolerance as % of range
 
 	private JPanel roiButtonsPanel;
 	private JRadioButton buttonAuto;
@@ -154,16 +154,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// Default lane size/offset (Just center 4 lanes in the image)
 		IW = imp.getWidth();
 		IH = imp.getHeight();
-		LW = 91;
-		LH = 531;
-		LSp = 108;
-		LHOff = 161;
-		LVOff = 87;
-//		LW = (int) Math.round(0.8 * IW / nLanes);
-//		LH = (int) Math.round(IH * 0.8);
-//		LSp = Math.round((IW - LW * nLanes) / (nLanes + 1));
-//		LHOff = LSp / 2;
-//		LVOff = (IH - LH) / 2;
+//		LW = 91;
+//		LH = 531;
+//		LSp = 108;
+//		LHOff = 161;
+//		LVOff = 87;
+		LW = (int) Math.round(0.8 * IW / nLanes);
+		LH = (int) Math.round(IH * 0.8);
+		LSp = Math.round((IW - LW * nLanes) / (nLanes + 1));
+		LHOff = LSp / 2;
+		LVOff = (IH - LH) / 2;
 		
 		imp.getCanvas().addMouseMotionListener(this);
 		imp.getCanvas().addMouseListener(this);
