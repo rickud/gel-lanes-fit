@@ -61,6 +61,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
 import ij.gui.ImageCanvas;
+import ij.gui.Line;
 import ij.gui.Overlay;
 import ij.gui.Roi;
 import ij.gui.TextRoi;
@@ -387,7 +388,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	private void reDrawROIs(final ImagePlus imgPlus, final String roiName) {
 		if (!auto) {
-			// HouseKeeping: Sort the rois based on name and remove null elements
+			// Housekeeping: Sort the rois based on name and remove null elements
 			final Comparator<Roi> nameComparator = new Comparator<Roi>() {
 
 				@Override
@@ -424,6 +425,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		while (roiIter.hasNext()) {
 			final Roi roi = roiIter.next();
 			final String label = roi.getName().substring(5);
+			final int lane = Integer.parseInt(roi.getName().substring(5));
 			final Font font = new Font("SansSerif", Font.BOLD, 20);
 			final TextRoi labelRoi = new TextRoi(0, 0, label, font);
 			labelRoi.setAntialiased(true);
@@ -451,6 +453,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			overlay.add(roi);
 			overlay.add(labelRoi);
 			if (buttonAuto.isSelected()) imgPlus.killRoi();
+			if (chkBoxBands.isSelected() && fitDone) {
+				//Draw a line where the bands are
+				for (Peak p : fitter.getFittedPeaks(lane)){
+					Roi band = new Line(x0, p.getDistance(), x0+rw, p.getDistance());
+					band.setStrokeColor(roi.getStrokeColor());
+					band.setStrokeWidth(1);
+					overlay.add(band);
+				}
+			}
 		}
 		imgPlus.setOverlay(overlay);
 	}
@@ -676,7 +687,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			fitter.setInputData(plotter.getProfiles());
 			final ArrayList<ArrayList<DataSeries>> fitted = fitter.doFit();
 			fitDone = true;
-			chkBoxBands.setEnabled(true);
 			for (final ArrayList<DataSeries> f : fitted) {
 				final MyPlot plot = plotter.getPlots().get(fitted.indexOf(f));
 				plot.addDataSeries(f);
@@ -684,9 +694,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			}
 			plotter.plotsMontage();
 			chkBoxBands.setEnabled(true);
+			chkBoxBands.setSelected(true);
 			buttonAddPeak.setEnabled(true);
 			buttonRemovePeak.setEnabled(true);
 			buttonResetCustomPeaks.setEnabled(true);
+			reDrawROIs(imp,"none");
 		}
 
 		if (e.getSource().equals(buttonAuto)) {
@@ -766,7 +778,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	@Override
 	public void itemStateChanged(final ItemEvent e) {
 		if (e.getItemSelectable() == chkBoxBands) {
-
+			reDrawROIs(imp,"none");
 		}
 	}
 
@@ -871,14 +883,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				if (addPeak && !removePeak) { // Add point
 					final double sd = askPoint(true, lane, y, intensity);
 					if (sd != 0.0) { // not cancelled
-						fitter.addCustomPeak(lane, new Peak(intensity, y, sd));
+						fitter.addCustomPeak(lane, new Peak(lane, intensity, y, sd));
 					}
 				}
 				else if (!addPeak && removePeak) { // Remove point
 					final double sd = askPoint(false, lane, y, intensity);
 					
 					if (sd != 0.0) {
-						fitter.removeCustomPeak(lane, new Peak(intensity, y));
+						fitter.removeCustomPeak(lane, new Peak(lane, intensity, y));
 					}
 				}
 				plotter.updateCustomPeaks(lane, fitter.getCustomPeaks(lane));

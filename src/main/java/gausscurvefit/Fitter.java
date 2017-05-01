@@ -48,6 +48,7 @@ public class Fitter {
 
 	private ArrayList<DataSeries> inputData;
 	private ArrayList<CustomPeaks> customPeaks;
+	private ArrayList<ArrayList<Peak>> fittedPeaks;
 
 	public Fitter(final Context context, final String title, final int degBG,
 		final double tolPK)
@@ -58,6 +59,7 @@ public class Fitter {
 		this.tolPK = tolPK;
 		this.inputData = new ArrayList<>();
 		this.customPeaks = new ArrayList<>();
+		this.fittedPeaks = new ArrayList<>();
 	}
 
 	public ArrayList<ArrayList<DataSeries>> doFit() {
@@ -73,9 +75,10 @@ public class Fitter {
 		RealVector colFWHM_g = new ArrayRealVector();
 
 		final ArrayList<ArrayList<DataSeries>> outputData = new ArrayList<>();
-		final Iterator<DataSeries> dataInputIter = inputData.iterator();
+		fittedPeaks = new ArrayList<>();
 		int progress = 1;
 		int datasetNumber = 0;
+		final Iterator<DataSeries> dataInputIter = inputData.iterator();
 		while (dataInputIter.hasNext()) {
 			datasetNumber++;
 			final DataSeries profile = dataInputIter.next();
@@ -83,6 +86,7 @@ public class Fitter {
 			final RealVector xvals = new ArrayRealVector(profile.getX());
 			final RealVector yvals = new ArrayRealVector(profile.getY());
 			final ArrayList<DataSeries> funout = new ArrayList<>();
+			final ArrayList<Peak> fittedPeaksThisLane = new ArrayList<>();
 
 			// Tolerance as percentage of the range
 			final double tolpk = tolPK * (yvals.getMaxValue() - yvals.getMinValue());
@@ -168,8 +172,9 @@ public class Fitter {
 				norms = norms.append(pars.getEntry(b));
 				means = means.append(pars.getEntry(b + 1));
 				sds = sds.append(pars.getEntry(b + 2));
+				fittedPeaksThisLane.add(new Peak(lane,pars.getEntry(b),pars.getEntry(b + 1),pars.getEntry(b + 2)));
 			}
-
+			fittedPeaks.add(fittedPeaksThisLane);
 			final PolynomialFunction bg = new PolynomialFunction(poly.getSubVector(1,
 				degBG + 1).toArray());
 			funout.add(new DataSeries("Background", lane, DataSeries.BACKGROUND,
@@ -273,17 +278,6 @@ public class Fitter {
 		return areas;
 	}
 
-	public CustomPeaks getCustomPeaks(int lane) {
-		Iterator<CustomPeaks> cpIter = customPeaks.iterator();
-		while (cpIter.hasNext()){
-			CustomPeaks cp = cpIter.next();
-			if (cp.getLane() == lane) {
-				return cp;
-			}
-		}
-		return null;
-	}
-
 	public void addCustomPeak(int lane, Peak peak) {
 		for (final CustomPeaks cp : customPeaks) {
 			if (cp.getLane() == lane) {
@@ -295,6 +289,29 @@ public class Fitter {
 		cp.addToList(peak);
 		customPeaks.add(cp);
 		return;
+	}
+
+	public CustomPeaks getCustomPeaks(int lane) {
+		Iterator<CustomPeaks> cpIter = customPeaks.iterator();
+		while (cpIter.hasNext()){
+			CustomPeaks cp = cpIter.next();
+			if (cp.getLane() == lane) {
+				return cp;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * return fittedPeaks
+	 */
+	public ArrayList<Peak> getFittedPeaks(int lane) {
+		for (ArrayList<Peak> f : fittedPeaks) {
+			if (!f.isEmpty() && f.get(0).getLane() == lane) {
+				return f;
+			}
+		}
+		return new ArrayList<>();
 	}
 
 	public void removeCustomPeak(int lane, Peak peak) {
@@ -314,15 +331,15 @@ public class Fitter {
 		customPeaks.add(new CustomPeaks(laneNumber));
 	}
 
-	public void setInputData(final ArrayList<DataSeries> inputData) {
-		this.inputData = inputData;
-	}
-
 	/**
 	 * @param degBG
 	 */
 	public void setDegBG(final int degBG) {
 		this.degBG = degBG;
+	}
+
+	public void setInputData(final ArrayList<DataSeries> inputData) {
+		this.inputData = inputData;
 	}
 
 	/**
@@ -371,17 +388,20 @@ class Peak {
 		private final double distance;
 		private final double intensity;
 		private final double sigma;
+		private final int lane;
 
-		public Peak(final double intensity, final double distance) {
+		public Peak(int lane, final double intensity, final double distance) {
 			this.intensity = intensity;
 			this.distance = distance;
 			this.sigma = 0.0;
+			this.lane = lane;
 		}
 
-		public Peak(final double intensity, final double distance, final double sigma) {
+		public Peak(int lane, final double intensity, final double distance, final double sigma) {
 			this.intensity = intensity;
 			this.distance = distance;
 			this.sigma = sigma;
+			this.lane = lane;
 		}
 
 		public double getDistance() {
@@ -395,6 +415,10 @@ class Peak {
 
 		public double getSigma() {
 			return sigma;
+		}
+		
+		public double getLane() {
+			return lane;
 		}
 }
 
