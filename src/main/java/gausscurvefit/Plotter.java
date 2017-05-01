@@ -1,3 +1,4 @@
+
 package gausscurvefit;
 
 import java.awt.Color;
@@ -9,6 +10,7 @@ import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 
+import gausscurvefit.Peak;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
@@ -19,17 +21,18 @@ import ij.process.ColorProcessor;
 import ij.process.ImageProcessor;
 
 public class Plotter {
+
 	private final ImagePlus plotImage = new ImagePlus();
 	private final ImagePlus imp;
 	private ArrayList<MyPlot> plots;
-	
+
 	private final int rows = 2; // Number of plot Rows in display
 	private final int cols = 2; // Number of plot Rows in display
-	
-	// Color are listed here for consistent, easy modification
-	public static final Color vLineRegColor = new Color(175, 175, 175);
-	public static final Color vLineAddPointColor = new Color(0, 185, 19);
-	public static final Color vLineRemovePointColor = new Color(185, 7, 0);
+
+	// Colors are listed here for consistent, easy modification
+	public static final Color vLineRegColor = new Color(127, 127, 127);
+	public static final Color vLineAddPeakColor = new Color(0, 185, 19);
+	public static final Color vLineRemovePeakColor = new Color(185, 7, 0);
 	// Colors for DataSeries in plots
 	public static final Color profileColor = Color.BLACK;
 	public static final Color gaussColor = Color.RED;
@@ -39,20 +42,24 @@ public class Plotter {
 	public static final Color plotSelColor = new Color(240, 240, 240);
 	public static final Color plotAddSelColor = new Color(192, 255, 185);
 	public static final Color plotRemoveSelColor = new Color(255, 188, 185);
-	
-	public Plotter(ImagePlus imp) {
+
+	public Plotter(final ImagePlus imp) {
 		this.imp = imp;
 		this.plots = new ArrayList<>();
 		plotImage.setTitle("Profiles of " + imp.getShortTitle());
 	}
-	
-	public void create(ArrayList<Roi> rois) {
+
+	public void create(final ArrayList<Roi> rois) {
 		for (final Roi r : rois)
 			updateProfile(r);
 		plotsMontage();
 		plotImage.show();
 	}
-	
+
+	public ImagePlus getPlotImage() {
+		return plotImage;
+	}
+
 	/**
 	 * Profile data from Roi, ready for fitting (null if not possible)
 	 *
@@ -60,6 +67,8 @@ public class Plotter {
 	 */
 	private DataSeries getLaneProfile(final Roi roi) {
 		imp.setRoi(roi);
+		final String name = roi.getName();
+		final int lane = Integer.parseInt(name.substring(5));
 		final ProfilePlot profileP = new ProfilePlot(imp, true); // get the profile
 		final RealVector profile = new ArrayRealVector(profileP.getProfile());
 		if (profile.getDimension() < 2) return null;
@@ -68,8 +77,27 @@ public class Plotter {
 		final double[] y = new double[profile.getDimension()];
 		for (int p = 0; p < y.length; p++)
 			y[p] = y0 + p;
-		return new DataSeries("Lane Profile", DataSeries.PROFILE,
-			new ArrayRealVector(y), profile, Color.BLACK);
+		return new DataSeries(name, lane, DataSeries.PROFILE, new ArrayRealVector(
+			y), profile, Color.BLACK);
+	}
+
+	public void updateProfile(final Roi roi) {
+		final int roiNumber = Integer.parseInt(roi.getName().substring(5));
+		final DataSeries profile = getLaneProfile(roi);
+		profile.setColor(profileColor);
+		final String xLabel = "Distance (px)";
+		final String yLabel = "Grayscale Value";
+		final MyPlot newPlot = new MyPlot(roi.getName(), xLabel, yLabel);
+		newPlot.setSelectedBGColor(plotSelColor);
+		newPlot.addDataSeries(profile);
+		newPlot.updatePlot();
+
+		final Iterator<MyPlot> plotIter = plots.iterator();
+		while (plotIter.hasNext()) {
+			final MyPlot plot = plotIter.next();
+			if (plot.getNumber() == (roiNumber)) plotIter.remove();
+		}
+		plots.add(newPlot);
 	}
 
 	public void setVLine(final int laneNumber, final double x,
@@ -77,16 +105,16 @@ public class Plotter {
 	{
 		final Iterator<MyPlot> plotIter = plots.iterator();
 		while (plotIter.hasNext()) {
-			final MyPlot plot = plotIter.next();
+			final MyPlot p = plotIter.next();
 			boolean vline = false;
-			if (plot.getNumber() == laneNumber) {
-				final double[] minmax = plot.getDataMinMax();
+			if (p.getNumber() == laneNumber) {
+				final double[] minmax = p.getDataMinMax();
 				final RealVector xvals = new ArrayRealVector(new double[] { x, x });
 				final RealVector yvals = new ArrayRealVector(new double[] { minmax[2],
 					minmax[3] });
-				final DataSeries l = new DataSeries("", DataSeries.VLINE, xvals, yvals,
-					color);
-				for (final DataSeries d : plot.getDataSeries()) {
+				final DataSeries l = new DataSeries("", laneNumber, DataSeries.VLINE,
+					xvals, yvals, color);
+				for (final DataSeries d : p.getDataSeries()) {
 					if (d.getType() == DataSeries.VLINE) {
 						d.setX(xvals.toArray());
 						d.setY(yvals.toArray());
@@ -95,31 +123,61 @@ public class Plotter {
 					}
 				}
 				if (!vline) {
-					plot.setSelected(true);
-					plot.addDataSeries(l);
+					p.setSelected(true);
+					p.addDataSeries(l);
 				}
-				plot.updatePlot();
+				p.updatePlot();
 				break;
 			}
 		}
 	}
 
 	public void removeVLine(final int laneNumber) {
-		final Iterator<MyPlot> plotIter = plots.iterator();
-		while (plotIter.hasNext()) {
-			final MyPlot plot = plotIter.next();
-			if (plot.getNumber() == laneNumber) {
-				for (final DataSeries d : plot.getDataSeries()) {
-					if (d.getType() == DataSeries.VLINE) {
-						plot.removeDataSeries(d);
-						plot.setSelected(false);
-						plot.updatePlot();
+		for (final MyPlot p : plots) {
+			if (p.getNumber() == laneNumber) {
+				final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
+				while (dataIter.hasNext()) {
+					if (dataIter.next().getType() == DataSeries.VLINE) {
+						dataIter.remove();
 						break;
 					}
 				}
+				p.setSelected(false);
+				p.updatePlot();
 				break;
 			}
 		}
+	}
+
+	public void removeCustomPeak(final MyPlot p) {
+		final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
+		while (dataIter.hasNext()) {
+			final DataSeries d = dataIter.next();
+			if (d.getType() == DataSeries.CUSTOMPEAK)
+			{
+				dataIter.remove();
+			}
+		}
+		p.updatePlot();
+	}
+
+	public void updateCustomPeaks(final int lane, final CustomPeaks cp) {
+		for (final MyPlot p : plots) {
+			if (p.getNumber() == lane) {
+				removeCustomPeak(p);
+				RealVector xadd = new ArrayRealVector();
+				RealVector yadd = new ArrayRealVector();
+				for (final Peak fp : cp.getList()) {
+					xadd = xadd.append(fp.getDistance());
+					yadd = yadd.append(fp.getIntensity());
+				}
+				final DataSeries customPeaks = new DataSeries("CP ADD", lane,
+					DataSeries.CUSTOMPEAK, xadd, yadd, Plotter.vLineAddPeakColor);
+				p.addDataSeries(customPeaks);
+				p.updatePlot();
+			}
+		}
+
 	}
 
 	/**
@@ -136,7 +194,7 @@ public class Plotter {
 		final ImageProcessor blank = plot0.duplicate();
 		IJ.setForegroundColor(255, 255, 255);
 		blank.fill();
-	
+
 		final ArrayList<ImageProcessor> pageMontages = new ArrayList<>();
 		final Iterator<MyPlot> plotIter = plots.iterator();
 		int psel = 0; // selected page
@@ -150,7 +208,8 @@ public class Plotter {
 				for (int c = 0; c < cols; c++) {
 					if (plotIter.hasNext()) {
 						subplot = plotIter.next();
-						if (subplot.getPlot().getProcessor() == null) System.out.println("Stop!");
+						if (subplot.getPlot().getProcessor() == null) System.out.println(
+							"Stop!");
 						if (subplot.isSelected()) psel = pageMontages.size() + 1;
 						subplotProcessor = subplot.getPlot().getProcessor();
 						subplotTitle = subplot.getPlot().getTitle();
@@ -161,7 +220,7 @@ public class Plotter {
 					}
 					plotsMontage.insert(subplotProcessor, plotSpacing + c * (plotSpacing +
 						plotW), plotSpacing + r * (plotSpacing + plotH));
-	
+
 					plotsMontage.drawString(subplotTitle, plotSpacing + plotW / 2 + c *
 						(plotSpacing + plotW), plotSpacing + plotH / 5 + r * (plotSpacing +
 							plotH), Color.LIGHT_GRAY);
@@ -185,106 +244,95 @@ public class Plotter {
 		if (plotImage.getRoi() != null) plotImage.killRoi();
 	}
 
-	public void updateProfile(final Roi roi) {
-		final int roiNumber = Integer.parseInt(roi.getName().substring(5));
-		final DataSeries profile = getLaneProfile(roi);
-		profile.setColor(profileColor);
-		final String xLabel = "Distance (px)";
-		final String yLabel = "Grayscale Value";
-		final MyPlot newPlot = new MyPlot(roi.getName(), xLabel, yLabel);
-		newPlot.setSelectedBGColor(plotSelColor);
-		newPlot.addDataSeries(profile);
-		newPlot.updatePlot();
-
-		final Iterator<MyPlot> plotIter = plots.iterator();
-		while (plotIter.hasNext()) {
-			final MyPlot plot = plotIter.next();
-			if (plot.getNumber() == (roiNumber)) plotIter.remove();
-		}
-		plots.add(newPlot);
-	}
-
-	public void resetPlots() {
-		plots = new ArrayList<>();
-	}
-	
-	public ImagePlus getPlotImage() {
-		return plotImage;
-	}
-	
-	public ArrayList<MyPlot> getPlots() {
-		return plots;
-	}
-	
 	public ArrayList<DataSeries> getProfiles() {
-		ArrayList<DataSeries> profiles = new ArrayList<>();
-		for (MyPlot p : plots) {
-			ArrayList<DataSeries> dlist = p.getDataSeries();
-			for (DataSeries d : dlist) {
+		final ArrayList<DataSeries> profiles = new ArrayList<>();
+		for (final MyPlot p : plots) {
+			final ArrayList<DataSeries> dlist = p.getDataSeries();
+			for (final DataSeries d : dlist) {
 				if (d.getType() == DataSeries.PROFILE) profiles.add(d);
 			}
 		}
 		return profiles;
 	}
-	
-	public void closePlot(){ 
+
+	public ArrayList<MyPlot> getPlots() {
+		return plots;
+	}
+
+	public void resetPlots() {
+		plots = new ArrayList<>();
+	}
+
+	public void closePlot() {
 		if (plotImage.getWindow() != null) plotImage.getWindow().close();
 	}
 }
 
 class DataSeries implements Comparable<DataSeries> {
 
-	private Color color; // Plot color
+	private final String name; // Name for Legend
+	private final int lane; // Reference
+	private final int type; // Type of function
+
 	private RealVector x;
 	private RealVector y;
-	private final String name; // Name for Legend
-	private int type; // Type of function
+	private Color color; // Plot color
 
+	// Possible Types
 	final static int VLINE = 0;
+
 	final static int PROFILE = 1;
 	final static int BACKGROUND = 2;
 	final static int GAUSS_BG = 3;
 	final static int FITTED = 4;
+	final static int CUSTOMPEAK = 5;
 
-	public DataSeries(final String name, final int type, final RealVector x,
-		final RealVector y, final Color color)
+	public DataSeries(final String name, final int lane, final int type,
+		final RealVector x, final RealVector y, final Color color)
 	{
 		this.name = name;
+		this.lane = lane;
 		this.type = type;
 		this.x = x;
 		this.y = y;
 		this.color = color;
-		if (x.getDimension() == 2 && x.getEntry(0) == x.getEntry(1)) {
-			this.type = VLINE;
-		}
-		else this.type = PROFILE;
 	}
 
-	public DataSeries(final String name, final int type, final RealVector x,
-		final UnivariateFunction[] function, final Color color)
+	public DataSeries(final String name, final int lane, final int type,
+		final RealVector x, final UnivariateFunction[] function,
+		final Color color)
 	{
 		this.name = name;
+		this.lane = lane;
 		this.type = type;
 		this.x = x;
 		this.color = color;
 		for (int i = 0; i < function.length; i++) {
-			if (i == 0) {
-				this.y = new ArrayRealVector(x.map(function[i]));
-			}
-			else {
-				this.y = y.add(x.map(function[i]));
-			}
+			this.y = (i == 0) ? new ArrayRealVector(x.map(function[i])) : y.add(x.map(
+				function[i]));
 		}
 	}
 
-	public DataSeries(final String name, final int type, final RealVector x,
-		final UnivariateFunction function, final Color color)
+	public DataSeries(final String name, final int lane, final int type,
+		final RealVector x, final UnivariateFunction function, final Color color)
 	{
 		this.name = name;
+		this.lane = lane;
 		this.type = type;
 		this.x = x;
 		this.color = color;
 		this.y = new ArrayRealVector(x.map(function));
+	}
+
+	public String getName() {
+		return name;
+	}
+
+	/**
+	 * @return the lane
+	 */
+	public int getLane() {
+		return lane;
 	}
 
 	public int getType() {
@@ -301,10 +349,6 @@ class DataSeries implements Comparable<DataSeries> {
 
 	public Color getColor() {
 		return color;
-	}
-
-	public String getName() {
-		return name;
 	}
 
 	/**
@@ -348,9 +392,7 @@ class MyPlot implements Comparable<MyPlot> {
 	private Color selectedBG = Color.white;
 	private final Color unselectedBG = Color.white;
 
-	public MyPlot(final String title, final String xLabel,
-		final String yLabel)
-	{
+	public MyPlot(final String title, final String xLabel, final String yLabel) {
 		this.title = title;
 		this.xLabel = xLabel;
 		this.yLabel = yLabel;
@@ -365,15 +407,22 @@ class MyPlot implements Comparable<MyPlot> {
 		plot = newPlot;
 		if (selected) plot.setBackgroundColor(selectedBG);
 		else plot.setBackgroundColor(unselectedBG);
+		sortDataSeries();
 		for (final DataSeries d : data) {
 			plot.setColor(d.getColor());
-			plot.addPoints(d.getX(), d.getY(), Plot.LINE);
+			if (d.getType() == DataSeries.CUSTOMPEAK) {
+				plot.addPoints(d.getX(), d.getY(), Plot.CIRCLE);
+			}
+			else {
+				plot.addPoints(d.getX(), d.getY(), Plot.LINE);
+			}
 		}
-		plot.setLimitsToFit(true);
+		plot.setLimits(xmin, xmax, ymin, ymax);
 	}
 
 	private void sortDataSeries() {
 		Collections.sort(data);
+		// Every time the DataSeries are sorted, the min/max are aslo updated
 		final Iterator<DataSeries> dataIter = data.iterator();
 		int nullIndex = 0;
 		xmin = Double.MAX_VALUE;
@@ -409,11 +458,6 @@ class MyPlot implements Comparable<MyPlot> {
 		sortDataSeries();
 	}
 
-	public void removeDataSeries(final DataSeries d) {
-		data.remove(d);
-		sortDataSeries();
-	}
-
 	public ArrayList<DataSeries> getDataSeries() {
 		return data;
 	}
@@ -429,10 +473,11 @@ class MyPlot implements Comparable<MyPlot> {
 	public double[] getDataMinMax() {
 		return new double[] { xmin, xmax, ymin, ymax };
 	}
-	
+
 	public boolean isSelected() {
 		return selected;
 	}
+
 	public void setSelected(final boolean s) {
 		selected = s;
 	}

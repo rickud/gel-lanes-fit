@@ -1,3 +1,4 @@
+
 package gausscurvefit;
 
 import java.io.BufferedWriter;
@@ -11,6 +12,7 @@ import net.imagej.table.DefaultTableDisplay;
 import net.imagej.table.GenericColumn;
 
 import org.apache.commons.math3.analysis.UnivariateFunction;
+import org.apache.commons.math3.analysis.function.Abs;
 import org.apache.commons.math3.analysis.function.Gaussian;
 import org.apache.commons.math3.analysis.integration.TrapezoidIntegrator;
 import org.apache.commons.math3.analysis.polynomials.PolynomialFunction;
@@ -27,30 +29,35 @@ import org.scijava.display.DisplayService;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 
+import gausscurvefit.Peak;
 import gausscurvefit.GaussianArrayCurveFitter.ParameterGuesser;
 
 public class Fitter {
+
 	@Parameter
 	private LogService log;
 	@Parameter
 	private DisplayService displayServ;
 	@Parameter
 	private StatusService statusServ;
-	
+
 	private int degBG;
 	private double tolPK;
-	private String title; // for the datafile, typically the main imag's title
+	private final String title; // for the datafile, typically the main image's
+															// title
 
-	private ArrayList<DataSeries> inputData; 
-	private ArrayList<CustomPoints> customPoints;
-	
-	public Fitter(Context context, String title, int degBG, double tolPK) {
+	private ArrayList<DataSeries> inputData;
+	private ArrayList<CustomPeaks> customPeaks;
+
+	public Fitter(final Context context, final String title, final int degBG,
+		final double tolPK)
+	{
 		context.inject(this);
 		this.title = title;
 		this.degBG = degBG;
 		this.tolPK = tolPK;
-		this.inputData= new ArrayList<>();
-		this.customPoints = new ArrayList<>();
+		this.inputData = new ArrayList<>();
+		this.customPeaks = new ArrayList<>();
 	}
 
 	public ArrayList<ArrayList<DataSeries>> doFit() {
@@ -64,81 +71,127 @@ public class Fitter {
 		RealVector colDistance_g = new ArrayRealVector();
 		RealVector colAmplitude_g = new ArrayRealVector();
 		RealVector colFWHM_g = new ArrayRealVector();
-	
+
 		final ArrayList<ArrayList<DataSeries>> outputData = new ArrayList<>();
-		final Iterator<DataSeries> dataIter = inputData.iterator();
+		final Iterator<DataSeries> dataInputIter = inputData.iterator();
 		int progress = 1;
 		int datasetNumber = 0;
-		while (dataIter.hasNext()) {
-			final DataSeries profile = dataIter.next();
+		while (dataInputIter.hasNext()) {
+			datasetNumber++;
+			final DataSeries profile = dataInputIter.next();
+			final int lane = profile.getLane();
 			final RealVector xvals = new ArrayRealVector(profile.getX());
 			final RealVector yvals = new ArrayRealVector(profile.getY());
 			final ArrayList<DataSeries> funout = new ArrayList<>();
 
 			// Tolerance as percentage of the range
-			final double tolpk = tolPK * (yvals.getMaxValue() - yvals
-				.getMinValue());
-	
+			final double tolpk = tolPK * (yvals.getMaxValue() - yvals.getMinValue());
+
 			final WeightedObservedPoints obs = new WeightedObservedPoints();
 			for (int o = 0; o < xvals.getDimension(); o++) {
 				obs.add(xvals.getEntry(o), yvals.getEntry(o));
 			}
-			// FIXME: Figure out a way to pass CustomPoint to guesser
+
 			final ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(
 				obs.toList(), tolpk, degBG);
-			final RealVector firstGuess = new ArrayRealVector(pg.guess());
-			final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(tolpk,
-				degBG).getProblem(obs.toList());
-	
-			final LeastSquaresOptimizer.Optimum optimum =
-				new LevenbergMarquardtOptimizer().optimize(problem);
-	
-			final RealVector pars = new ArrayRealVector(optimum.getPoint());
-	
+			RealVector firstGuess = new ArrayRealVector(pg.guess());
+
 			// Initial Guess
 			RealVector norms0 = new ArrayRealVector();
 			RealVector means0 = new ArrayRealVector();
 			RealVector sds0 = new ArrayRealVector();
-	
+			for (int b = degBG + 2; b < firstGuess.getDimension(); b += 3) {
+				// Initial Guess
+				norms0 = norms0.append(firstGuess.getEntry(b));
+				means0 = means0.append(firstGuess.getEntry(b + 1));
+				sds0 = sds0.append(firstGuess.getEntry(b + 2));
+			}
+
+			// Check CustomPoint for the lane and adjust initial guess
+			for (final CustomPeaks cp : customPeaks) {
+				if (cp.getLane() == lane) {
+					for (final Peak fp : cp.getList()) {
+						final double mean = fp.getDistance();
+						int idx = firstGuess.mapSubtract(mean).mapToSelf(new Abs())
+							.getMinIndex();
+						if (FastMath.abs(firstGuess.getEntry(idx) - mean) <= 5){
+							// the point is already detected, ONLY replace the SD
+							firstGuess.setEntry(idx + 1, fp.getSigma());
+							int idx2 = (idx - degBG - 1)/3;
+							sds0.setEntry(idx2, fp.getSigma());
+						}
+						else {
+							// Place the new peak in order of mean, distance y from top 
+							for (int m  = 0; m < means0.getDimension(); m++) {
+								if (fp.getDistance() < means0.getEntry(m)) {
+									norms0 = norms0.getSubVector(0,m).append(fp.getIntensity()).append(norms0.getSubVector(m,norms0.getDimension()-m));
+									means0 = means0.getSubVector(0,m).append(fp.getDistance()).append(means0.getSubVector(m,means0.getDimension()-m));
+									sds0 = sds0.getSubVector(0,m).append(fp.getSigma()).append(sds0.getSubVector(m,sds0.getDimension()-m));
+									firstGuess = firstGuess.getSubVector(0,degBG+2+3*m).append(fp.getIntensity()).append(fp
+										.getDistance()).append(fp.getSigma()).append(firstGuess.getSubVector(degBG+2+3*m,(firstGuess.getDimension()-(degBG+2+3*m))));
+									break;
+								}
+								// mean is larger than all existing ones
+								if (m == means0.getDimension()-1) {
+									norms0 = norms0.append(fp.getIntensity());
+									means0 = means0.append(fp.getDistance());
+									sds0 = sds0.append(fp.getSigma());
+									firstGuess = firstGuess.append(fp.getIntensity()).append(fp.getDistance()).append(fp.getSigma());
+									break;
+								}
+							}
+						}
+					}
+
+					// FIXME Remove points previously added MANUALLY
+					// Does not make sense to remove points that where detected automatically.
+					// Better to increase threshold to avoid detecting noise.
+					// Use remove feature to remove a previously added custom peak.
+				}
+			}
+
+			final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(tolpk,
+				degBG).withStartPoint(firstGuess.toArray()).getProblem(obs.toList());
+
+			final LeastSquaresOptimizer.Optimum optimum =
+				new LevenbergMarquardtOptimizer().optimize(problem);
+
+			final RealVector pars = new ArrayRealVector(optimum.getPoint());
+
 			// After fitting
 			RealVector norms = new ArrayRealVector();
 			RealVector means = new ArrayRealVector();
 			RealVector sds = new ArrayRealVector();
 			final RealVector poly = pars.getSubVector(0, degBG + 2);
-	
-			final PolynomialFunction bg = new PolynomialFunction(poly.getSubVector(1,
-				degBG + 1).toArray());
-			funout.add(new DataSeries("Background", DataSeries.BACKGROUND, xvals, bg,
-				Plotter.bgColor));
+
 			for (int b = degBG + 2; b < pars.getDimension(); b += 3) {
-				// Initial Guess
-				norms0 = norms0.append(firstGuess.getEntry(b));
-				means0 = means0.append(firstGuess.getEntry(b + 1));
-				sds0 = sds0.append(firstGuess.getEntry(b + 2));
-	
-				// After fitting
 				norms = norms.append(pars.getEntry(b));
 				means = means.append(pars.getEntry(b + 1));
 				sds = sds.append(pars.getEntry(b + 2));
 			}
-	
+
+			final PolynomialFunction bg = new PolynomialFunction(poly.getSubVector(1,
+				degBG + 1).toArray());
+			funout.add(new DataSeries("Background", lane, DataSeries.BACKGROUND,
+				xvals, bg, Plotter.bgColor));
+
 			for (int gg = 1; gg < norms.getDimension(); gg++) {
 				final Gaussian gauss = new Gaussian(norms.getEntry(gg), means.getEntry(
 					gg), sds.getEntry(gg));
 				final UnivariateFunction[] functs = { bg, gauss };
-				funout.add(new DataSeries("Band " + gg, DataSeries.GAUSS_BG, xvals,
-					functs, Plotter.gaussColor));
+				funout.add(new DataSeries("Band " + gg, lane, DataSeries.GAUSS_BG,
+					xvals, functs, Plotter.gaussColor));
 			}
-			final GaussianArrayBG fitted = new GaussianArrayBG(norms, means, sds,
+			final GaussianArray fitted = new GaussianArray(norms, means, sds,
 				poly);
-			funout.add(new DataSeries("Fit", DataSeries.FITTED, xvals, fitted,
+			funout.add(new DataSeries("Fit", lane, DataSeries.FITTED, xvals, fitted,
 				Plotter.fittedColor));
 			outputData.add(funout);
-	
+
 			final RealVector peakAreas = doIntegrate(xvals, norms, means, sds);
-	
+
 			// Prepare columns for Results Table
-			colLane.add("Lane " + datasetNumber++);
+			colLane.add("Lane " + datasetNumber);
 			colBand.add(1);
 			for (int rr = 1; rr < peakAreas.getDimension(); rr++) {
 				colLane.add("");
@@ -153,18 +206,18 @@ public class Fitter {
 			colAmplitude_g = colAmplitude_g.append(norms0);
 			colFWHM_g = colFWHM_g.append(sds0.mapMultiplyToSelf(2 * FastMath.sqrt(2 *
 				FastMath.log(2))));
-	
-			final String output = String.format("Lane " + datasetNumber +", RMS: %1$.2f; ",
-				optimum.getRMS());
+
+			final String output = String.format("Lane " + datasetNumber +
+				", RMS: %1$.2f; ", optimum.getRMS());
 			log.info(output);
 			statusServ.showProgress(++progress, inputData.size());
 		}
-	
+
 		final String[] headers = { "", "Band", "Distance", "Amplitude", "FWHM",
 			"Area", "Dist. G.", "Amp. G.", "FWHM G." };
 		final GenericColumn[] tableCol = new GenericColumn[headers.length];
 		final DefaultGenericTable rt = new DefaultGenericTable();
-	
+
 		for (int cc = 0; cc < headers.length; cc++)
 			tableCol[cc] = new GenericColumn(headers[cc]);
 		tableCol[0].addAll(colLane);
@@ -180,11 +233,11 @@ public class Fitter {
 		}
 		for (int cc = 0; cc < headers.length; cc++)
 			rt.add(tableCol[cc]);
-	
+
 		final DefaultTableDisplay tableDisplay = (DefaultTableDisplay) displayServ
 			.createDisplay("Results Display", rt);
 		displayServ.setActiveDisplay(tableDisplay);
-	
+
 		final String saveFile = "Fit of " + title + ".xls";
 		try (BufferedWriter out = new BufferedWriter(new FileWriter(saveFile))) {
 			String outText = "";
@@ -212,100 +265,122 @@ public class Fitter {
 		RealVector areas = new ArrayRealVector();
 		for (int i = 0; i < norms.getDimension(); i++) {
 			final TrapezoidIntegrator ti = new TrapezoidIntegrator();
-			areas = areas.append(ti.integrate(Integer.MAX_VALUE, new Gaussian(norms
-				.getEntry(i), means.getEntry(i), sds.getEntry(i)), xvals.getMinValue(),
-				xvals.getMaxValue()));
+			final Gaussian gauss = new Gaussian(norms.getEntry(i), means.getEntry(i),
+				sds.getEntry(i));
+			areas = areas.append(ti.integrate(Integer.MAX_VALUE, gauss, xvals
+				.getMinValue(), xvals.getMaxValue()));
 		}
 		return areas;
 	}
-	
-	public ArrayList<CustomPoints> getCustomPoints(){
-		return customPoints;
-	}
-	
-	public void setCustomPoints(ArrayList<CustomPoints> customPoints){
-		this.customPoints = customPoints;
-	}
-	
-	public void setInputData(ArrayList<DataSeries> inputData) {
-		this.inputData = inputData;
-	}
-	
-	public void resetCustomPoints(int laneNumber) {
-		final Iterator<CustomPoints> pointsListsIter = customPoints.iterator();
-		while (pointsListsIter.hasNext()) {
-			final CustomPoints pointsList = pointsListsIter.next();
-			if (pointsList.getLane() == laneNumber) 
-				pointsListsIter.remove();
+
+	public CustomPeaks getCustomPeaks(int lane) {
+		Iterator<CustomPeaks> cpIter = customPeaks.iterator();
+		while (cpIter.hasNext()){
+			CustomPeaks cp = cpIter.next();
+			if (cp.getLane() == lane) {
+				return cp;
+			}
 		}
-		customPoints.add(new CustomPoints(laneNumber));
+		return null;
+	}
+
+	public void addCustomPeak(int lane, Peak peak) {
+		for (final CustomPeaks cp : customPeaks) {
+			if (cp.getLane() == lane) {
+				cp.addToList(peak);
+				return;
+			}
+		}
+		CustomPeaks cp = new CustomPeaks(lane);
+		cp.addToList(peak);
+		customPeaks.add(cp);
+		return;
+	}
+
+	public void removeCustomPeak(int lane, Peak peak) {
+		for (final CustomPeaks cp : customPeaks) {
+			if (cp.getLane() == lane) {
+					cp.removeFromList(peak);
+				}
+		}
+	}
+
+	public void resetCustomPeaks(final int laneNumber) {
+		final Iterator<CustomPeaks> pointsListsIter = customPeaks.iterator();
+		while (pointsListsIter.hasNext()) {
+			final CustomPeaks pointsList = pointsListsIter.next();
+			if (pointsList.getLane() == laneNumber) pointsListsIter.remove();
+		}
+		customPeaks.add(new CustomPeaks(laneNumber));
+	}
+
+	public void setInputData(final ArrayList<DataSeries> inputData) {
+		this.inputData = inputData;
 	}
 
 	/**
 	 * @param degBG
 	 */
-	public void setDegBG(int degBG) {
-		this.degBG = degBG;		
+	public void setDegBG(final int degBG) {
+		this.degBG = degBG;
 	}
 
 	/**
 	 * @param tolPK
 	 */
-	public void setTolPK(double tolPK) {
+	public void setTolPK(final double tolPK) {
 		this.tolPK = tolPK;
-		
+
 	}
 }
 
-class CustomPoints {
+class CustomPeaks {
 
 	private final int lane;
-	private final ArrayList<FitPoint> removeList;
-	private final ArrayList<FitPoint> addList;
+	private final ArrayList<Peak> addList;
 
-	public CustomPoints(final int lane) {
+	public CustomPeaks(final int lane) {
 		this.lane = lane;
-		removeList = new ArrayList<>();
 		addList = new ArrayList<>();
 	}
 
-	public void addToAddList(final double distance, final double intensity,
-		final double sigma)
-	{
-		addList.add(new FitPoint(distance, intensity, sigma));
+	public void addToList(Peak peak) {
+		addList.add(peak);
 	}
 
-	public void addToRemoveList(final double distance, final double intensity) {
-		removeList.add(new FitPoint(distance, intensity));
+	public void removeFromList(final Peak peak)
+	{
+		Iterator<Peak> peakIter = addList.iterator(); 
+		while (peakIter.hasNext()) {
+			double diff = FastMath.abs(peak.getDistance()-peakIter.next().getDistance());
+			if (diff <= 5) peakIter.remove();
+		}
 	}
 
 	public int getLane() {
 		return lane;
 	}
 
-	public ArrayList<FitPoint> getAddList() {
+	public ArrayList<Peak> getList() {
 		return addList;
 	}
+}
 
-	public ArrayList<FitPoint> getRemoveList() {
-		return removeList;
-	}
-
-	class FitPoint {
+class Peak {
 
 		private final double distance;
 		private final double intensity;
 		private final double sigma;
 
-		public FitPoint(final double x, final double y) {
-			this.distance = x;
-			this.intensity = y;
+		public Peak(final double intensity, final double distance) {
+			this.intensity = intensity;
+			this.distance = distance;
 			this.sigma = 0.0;
 		}
 
-		public FitPoint(final double x, final double y, final double sigma) {
-			this.distance = x;
-			this.intensity = y;
+		public Peak(final double intensity, final double distance, final double sigma) {
+			this.intensity = intensity;
+			this.distance = distance;
 			this.sigma = sigma;
 		}
 
@@ -321,5 +396,5 @@ class CustomPoints {
 		public double getSigma() {
 			return sigma;
 		}
-	}
 }
+

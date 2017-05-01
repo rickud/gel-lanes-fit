@@ -121,7 +121,7 @@ public class GelLanesFit implements Command {
 	}
 
 	/**
-	 *
+	 * General info About the Software
 	 */
 	public void about() {
 		final ClassLoader loader = Thread.currentThread().getContextClassLoader();
@@ -142,7 +142,7 @@ public class GelLanesFit implements Command {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
 		final ImagePlus iPlus = new Opener().openImage(
-			"src//main//resources//sample//All[01-17-2017].tif");
+			"src//main//resources//sample//03_05_16_refs.tif");
 		// display it via ImageJ
 		iPlus.show();
 		iPlus.getCanvas().setLocation(0, 100);
