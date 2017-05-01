@@ -204,8 +204,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 
 		sliderPanel.setLayout(new BoxLayout(sliderPanel, BoxLayout.Y_AXIS));
-		sliderW = makeTitledSlider("Width ( " + LW + " px )", Color.black, 1, IW /
-			4, LW);
+		sliderW = makeTitledSlider("Width ( " + LW + " px )", Color.black, 1, IW/nLanes, LW);
 		sliderPanel.add(sliderW);
 		sliderH = makeTitledSlider("Height ( " + LH + " px )", Color.black, IH / 10,
 			IH, LH);
@@ -902,7 +901,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	@Override
 	public void mousePressed(final MouseEvent e) {
-		if (!auto) selectionUpdate = true;
+		if (!(auto || addPeak || removePeak)) selectionUpdate = true;
 	}
 
 	@Override
