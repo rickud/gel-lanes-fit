@@ -138,6 +138,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private JPanel dialogPanel;
 	private final JFrame frame;
 
+	
 	public MainDialog(final Context context, final String string,
 		final ImagePlus imp)
 	{
@@ -313,15 +314,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final double v)
 	{
 		String title, action, message;
+		String fwhm = "FWHM = \u03C3 * (2 * \u221A (2 * log(2))";
 		if (add) {
 			title = "ADD PEAK";
 			action = "add";
-			message = "If the new peak is located less than 5 px away from an exisitng peak, the existing peak will be replaced with the new one.";
+			message = "If the new peak is located less than 2 px away from an exisitng peak,\n the existing peak will be replaced with the new one.";
 		}
 		else {
 			title = "REMOVE PEAK";
 			action = "remove";
-			message = "The custom peak that is closer to this peak will be removed";
+			message = "The custom peak that is closest\n to this peak will be removed";
 		}
 		final GenericDialog gd = new GenericDialog(title);
 		gd.addMessage("You are about to " + action + " this peak");
@@ -330,7 +332,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		gd.addMessage(String.format("Distance: \t%10.1f", y));
 		gd.addMessage(String.format("Intensity: \t%.0f", v));
 		if (add) {
-			gd.addMessage("Estimate a Standard deviation, \u03C3");
+			gd.addMessage("Estimate a FWHM, " + fwhm);
 			gd.addNumericField("\u03C3", 1.0, 1);
 		}
 		gd.showDialog();
@@ -508,7 +510,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		plotter.resetPlots();
 		for (final Roi r : rois) {
 			final Rectangle rect = r.getBounds();
-			if (rect.getMinX() <= IW && rect.getMinY() <= IH) plotter.updateProfile(
+			if (rect.getMinX() < IW && rect.getMinY() < IH) plotter.updateProfile(
 				r);
 		}
 		for (final int i : getAllLaneNumbers())
@@ -887,8 +889,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 						}
 					}
 					else if (!addPeak && removePeak) { // Remove Peak
+						// Remove points previously added MANUALLY, not implemented
+						// Does not make sense to remove points that where detected automatically.
+						// Better to increase threshold to avoid detecting noise.
+						// Use remove feature to remove a previously added custom peak.
 						final double sd = askPeak(false, lane, y, intensity);
-
 						if (sd != 0.0) {
 							fitter.removeCustomPeak(lane, new Peak(lane, intensity, y));
 						}

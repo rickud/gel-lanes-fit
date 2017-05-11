@@ -7,9 +7,7 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 
-import org.apache.commons.math3.analysis.FunctionUtils;
 import org.apache.commons.math3.analysis.ParametricUnivariateFunction;
-import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.differentiation.DerivativeStructure;
 import org.apache.commons.math3.analysis.differentiation.UnivariateDifferentiableFunction;
 import org.apache.commons.math3.analysis.function.Gaussian;
@@ -34,10 +32,7 @@ import org.apache.commons.math3.util.FastMath;
 public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 	/** Parametric function to be fitted. */
-//	ParametricUnivariateFunction a = new Gaussian.Parametric();
-//	ParametricUnivariateFunction b = new Gaussian.Parametric();
-//	private final ParametricUnivariateFunction FUNCTION = FunctionUtils.add(a, b);
-		private static final GaussianArray.Parametric FUNCTION = new GaussianArray.Parametric();
+	private static final GaussianArray.Parametric FUNCTION = new GaussianArray.Parametric();
 
 //		/** {@inheritDoc} */
 //		@Override
@@ -172,7 +167,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 	/**
 	 * Guesses the parameters {@code norm}, {@code mean}, and {@code sigma} of a
-	 * {@link GaussianArrayBG.Parametric} based on the specified observed
+	 * {@link GaussianArray.Parametric} based on the specified observed
 	 * points.
 	 */
 	public static class ParameterGuesser {
@@ -623,7 +618,7 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 	public static class Parametric implements ParametricUnivariateFunction {
 
 		/**
-		 * Computes the value of the Gaussian at {@code x}.
+		 * Computes the value of the Gaussian Array at {@code x}.
 		 *
 		 * @param x
 		 *            Value for which the function must be computed.

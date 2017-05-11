@@ -19,11 +19,8 @@ package gausscurvefit;
 
 import java.awt.Dimension;
 import java.awt.Point;
-import java.awt.event.WindowAdapter;
-import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.List;
 import java.util.Properties;
 
 import net.imagej.ImageJ;
@@ -45,6 +42,9 @@ import ij.io.Opener;
 	menuPath = "Plugins>Gel Tools>Gauss Fit")
 public class GelLanesFit implements Command {
 
+	/**
+	 * 
+	 */
 	@Parameter
 	private LogService log;
 	@Parameter
@@ -55,18 +55,21 @@ public class GelLanesFit implements Command {
 	private static Context context;
 
 	// Default Parameters
-	private Thread mainWindowThread; // thread for the main window
+//TODO: private Thread mainWindowThread; // thread for the main window
 	private Thread plotThread; // thread for plotting
 
 	private boolean setup = true;
-	private boolean doPlot; // tells the background thread to update
+	//TODO: private boolean doPlot; // tells the background thread to update
 
 	private ImagePlus imp;
 	private String version;
 
+	/**
+	 * Initialization method
+	 */
 	public void init() {
-		final double SW = IJ.getScreenSize().getWidth();
-		final double SH = IJ.getScreenSize().getHeight();
+//		final double SW = IJ.getScreenSize().getWidth();
+//		final double SH = IJ.getScreenSize().getHeight();
 
 		imp = IJ.getImage();
 		String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(".")); 
@@ -138,6 +141,11 @@ public class GelLanesFit implements Command {
 		}
 	}
 
+	/**
+	 * Main method to execute the plugin in Eclipse
+	 * @param args
+	 * @throws Exception
+	 */
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
