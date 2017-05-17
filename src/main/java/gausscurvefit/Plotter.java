@@ -149,11 +149,11 @@ public class Plotter {
 		}
 	}
 
-	public void removeCustomPeak(final MyPlot p) {
+	public void removeCustomPeaks(final MyPlot p) {
 		final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
 		while (dataIter.hasNext()) {
 			final DataSeries d = dataIter.next();
-			if (d.getType() == DataSeries.CUSTOMPEAK)
+			if (d.getType() == DataSeries.CUSTOMPEAKS)
 			{
 				dataIter.remove();
 			}
@@ -161,18 +161,18 @@ public class Plotter {
 		p.updatePlot();
 	}
 
-	public void updateCustomPeaks(final int lane, final CustomPeaks cp) {
+	public void updateCustomPeaks(final int lane, final ArrayList<Peak> pl) {
 		for (final MyPlot p : plots) {
 			if (p.getNumber() == lane) {
-				removeCustomPeak(p);
+				removeCustomPeaks(p);
 				RealVector xadd = new ArrayRealVector();
 				RealVector yadd = new ArrayRealVector();
-				for (final Peak fp : cp.getList()) {
-					xadd = xadd.append(fp.getDistance());
-					yadd = yadd.append(fp.getIntensity());
+				for (final Peak fp : pl) {
+					xadd = xadd.append(fp.getMean());
+					yadd = yadd.append(fp.getNorm());
 				}
 				final DataSeries customPeaks = new DataSeries("CP ADD", lane,
-					DataSeries.CUSTOMPEAK, xadd, yadd, Plotter.vLineAddPeakColor);
+					DataSeries.CUSTOMPEAKS, xadd, yadd, Plotter.vLineAddPeakColor);
 				p.addDataSeries(customPeaks);
 				p.updatePlot();
 			}
@@ -285,7 +285,7 @@ class DataSeries implements Comparable<DataSeries> {
 	final static int BACKGROUND = 2;
 	final static int GAUSS_BG = 3;
 	final static int FITTED = 4;
-	final static int CUSTOMPEAK = 5;
+	final static int CUSTOMPEAKS = 5;
 
 	public DataSeries(final String name, final int lane, final int type,
 		final RealVector x, final RealVector y, final Color color)
@@ -410,7 +410,7 @@ class MyPlot implements Comparable<MyPlot> {
 		sortDataSeries();
 		for (final DataSeries d : data) {
 			plot.setColor(d.getColor());
-			if (d.getType() == DataSeries.CUSTOMPEAK) {
+			if (d.getType() == DataSeries.CUSTOMPEAKS) {
 				plot.addPoints(d.getX(), d.getY(), Plot.CIRCLE);
 			}
 			else {

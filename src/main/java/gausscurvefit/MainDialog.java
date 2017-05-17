@@ -1,4 +1,3 @@
-
 package gausscurvefit;
 
 import java.awt.BorderLayout;
@@ -48,6 +47,7 @@ import javax.swing.text.Document;
 import org.apache.commons.math3.analysis.function.Abs;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
+import org.apache.commons.math3.util.FastMath;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.display.Display;
@@ -79,6 +79,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	@Parameter
 	private StatusService statusServ;
 
+	public static final Color guess = Color.BLUE;
+	public static final Color custom = Color.GREEN;
+	public static final Color fit = Color.MAGENTA;
+	public static final Color selected = Color.YELLOW;
+	public static final Color unselected = Color.RED;
+	
 	private boolean auto = true; // AUTO Lane size mode is ON
 	private boolean selectionUpdate = false; // active updating is off
 	private boolean fitDone = false; // Keep track of whether fit data exists
@@ -314,7 +320,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final double v)
 	{
 		String title, action, message;
-		String fwhm = "FWHM = \u03C3 * (2 * \u221A (2 * log(2))";
+		String fwhm = "FWHM = \u03C3 * (2 * \u221A (2 * ln(2))";
 		if (add) {
 			title = "ADD PEAK";
 			action = "add";
@@ -333,7 +339,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		gd.addMessage(String.format("Intensity: \t%.0f", v));
 		if (add) {
 			gd.addMessage("Estimate a FWHM, " + fwhm);
-			gd.addNumericField("\u03C3", 1.0, 1);
+			gd.addNumericField("FWHM", 5.0, 1);
 		}
 		gd.showDialog();
 		if (gd.wasOKed()) {
@@ -440,7 +446,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				1.1 * lh);
 			else labelRoi.setLocation(x0 + 0.2 * lw, y0 + rh - 1.1 * lh);
 			if (roi.getName().equals(roiName)) {
-				roi.setStrokeColor(Color.YELLOW);
+				roi.setStrokeColor(MainDialog.selected);
 				roi.setStrokeWidth(3);
 				if (buttonManual.isSelected() && !roiName.equals("none")) {
 					imgPlus.setRoi(roi);
@@ -448,20 +454,46 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			}
 			else {
 				roi.setStrokeWidth(1);
-				roi.setStrokeColor(Color.RED);
-				labelRoi.setFillColor(Color.RED);
+				roi.setStrokeColor(MainDialog.unselected);
+				labelRoi.setFillColor(MainDialog.unselected);
 			}
 			overlay.add(roi);
 			overlay.add(labelRoi);
 			if (buttonAuto.isSelected()) imgPlus.killRoi();
 			if (chkBoxBands.isSelected() && fitDone) {
-				// Draw a line where the bands are
+				// Draw a tick where the bands are
 				for (final Peak p : fitter.getFittedPeaks(lane)) {
-					final Roi band = new Line(x0, p.getDistance(), x0 + rw, p
-						.getDistance());
-					band.setStrokeColor(roi.getStrokeColor());
-					band.setStrokeWidth(1);
-					overlay.add(band);
+					final double y = p.getMean();
+					final Roi band1 = new Line(x0, y, x0 + 10, y);
+					band1.setStrokeColor(MainDialog.fit);
+					band1.setStrokeWidth(1);
+					overlay.add(band1);
+					final Roi band2 = new Line(x0 + rw - 10, y, x0 + rw, y);
+					band2.setStrokeColor(MainDialog.fit);
+					band2.setStrokeWidth(1);
+					overlay.add(band2);
+				}
+				for (final Peak p : fitter.getGuessPeaks(lane)) {
+					final double y = p.getMean();
+					final Roi band1 = new Line(x0, y, x0 + 5, y);
+					band1.setStrokeColor(MainDialog.guess);
+					band1.setStrokeWidth(1);
+					overlay.add(band1);
+					final Roi band2 = new Line(x0 + rw - 5, y, x0 + rw, y);
+					band2.setStrokeColor(MainDialog.guess);
+					band2.setStrokeWidth(1);
+					overlay.add(band2);
+				}
+				for (final Peak p : fitter.getCustomPeaks(lane)) {
+					final double y = p.getMean();
+					final Roi band1 = new Line(x0, y, x0 + 5, y);
+					band1.setStrokeColor(MainDialog.custom);
+					band1.setStrokeWidth(1);
+					overlay.add(band1);
+					final Roi band2 = new Line(x0 + rw - 5, y, x0 + rw, y);
+					band2.setStrokeColor(MainDialog.custom);
+					band2.setStrokeWidth(1);
+					overlay.add(band2);
 				}
 			}
 		}
@@ -491,6 +523,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
 			reDrawROIs(imp, "none");
 			redoProfilePlots();
+			fitter.resetAllFitter();
+			fitter.setInputData(plotter.getProfiles());
 		}
 		else if (textBox.equals(textDegBG.getDocument())) {
 			fitter.setDegBG(getDegBG());
@@ -507,14 +541,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonAddPeak.setEnabled(false);
 		buttonRemovePeak.setEnabled(false);
 		buttonResetCustomPeaks.setEnabled(false);
-		plotter.resetPlots();
 		for (final Roi r : rois) {
 			final Rectangle rect = r.getBounds();
-			if (rect.getMinX() < IW && rect.getMinY() < IH) plotter.updateProfile(
+			if (rect.getMinX() < 0.95*IW && rect.getMinY() < 0.95*IH) plotter.updateProfile(
 				r);
 		}
-		for (final int i : getAllLaneNumbers())
-			fitter.resetCustomPeaks(i);
 		plotter.plotsMontage();
 	}
 
@@ -643,7 +674,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 		resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
 		reDrawROIs(imp, "none");
+
 		redoProfilePlots();
+		fitter.resetAllFitter();
+		fitter.setInputData(plotter.getProfiles());
+		
+		// Close results table
+		for (final Display<?> d : displayServ.getDisplays()) {
+			if (d.getName().equals("Results Display")) d.close();
+		}
 	}
 
 	// TextField Listeners
@@ -675,20 +714,32 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			buttonRemovePeak.setSelected(false);
 			buttonResetCustomPeaks.setSelected(false);
 
-			// Remove everything but the profile
+			// Remove everything in the plots, but the profile
 			for (final MyPlot p : plotter.getPlots()) {
 				p.setSelectedBGColor(Plotter.plotSelColor);
 				final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
 				while (dataIter.hasNext()) {
 					final DataSeries d = dataIter.next();
 					if (d.getType() != DataSeries.PROFILE && d
-						.getType() != DataSeries.CUSTOMPEAK) dataIter.remove();
+						.getType() != DataSeries.CUSTOMPEAKS) dataIter.remove();
 				}
 			}
-
-			fitter.setInputData(plotter.getProfiles());
+			
+			// Reset fit
+			if (fitDone) {
+				fitter.resetFit();
+			} else {
+				fitter.setInputData(plotter.getProfiles());
+			}
+			
+			// Close results table
+			for (final Display<?> d : displayServ.getDisplays()) {
+				if (d.getName().equals("Results Display")) d.close();
+			}
+			
 			final ArrayList<ArrayList<DataSeries>> fitted = fitter.doFit();
 			fitDone = true;
+			
 			for (final ArrayList<DataSeries> f : fitted) {
 				final MyPlot plot = plotter.getPlots().get(fitted.indexOf(f));
 				plot.addDataSeries(f);
@@ -700,7 +751,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			buttonAddPeak.setEnabled(true);
 			buttonRemovePeak.setEnabled(true);
 			buttonResetCustomPeaks.setEnabled(true);
-			reDrawROIs(imp, "none");
+			reDrawROIs(imp, "none"); // adds the bands
 		}
 
 		if (e.getSource().equals(buttonAuto)) {
@@ -881,9 +932,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 								new Abs()).getMinIndex());
 						}
 					}
-					// Fitter has 1 CustomPeaks object for each plot
+					// Fitter has 1 CustomPeaks object for each plot/lane
 					if (addPeak && !removePeak) { // Add Peak
-						final double sd = askPeak(true, lane, y, intensity);
+						final double sd = askPeak(true, lane, y, intensity)/(2 * FastMath.sqrt(2 * FastMath.log(2)));
 						if (sd != 0.0) { // not cancelled
 							fitter.addCustomPeak(lane, new Peak(lane, intensity, y, sd));
 						}
