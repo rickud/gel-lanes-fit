@@ -1,13 +1,12 @@
-package gausscurvefit;
 /**
  * Gauss Fit
- * GaussFitLanes.java
+ * GelLanesFit.java
  * author: Rick Ziraldo, 2017
  * The /University of Texas at Dallas, Richardson, TX
  * http://www.utdallas.edu
  *
- * Feature:   Fitting of Gaussian profiles along gel lanes
- * v is a tool for fitting gaussian profiles and estimating
+ * Feature: Fitting of multiple Gaussian functions to intensity profiles along the gel lanes
+ * Gauss Fit is a tool for fitting gaussian profiles and estimating
  * the profile parameters on selected lanes in gel electrophoresis images.
  *
  *    The GaussianArrayCurveFitter class is implemented using
@@ -16,6 +15,8 @@ package gausscurvefit;
  *    The source code is maintained and made available on GitHub
  *    https://github.com/rickud/gauss-curve-fit
  */
+
+package gausscurvefit;
 
 import java.awt.Dimension;
 import java.awt.Point;
@@ -43,7 +44,7 @@ import ij.io.Opener;
 public class GelLanesFit implements Command {
 
 	/**
-	 * 
+	 *
 	 */
 	@Parameter
 	private LogService log;
@@ -59,7 +60,7 @@ public class GelLanesFit implements Command {
 	private Thread plotThread; // thread for plotting
 
 	private boolean setup = true;
-	//TODO: private boolean doPlot; // tells the background thread to update
+	// TODO: private boolean doPlot; // tells the background thread to update
 
 	private ImagePlus imp;
 	private String version;
@@ -72,7 +73,8 @@ public class GelLanesFit implements Command {
 //		final double SH = IJ.getScreenSize().getHeight();
 
 		imp = IJ.getImage();
-		String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(".")); 
+		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
+			"."));
 		about();
 		final String title = "[v" + version + "] Gel Lanes Gauss Fitting: " + imp
 			.getTitle();
@@ -84,7 +86,7 @@ public class GelLanesFit implements Command {
 		plotter.create(md.getRois());
 		md.setPlotter(plotter);
 		md.setFitter(fitter);
-		
+
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
 		final ImageWindow pwin = plotter.getPlotImage().getWindow();
@@ -143,6 +145,7 @@ public class GelLanesFit implements Command {
 
 	/**
 	 * Main method to execute the plugin in Eclipse
+	 * 
 	 * @param args
 	 * @throws Exception
 	 */

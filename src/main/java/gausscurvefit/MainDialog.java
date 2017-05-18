@@ -1,3 +1,21 @@
+/**
+ * Gauss Fit
+ * GelLanesFit.java
+ * author: Rick Ziraldo, 2017
+ * The /University of Texas at Dallas, Richardson, TX
+ * http://www.utdallas.edu
+ *
+ * Feature: Fitting of multiple Gaussian functions to intensity profiles along the gel lanes
+ * Gauss Fit is a tool for fitting gaussian profiles and estimating
+ * the profile parameters on selected lanes in gel electrophoresis images.
+ *
+ *    The GaussianArrayCurveFitter class is implemented using
+ *    Abstract classes from Apache Commons project
+ *
+ *    The source code is maintained and made available on GitHub
+ *    https://github.com/rickud/gauss-curve-fit
+ */
+
 package gausscurvefit;
 
 import java.awt.BorderLayout;
@@ -22,7 +40,6 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
-import java.util.List;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -65,9 +82,9 @@ import ij.gui.Roi;
 import ij.gui.TextRoi;
 
 @SuppressWarnings("serial")
-class MainDialog extends JFrame implements ActionListener, ChangeListener,
-	DocumentListener, ItemListener, MouseMotionListener, MouseListener,
-	MouseWheelListener
+public class MainDialog extends JFrame implements ActionListener,
+	ChangeListener, DocumentListener, ItemListener, MouseMotionListener,
+	MouseListener, MouseWheelListener
 {
 
 	@Parameter
@@ -79,12 +96,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	@Parameter
 	private StatusService statusServ;
 
-	public static final Color guess = Color.BLUE;
-	public static final Color custom = Color.GREEN;
-	public static final Color fit = Color.MAGENTA;
-	public static final Color selected = Color.YELLOW;
-	public static final Color unselected = Color.RED;
-	
+	private static final Color guess = Color.BLUE;
+	private static final Color custom = Color.GREEN;
+	private static final Color fit = Color.MAGENTA;
+	private static final Color selected = Color.YELLOW;
+	private static final Color unselected = Color.RED;
+
 	private boolean auto = true; // AUTO Lane size mode is ON
 	private boolean selectionUpdate = false; // active updating is off
 	private boolean fitDone = false; // Keep track of whether fit data exists
@@ -94,7 +111,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private String roiSelected = "none";
 	private String roiPreviouslySelected = "none";
 
-	final String warningFit =
+	private final String warningFit =
 		"The current plots will be reset and the current fitting data will be lost.";
 
 	private Plotter plotter;
@@ -144,7 +161,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private JPanel dialogPanel;
 	private final JFrame frame;
 
-	
 	public MainDialog(final Context context, final String string,
 		final ImagePlus imp)
 	{
@@ -292,10 +308,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			@Override
 			public void windowClosing(final WindowEvent e) {
 				cleanupAndClose();
-				final List<Display<?>> displays = displayServ.getDisplays();
-				for (final Display<?> d : displays)
-					d.close();
-				log.info("Gauss Fit terminated.");
 			}
 		});
 
@@ -316,30 +328,77 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		return false;
 	}
 
-	private double askPeak(final boolean add, final int lane, final double y,
-		final double v)
+	private double askPeak(final boolean add, final int lane, double y,
+		double a)
 	{
-		String title, action, message;
-		String fwhm = "FWHM = \u03C3 * (2 * \u221A (2 * ln(2))";
+		String title, action, message, fromTo;
+		final String fwhmString = "FWHM = \u03C3 * (2 * \u221A (2 * ln(2))";
+		double fwhmValue = 0.0;
+
 		if (add) {
 			title = "ADD PEAK";
 			action = "add";
-			message = "If the new peak is located less than 2 px away from an exisitng peak,\n the existing peak will be replaced with the new one.";
+			message = "If the new peak is located less than " +
+				(int) Fitter.peakDistanceTol +
+				" px away from an exisitng peak,\nthe existing peak will be replaced with the new one.";
+			fromTo = "to the custom list";
 		}
 		else {
 			title = "REMOVE PEAK";
 			action = "remove";
-			message = "The custom peak that is closest\n to this peak will be removed";
+			message =
+				"The custom peak that is closest\n to this peak will be removed";
+			fromTo = "from the custom list.";
 		}
-		final GenericDialog gd = new GenericDialog(title);
-		gd.addMessage("You are about to " + action + " this peak");
-		gd.addMessage(message);
-		gd.addMessage(String.format("Lane: \t%2d", lane));
-		gd.addMessage(String.format("Distance: \t%10.1f", y));
-		gd.addMessage(String.format("Intensity: \t%.0f", v));
+
+		boolean foundGuess = false;
+		boolean foundCustom = false;
+		for (final Peak p : fitter.getGuessPeaks(lane)) {
+			if (FastMath.abs(y - p.getMean()) <= Fitter.peakDistanceTol) {
+				y = p.getMean();
+				a = p.getNorm();
+				fwhmValue = p.getSigma();
+				foundGuess = true;
+				break;
+			}
+		}
+		for (final Peak p : fitter.getCustomPeaks(lane)) {
+			if (FastMath.abs(y - p.getMean()) <= Fitter.peakDistanceTol) {
+				y = p.getMean();
+				a = p.getNorm();
+				fwhmValue = p.getSigma();
+				foundCustom = true;
+				break;
+			}
+		}
+
 		if (add) {
-			gd.addMessage("Estimate a FWHM, " + fwhm);
-			gd.addNumericField("FWHM", 5.0, 1);
+			action = "replace";
+			if (foundCustom && foundGuess) {
+				fromTo = " in the custom list and the guesslist.";
+			}
+			else if (foundCustom && !foundGuess) {
+				fromTo = " in the custom list.";
+			}
+			else if (!foundCustom && foundGuess) {
+				fromTo = " in the guesslist.";
+			}
+		}
+		if (!foundCustom) fwhmValue = 5.0;
+		final GenericDialog gd = new GenericDialog(title);
+		if (add || (!add && foundCustom)) {
+			gd.addMessage("You are about to " + action + " this peak\n" +	fromTo);
+			gd.addMessage(message);
+			gd.addMessage(String.format("Lane: \t%2d", lane));
+			gd.addMessage(String.format("Distance: \t%10.1f", y));
+			gd.addMessage(String.format("Intensity: \t%.0f", a));
+		} 
+		else if (!add && !foundCustom) {
+			gd.addMessage("No custom peak found nearby. Try again!");
+		}
+		if (add) {
+			gd.addMessage("Estimate the full width at half maximum,\n" + fwhmString);
+			gd.addNumericField("FWHM", fwhmValue, 1);
 		}
 		gd.showDialog();
 		if (gd.wasOKed()) {
@@ -543,14 +602,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonResetCustomPeaks.setEnabled(false);
 		for (final Roi r : rois) {
 			final Rectangle rect = r.getBounds();
-			if (rect.getMinX() < 0.95*IW && rect.getMinY() < 0.95*IH) plotter.updateProfile(
-				r);
+			if (rect.getMinX() < 0.95 * IW && rect.getMinY() < 0.95 * IH) plotter
+				.updateProfile(r);
 		}
 		plotter.plotsMontage();
 	}
 
-	public void cleanupAndClose() {
-		// Remove Listeners on imp
+	private void cleanupAndClose() {
+		// Remove Listeners on gel image and close plugin-associated windows in
+		// preparation for exit
 		if (imp != null) {
 			imp.getCanvas().removeMouseListener(this);
 			imp.getCanvas().removeMouseMotionListener(this);
@@ -560,8 +620,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			imp.setOverlay(null);
 		}
 		plotter.closePlot();
+		for (final Display<?> d : displayServ.getDisplays())
+			d.close();
+		log.info("Gauss Fit terminated.");
 	}
 
+	/**
+	 * @return @param nLanes, the number of ROIs currently present in the gel
+	 *         image
+	 */
 	public int getNLanes() {
 		try {
 			return Integer.parseInt(textNLanes.getText().trim());
@@ -571,6 +638,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/**
+	 * @return the currently selected @param degBG, the degree of the polynomial
+	 *         representing the background signal
+	 */
 	public int getDegBG() {
 		try {
 			degBG = Integer.parseInt(textDegBG.getText().trim());
@@ -582,7 +653,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	/**
-	 * @return the currently selected @param tolpk, the tolerance on the peak
+	 * @return the currently selected @param tolPK, the tolerance on the peak
 	 *         selection
 	 */
 	public double getTolPK() {
@@ -595,6 +666,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/**
+	 * @return ROI identified by title. Typically "Lane n", where int n > 0
+	 */
 	public Roi getRoi(final String title) {
 		final Iterator<Roi> roiIter = rois.iterator();
 		while (roiIter.hasNext()) {
@@ -605,7 +679,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	/**
-	 * @return @param(rois), the current ROI set
+	 * @return @param rois, the current ROI set
 	 */
 	public ArrayList<Roi> getRois() {
 		return rois;
@@ -678,14 +752,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		redoProfilePlots();
 		fitter.resetAllFitter();
 		fitter.setInputData(plotter.getProfiles());
-		
+
 		// Close results table
 		for (final Display<?> d : displayServ.getDisplays()) {
 			if (d.getName().equals("Results Display")) d.close();
 		}
 	}
 
-	// TextField Listeners
+	// TextField Document Listeners (change, remove, insert)
 	@Override
 	public void changedUpdate(final DocumentEvent e) {
 		changeTextFieldVariable(e);
@@ -724,22 +798,23 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 						.getType() != DataSeries.CUSTOMPEAKS) dataIter.remove();
 				}
 			}
-			
+
 			// Reset fit
 			if (fitDone) {
 				fitter.resetFit();
-			} else {
+			}
+			else {
 				fitter.setInputData(plotter.getProfiles());
 			}
-			
+
 			// Close results table
 			for (final Display<?> d : displayServ.getDisplays()) {
 				if (d.getName().equals("Results Display")) d.close();
 			}
-			
+
 			final ArrayList<ArrayList<DataSeries>> fitted = fitter.doFit();
 			fitDone = true;
-			
+
 			for (final ArrayList<DataSeries> f : fitted) {
 				final MyPlot plot = plotter.getPlots().get(fitted.indexOf(f));
 				plot.addDataSeries(f);
@@ -789,7 +864,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				: Plotter.plotSelColor;
 			for (final MyPlot p : plotter.getPlots())
 				p.setSelectedBGColor(plotBGColor);
-
 		}
 
 		if (e.getSource().equals(buttonResetCustomPeaks)) {
@@ -934,14 +1008,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 					}
 					// Fitter has 1 CustomPeaks object for each plot/lane
 					if (addPeak && !removePeak) { // Add Peak
-						final double sd = askPeak(true, lane, y, intensity)/(2 * FastMath.sqrt(2 * FastMath.log(2)));
+						final double sd = askPeak(true, lane, y, intensity) / (2 * FastMath
+							.sqrt(2 * FastMath.log(2)));
 						if (sd != 0.0) { // not cancelled
 							fitter.addCustomPeak(lane, new Peak(lane, intensity, y, sd));
 						}
 					}
 					else if (!addPeak && removePeak) { // Remove Peak
 						// Remove points previously added MANUALLY, not implemented
-						// Does not make sense to remove points that where detected automatically.
+						// Does not make sense to remove points that where detected
+						// automatically.
 						// Better to increase threshold to avoid detecting noise.
 						// Use remove feature to remove a previously added custom peak.
 						final double sd = askPeak(false, lane, y, intensity);

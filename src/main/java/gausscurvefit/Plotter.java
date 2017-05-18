@@ -1,3 +1,20 @@
+/**
+ * Gauss Fit
+ * GelLanesFit.java
+ * author: Rick Ziraldo, 2017
+ * The /University of Texas at Dallas, Richardson, TX
+ * http://www.utdallas.edu
+ *
+ * Feature: Fitting of multiple Gaussian functions to intensity profiles along the gel lanes
+ * Gauss Fit is a tool for fitting gaussian profiles and estimating
+ * the profile parameters on selected lanes in gel electrophoresis images.
+ *
+ *    The GaussianArrayCurveFitter class is implemented using
+ *    Abstract classes from Apache Commons project
+ *
+ *    The source code is maintained and made available on GitHub
+ *    https://github.com/rickud/gauss-curve-fit
+ */
 
 package gausscurvefit;
 
@@ -10,7 +27,6 @@ import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 
-import gausscurvefit.Peak;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.ImageStack;
@@ -153,8 +169,7 @@ public class Plotter {
 		final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
 		while (dataIter.hasNext()) {
 			final DataSeries d = dataIter.next();
-			if (d.getType() == DataSeries.CUSTOMPEAKS)
-			{
+			if (d.getType() == DataSeries.CUSTOMPEAKS) {
 				dataIter.remove();
 			}
 		}
@@ -268,6 +283,128 @@ public class Plotter {
 	}
 }
 
+class MyPlot implements Comparable<MyPlot> {
+
+	private Plot plot;
+
+	private final int number;
+
+	private final String title;
+	private final String xLabel;
+	private final String yLabel;
+
+	private ArrayList<DataSeries> data = new ArrayList<>();
+	private double xmin;
+	private double xmax;
+	private double ymin;
+	private double ymax;
+
+	private boolean selected = false;
+
+	private final Color unselectedBG = Color.white;
+
+	private Color selectedBG = Color.white;
+
+	public MyPlot(final String title, final String xLabel, final String yLabel) {
+		this.title = title;
+		this.xLabel = xLabel;
+		this.yLabel = yLabel;
+		this.number = Integer.parseInt(title.substring(5));
+	}
+
+	private void sortDataSeries() {
+		Collections.sort(data);
+		// Every time the DataSeries are sorted, the min/max are aslo updated
+		final Iterator<DataSeries> dataIter = data.iterator();
+		int nullIndex = 0;
+		xmin = Double.MAX_VALUE;
+		xmax = Double.MIN_VALUE;
+		ymin = Double.MAX_VALUE;
+		ymax = Double.MIN_VALUE;
+		while (dataIter.hasNext()) {
+			final DataSeries d = dataIter.next();
+			if (d == null) break;
+			double xmin2, xmax2, ymin2, ymax2;
+			final RealVector x = new ArrayRealVector(d.getX());
+			final RealVector y = new ArrayRealVector(d.getY());
+			xmin2 = x.getMinValue();
+			xmax2 = x.getMaxValue();
+			ymin2 = y.getMinValue();
+			ymax2 = y.getMaxValue();
+			if (xmin2 < xmin) xmin = xmin2;
+			if (xmax2 > xmax) xmax = xmax2;
+			if (ymin2 < ymin) ymin = ymin2;
+			if (ymax2 > ymax) ymax = ymax2;
+			nullIndex++;
+		}
+		data = new ArrayList<>(data.subList(0, nullIndex));
+	}
+
+	public void addDataSeries(final DataSeries d) {
+		data.add(d);
+		sortDataSeries();
+	}
+
+	public void addDataSeries(final ArrayList<DataSeries> d) {
+		data.addAll(d);
+		sortDataSeries();
+	}
+
+	public double[] getDataMinMax() {
+		return new double[] { xmin, xmax, ymin, ymax };
+	}
+
+	public ArrayList<DataSeries> getDataSeries() {
+		return data;
+	}
+
+	public int getNumber() {
+		return number;
+	}
+
+	public Plot getPlot() {
+		return plot;
+	}
+
+	public boolean isSelected() {
+		return selected;
+	}
+
+	public void setSelected(final boolean s) {
+		selected = s;
+	}
+
+	public void setSelectedBGColor(final Color color) {
+		selectedBG = color;
+	}
+
+	public void updatePlot() {
+		final Plot newPlot = new Plot(title, xLabel, yLabel);
+		newPlot.useTemplate(plot, Plot.COPY_LABELS + Plot.COPY_LEGEND +
+			Plot.COPY_SIZE);
+		if (plot != null) plot.dispose();
+		plot = newPlot;
+		if (selected) plot.setBackgroundColor(selectedBG);
+		else plot.setBackgroundColor(unselectedBG);
+		sortDataSeries();
+		for (final DataSeries d : data) {
+			plot.setColor(d.getColor());
+			if (d.getType() == DataSeries.CUSTOMPEAKS) {
+				plot.addPoints(d.getX().toArray(), d.getY().toArray(), Plot.CIRCLE);
+			}
+			else {
+				plot.addPoints(d.getX().toArray(), d.getY().toArray(), Plot.LINE);
+			}
+		}
+		plot.setLimits(xmin, xmax, ymin, ymax);
+	}
+
+	@Override
+	public int compareTo(final MyPlot p) {
+		return (number - p.getNumber());
+	}
+}
+
 class DataSeries implements Comparable<DataSeries> {
 
 	private final String name; // Name for Legend
@@ -339,12 +476,12 @@ class DataSeries implements Comparable<DataSeries> {
 		return type;
 	}
 
-	public double[] getX() {
-		return x.toArray();
+	public RealVector getX() {
+		return x;
 	}
 
-	public double[] getY() {
-		return y.toArray();
+	public RealVector getY() {
+		return y;
 	}
 
 	public Color getColor() {
@@ -369,125 +506,5 @@ class DataSeries implements Comparable<DataSeries> {
 	@Override
 	public int compareTo(final DataSeries d) {
 		return (type - d.getType());
-	}
-}
-
-class MyPlot implements Comparable<MyPlot> {
-
-	private Plot plot;
-
-	private boolean selected = false;
-	private final int number;
-
-	private final String title;
-	private final String xLabel;
-	private final String yLabel;
-
-	private ArrayList<DataSeries> data = new ArrayList<>();
-	double xmin;
-	double xmax;
-	double ymin;
-	double ymax;
-
-	private Color selectedBG = Color.white;
-	private final Color unselectedBG = Color.white;
-
-	public MyPlot(final String title, final String xLabel, final String yLabel) {
-		this.title = title;
-		this.xLabel = xLabel;
-		this.yLabel = yLabel;
-		this.number = Integer.parseInt(title.substring(5));
-	}
-
-	public void updatePlot() {
-		final Plot newPlot = new Plot(title, xLabel, yLabel);
-		newPlot.useTemplate(plot, Plot.COPY_LABELS + Plot.COPY_LEGEND +
-			Plot.COPY_SIZE);
-		if (plot != null) plot.dispose();
-		plot = newPlot;
-		if (selected) plot.setBackgroundColor(selectedBG);
-		else plot.setBackgroundColor(unselectedBG);
-		sortDataSeries();
-		for (final DataSeries d : data) {
-			plot.setColor(d.getColor());
-			if (d.getType() == DataSeries.CUSTOMPEAKS) {
-				plot.addPoints(d.getX(), d.getY(), Plot.CIRCLE);
-			}
-			else {
-				plot.addPoints(d.getX(), d.getY(), Plot.LINE);
-			}
-		}
-		plot.setLimits(xmin, xmax, ymin, ymax);
-	}
-
-	private void sortDataSeries() {
-		Collections.sort(data);
-		// Every time the DataSeries are sorted, the min/max are aslo updated
-		final Iterator<DataSeries> dataIter = data.iterator();
-		int nullIndex = 0;
-		xmin = Double.MAX_VALUE;
-		xmax = Double.MIN_VALUE;
-		ymin = Double.MAX_VALUE;
-		ymax = Double.MIN_VALUE;
-		while (dataIter.hasNext()) {
-			final DataSeries d = dataIter.next();
-			if (d == null) break;
-			double xmin2, xmax2, ymin2, ymax2;
-			final RealVector x = new ArrayRealVector(d.getX());
-			final RealVector y = new ArrayRealVector(d.getY());
-			xmin2 = x.getMinValue();
-			xmax2 = x.getMaxValue();
-			ymin2 = y.getMinValue();
-			ymax2 = y.getMaxValue();
-			if (xmin2 < xmin) xmin = xmin2;
-			if (xmax2 > xmax) xmax = xmax2;
-			if (ymin2 < ymin) ymin = ymin2;
-			if (ymax2 > ymax) ymax = ymax2;
-			nullIndex++;
-		}
-		data = new ArrayList<>(data.subList(0, nullIndex));
-	}
-
-	public void addDataSeries(final DataSeries d) {
-		data.add(d);
-		sortDataSeries();
-	}
-
-	public void addDataSeries(final ArrayList<DataSeries> d) {
-		data.addAll(d);
-		sortDataSeries();
-	}
-
-	public ArrayList<DataSeries> getDataSeries() {
-		return data;
-	}
-
-	public Plot getPlot() {
-		return plot;
-	}
-
-	public int getNumber() {
-		return number;
-	}
-
-	public double[] getDataMinMax() {
-		return new double[] { xmin, xmax, ymin, ymax };
-	}
-
-	public boolean isSelected() {
-		return selected;
-	}
-
-	public void setSelected(final boolean s) {
-		selected = s;
-	}
-
-	public void setSelectedBGColor(final Color color) {
-		selectedBG = color;
-	}
-
-	@Override
-	public int compareTo(final MyPlot p) {
-		return (number - p.getNumber());
 	}
 }

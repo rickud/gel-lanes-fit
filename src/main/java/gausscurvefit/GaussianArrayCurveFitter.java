@@ -36,33 +36,6 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private static final GaussianArray.Parametric FUNCTION =
 		new GaussianArray.Parametric();
 
-//		/** {@inheritDoc} */
-//		@Override
-//		public double value(final double x, final double... p) {
-//			double v = Double.POSITIVE_INFINITY;
-//			try {
-//				v = super.value(x, p);
-//			} catch (final NotStrictlyPositiveException e) { // NOPMD
-//				// Do nothing.
-//			}
-//			return v;
-//		}
-//
-//		/** {@inheritDoc} */
-//		@Override
-//		public double[] gradient(final double x, final double... p) {
-//			RealVector v = new ArrayRealVector();
-//			for (int i = 0; i < p.length; i++) {
-//				v = v.append(Double.POSITIVE_INFINITY);
-//			}
-//			try {
-//				v = new ArrayRealVector(super.gradient(x, p));
-//			} catch (final NotStrictlyPositiveException e) { // NOPMD
-//				System.out.println(e.getMessage());
-//			}
-//			return v.toArray();
-//		}
-
 	/** Initial guess. */
 	private final double[] initialGuess;
 	/** Maximum number of iterations of the optimization algorithm. */
@@ -71,7 +44,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private final int deg;
 
 	/**
-	 * Contructor used by the factory methods.
+	 * Constructor used by the factory methods.
 	 *
 	 * @param initialGuess Initial guess. If set to {@code null}, the initial
 	 *          guess will be estimated using the {@link ParameterGuesser}.
@@ -152,8 +125,6 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		final GaussianArrayParameterValidator parValid =
 			new GaussianArrayParameterValidator(startPoint, xx, target);
 
-		// Return a new least squares problem set up to fit a Gaussian curve to
-		// the observed points
 		return new LeastSquaresBuilder().parameterValidator(parValid)
 			.maxEvaluations(Integer.MAX_VALUE).maxIterations(maxIter).lazyEvaluation(
 				false).start(startPoint).target(target).weight(new DiagonalMatrix(
@@ -164,8 +135,6 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	/** {@inheritDoc} */
 	@Override
 	protected LeastSquaresOptimizer getOptimizer() {
-		// Return a new least squares problem set up to fit a univariate curve
-		// to the observed points.
 		return new LevenbergMarquardtOptimizer().withCostRelativeTolerance(1e-12)
 			.withOrthoTolerance(1e-12).withParameterRelativeTolerance(1e-10);
 	}
@@ -336,25 +305,26 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				boolean foundLWHM = false;
 				double LWHM = 0.0;
 				double RWHM = 0.0;
-				double FWHM = (xvals.getMaxValue()-xvals.getMinValue())/2;
+				double FWHM = (xvals.getMaxValue() - xvals.getMinValue()) / 2;
 
 				final double yRange = yvals.getEntry(maximaIdx[m]) - yMin;
 				double hm = yRange / 2.0; // Actual profile value; incledes offset
 				final int pkPos = maximaIdx[m];
-				
+
 				final int range = 3;
 				final double inc = 1.05;
 				double peakDistance = 0.0;
-				
+
 				int count = 0;
 				for (int p = m - range; p < m + range; p++) {
 					if (p >= 0 && p < maximaIdx.length - 1) {
-						peakDistance += xvals.getEntry(maximaIdx[p + 1]) - xvals.getEntry(maximaIdx[p]); 
+						peakDistance += xvals.getEntry(maximaIdx[p + 1]) - xvals.getEntry(
+							maximaIdx[p]);
 						count++;
-					} 
+					}
 				}
-				peakDistance = peakDistance/count;
-				
+				peakDistance = peakDistance / count;
+
 				while (!(foundFWHM && FWHM < peakDistance) && hm * inc < 0.9 * yRange) {
 					foundFWHM = false;
 					foundRWHM = false;
@@ -362,20 +332,22 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					// Right side, check 3 consecutive points for smoothing
 					int p = 0;
 					while (pkPos + p + 2 < xvals.getDimension() && !foundRWHM) {
-						if (yvals.getEntry(pkPos + p) < (hm + yMin) && yvals.getEntry(pkPos + p +
-							1) < (hm + yMin) && yvals.getEntry(pkPos + p + 2) < (hm + yMin))
+						if (yvals.getEntry(pkPos + p) < (hm + yMin) && yvals.getEntry(
+							pkPos + p + 1) < (hm + yMin) && yvals.getEntry(pkPos + p +
+								2) < (hm + yMin))
 						{
 							foundRWHM = true;
 							RWHM = xvals.getEntry(pkPos + p) - means[m];
 						}
 						p++;
 					}
-									
+
 					// Left side, check 3 consecutive points for smoothing
 					p = 0;
 					while (pkPos - p - 2 >= 0 && !foundLWHM) {
-						if (yvals.getEntry(pkPos - p) < (hm + yMin) && yvals.getEntry(pkPos - p -
-							1) < (hm + yMin) && yvals.getEntry(pkPos - p - 2) < (hm + yMin))
+						if (yvals.getEntry(pkPos - p) < (hm + yMin) && yvals.getEntry(
+							pkPos - p - 1) < (hm + yMin) && yvals.getEntry(pkPos - p -
+								2) < (hm + yMin))
 						{
 							foundLWHM = true;
 							LWHM = means[m] - xvals.getEntry(pkPos - p);
@@ -385,13 +357,14 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 					if (foundLWHM && foundRWHM) {
 						foundFWHM = true;
-						FWHM = 2*FastMath.min(LWHM, RWHM);
+						FWHM = 2 * FastMath.min(LWHM, RWHM);
 					}
 
 					// Do another round with larger hm
 					hm = hm * inc;
 				}
-				System.out.println("PeakDist: " + peakDistance + " (" + LWHM +":"+ RWHM + "); " +hm/yRange);
+				System.out.println("PeakDist: " + peakDistance + " (" + LWHM + ":" +
+					RWHM + "); " + hm / yRange);
 				sds[m] = FWHM / (2 * FastMath.sqrt(2 * FastMath.log(2)));
 				gaussGuess = gaussGuess.append(norms[m]);
 				gaussGuess = gaussGuess.append(means[m]);
@@ -511,19 +484,21 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.minSD = 2.0;
 		}
 
-		private double peakDistance(int i) {
-			int m = i - 1; // means positioned right before SDs
+		private double peakDistance(final int i) {
+			final int m = i - 1; // means positioned right before SDs
 			final int range = 3;
 			double peakDistance = 0.0;
-			
+
 			int count = 0;
-			for (int p = m - 3*range; p < m + 3*range; p += 3) {
-				if (p >= (int) initialParameterSet[0] + 2 && p < initialParameterSet.length - 4) {
-					peakDistance += initialParameterSet[p + 3] - initialParameterSet[p]; 
+			for (int p = m - 3 * range; p < m + 3 * range; p += 3) {
+				if (p >= (int) initialParameterSet[0] + 2 &&
+					p < initialParameterSet.length - 4)
+				{
+					peakDistance += initialParameterSet[p + 3] - initialParameterSet[p];
 					count++;
-				} 
+				}
 			}
-			return peakDistance/count;
+			return peakDistance / count;
 		}
 
 		@Override
@@ -565,7 +540,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 						initialParameterSet[i] + sign * maxMeanDiff);
 				}
 				if ((i - gaussStart) % 3 == 2) {
-					double maxSD = peakDistance(i);
+					final double maxSD = peakDistance(i);
 					if (param.getEntry(i) > maxSD) param.setEntry(i, maxSD);
 				}
 			}
