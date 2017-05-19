@@ -12,7 +12,7 @@
 
 	<groupId>imagej-plugins</groupId>
 	<artifactId>GaussianFit</artifactId>
-	<version>1.0.3-SNAPSHOT</version>
+	<version>1.0.3</version>
 
 	<name> Gauss Fit</name>
 	<description>This plugin fits Gaussians around local maxima.</description>
