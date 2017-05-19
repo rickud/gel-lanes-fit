@@ -203,7 +203,12 @@ class Fitter {
 		}
 		
 		double[] firstGuess = peaksToArray(getGuessPeaks(lane));
-		if (getFittedPeaks(lane).isEmpty()) {
+		boolean foundList = false;
+		for (PeaksList pl : allPeaksLists) {
+			if (pl.getLane() == lane) foundList = true;
+		}
+		
+		if (!foundList) {
 			final ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(
 				obs.toList(), tolpk, degBG);
 			PeaksList pl = new PeaksList(lane, pg);
