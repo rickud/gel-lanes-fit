@@ -35,6 +35,7 @@ import java.awt.event.MouseWheelEvent;
 import java.awt.event.MouseWheelListener;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.event.WindowListener;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -84,7 +85,7 @@ import ij.gui.TextRoi;
 @SuppressWarnings("serial")
 public class MainDialog extends JFrame implements ActionListener,
 	ChangeListener, DocumentListener, ItemListener, MouseMotionListener,
-	MouseListener, MouseWheelListener
+	MouseListener, MouseWheelListener, WindowListener
 {
 
 	@Parameter
@@ -191,6 +192,7 @@ public class MainDialog extends JFrame implements ActionListener,
 		imp.getCanvas().addMouseWheelListener(this);
 		imp.getWindow().addMouseListener(this);
 		imp.getWindow().addMouseMotionListener(this);
+		imp.getWindow().addWindowListener(this);
 
 		roiButtonsPanel = new JPanel();
 		buttonAuto = new JRadioButton("Automatic Rectangle Selection");
@@ -372,7 +374,7 @@ public class MainDialog extends JFrame implements ActionListener,
 			}
 		}
 
-		if (add) {
+		if (add && (foundCustom || foundGuess)) {
 			action = "replace";
 			if (foundCustom && foundGuess) {
 				fromTo = " in the custom list and the guesslist.";
@@ -403,6 +405,7 @@ public class MainDialog extends JFrame implements ActionListener,
 		gd.showDialog();
 		if (gd.wasOKed()) {
 			if (add) return gd.getNextNumber();
+			if (!add && !foundCustom) return 0.0;
 			return -1.0; // Removing peak
 		}
 		return 0.0; // If Dialog Cancelled
@@ -622,7 +625,7 @@ public class MainDialog extends JFrame implements ActionListener,
 		plotter.closePlot();
 		for (final Display<?> d : displayServ.getDisplays())
 			d.close();
-		log.info("Gauss Fit terminated.");
+		log.info("Gel Lanes Fit terminated.");
 	}
 
 	/**
@@ -891,13 +894,14 @@ public class MainDialog extends JFrame implements ActionListener,
 						}
 					}
 				}
+				reDrawROIs(imp, "none");
 				plotter.plotsMontage();
 			}
 
 		}
 
 		if (e.getSource().equals(buttonClose)) {
-			if (askUser("Would you like to exit?")) {
+			if (askUser("Would you like to quit Gel Lanes Fit?")) {
 				frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING));
 			}
 		}
@@ -1025,6 +1029,7 @@ public class MainDialog extends JFrame implements ActionListener,
 							fitter.removeCustomPeak(lane, new Peak(lane, intensity, y));
 						}
 					}
+					reDrawROIs(imp, "none");
 					plotter.updateCustomPeaks(lane, fitter.getCustomPeaks(lane));
 					plotter.plotsMontage();
 				}
@@ -1128,5 +1133,48 @@ public class MainDialog extends JFrame implements ActionListener,
 			if (fitDone && !askUser(warningFit)) return;
 			redoProfilePlots();
 		}
+	}
+
+	@Override
+	public void windowOpened(WindowEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void windowClosing(WindowEvent e) {
+		if (e.getSource() == imp.getWindow()) {
+			frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING));
+		}
+	}
+
+	@Override
+	public void windowClosed(WindowEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void windowIconified(WindowEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void windowDeiconified(WindowEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void windowActivated(WindowEvent e) {
+		// TODO Auto-generated method stub
+		
+	}
+
+	@Override
+	public void windowDeactivated(WindowEvent e) {
+		// TODO Auto-generated method stub
+		
 	}
 }

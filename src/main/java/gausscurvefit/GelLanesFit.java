@@ -40,7 +40,7 @@ import ij.gui.ImageWindow;
 import ij.io.Opener;
 
 @Plugin(type = Command.class, headless = true,
-	menuPath = "Plugins>Gel Tools>Gauss Fit")
+	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
 public class GelLanesFit implements Command {
 
 	/**

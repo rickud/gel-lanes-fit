@@ -59,6 +59,8 @@ class Fitter {
 	private StatusService statusServ;
 
 	public static final double peakDistanceTol = 2;
+	private static final double sd2FWHM = 2 * FastMath.sqrt(2 *
+		FastMath.log(2));
 	private int degBG;
 	private double tolPK;
 	private final String title; // for the datafile, main image's title
@@ -127,12 +129,11 @@ class Fitter {
 				tableCol[1].add(band);
 				tableCol[2].add(String.format("%1$.1f", m));
 				tableCol[3].add(String.format("%1$.1f", n));
-				tableCol[4].add(String.format("%1$.2f", s));
+				tableCol[4].add(String.format("%1$.2f", s * sd2FWHM));
 				tableCol[5].add(String.format("%1$.1f", a));
 				tableCol[6].add(String.format("%1$.1f", m0));
 				tableCol[7].add(String.format("%1$.1f", n0));
-				tableCol[8].add(String.format("%1$.2f", s0 * 2 * FastMath.sqrt(2 *
-					FastMath.log(2))));
+				tableCol[8].add(String.format("%1$.2f", s0 * sd2FWHM));
 				band++;
 			}
 		}
@@ -462,10 +463,12 @@ class PeaksList {
 
 	public void setGuessList(final ArrayList<Peak> guessList) {
 		this.guessList = guessList;
+		reGuess();
 	}
 
 	public void setAddList(final ArrayList<Peak> addList) {
 		this.addList = addList;
+		reGuess();
 	}
 
 	public void setFittedList(final ArrayList<Peak> fittedList) {
