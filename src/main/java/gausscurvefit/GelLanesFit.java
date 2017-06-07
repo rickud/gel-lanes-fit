@@ -56,7 +56,7 @@ public class GelLanesFit implements Command {
 	private static Context context;
 
 	// Default Parameters
-//TODO: private Thread mainWindowThread; // thread for the main window
+	// TODO: private Thread mainWindowThread; // thread for the main window
 	private Thread plotThread; // thread for plotting
 
 	private boolean setup = true;
@@ -69,8 +69,8 @@ public class GelLanesFit implements Command {
 	 * Initialization method
 	 */
 	public void init() {
-//		final double SW = IJ.getScreenSize().getWidth();
-//		final double SH = IJ.getScreenSize().getHeight();
+		//		final double SW = IJ.getScreenSize().getWidth();
+		//		final double SH = IJ.getScreenSize().getHeight();
 
 		imp = IJ.getImage();
 		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
@@ -82,8 +82,7 @@ public class GelLanesFit implements Command {
 
 		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
 			.getTolPK());
-		final Plotter plotter = new Plotter(imp);
-		plotter.create(md.getRois());
+		final Plotter plotter = new Plotter(imp, md.getRois());
 		md.setPlotter(plotter);
 		md.setFitter(fitter);
 
@@ -134,7 +133,7 @@ public class GelLanesFit implements Command {
 		try (InputStream input = loader.getResourceAsStream("about.properties")) {
 			props.load(input);
 			version = props.getProperty("version");
-			log.info("Gauss Fit - v" + version);
+			log.info("Gauss Fit - v" + version + "\n");
 			input.close();
 		}
 		catch (final IOException e) {

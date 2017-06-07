@@ -363,8 +363,8 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					// Do another round with larger hm
 					hm = hm * inc;
 				}
-				System.out.println("PeakDist: " + peakDistance + " (" + LWHM + ":" +
-					RWHM + "); " + hm / yRange);
+//				System.out.println("PeakDist: " + peakDistance + " (" + LWHM + ":" +
+//					RWHM + "); " + hm / yRange);
 				sds[m] = FWHM / (2 * FastMath.sqrt(2 * FastMath.log(2)));
 				gaussGuess = gaussGuess.append(norms[m]);
 				gaussGuess = gaussGuess.append(means[m]);

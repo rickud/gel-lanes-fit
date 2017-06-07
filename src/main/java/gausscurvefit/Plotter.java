@@ -59,13 +59,10 @@ public class Plotter {
 	public static final Color plotAddSelColor = new Color(192, 255, 185);
 	public static final Color plotRemoveSelColor = new Color(255, 188, 185);
 
-	public Plotter(final ImagePlus imp) {
+	public Plotter(final ImagePlus imp, final ArrayList<Roi> rois) {
 		this.imp = imp;
 		this.plots = new ArrayList<>();
 		plotImage.setTitle("Profiles of " + imp.getShortTitle());
-	}
-
-	public void create(final ArrayList<Roi> rois) {
 		for (final Roi r : rois)
 			updateProfile(r);
 		plotsMontage();

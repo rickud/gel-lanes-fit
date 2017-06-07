@@ -161,7 +161,7 @@ class Fitter {
 			out.close();
 		}
 		catch (final IOException e) {
-			System.out.println("Exception");
+			log.info("Exception", e);
 		}
 	}
 
