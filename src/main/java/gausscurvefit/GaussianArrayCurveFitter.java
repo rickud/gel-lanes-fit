@@ -30,7 +30,7 @@ import org.apache.commons.math3.linear.DiagonalMatrix;
 import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.util.FastMath;
 
-public class GaussianArrayCurveFitter extends AbstractCurveFitter {
+class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 	/** Parametric function to be fitted. */
 	private static final GaussianArray.Parametric FUNCTION =
@@ -69,7 +69,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * @see #withStartPoint(double[])
 	 * @see #withMaxIterations(int)
 	 */
-	public static GaussianArrayCurveFitter create(final double peakTol,
+	static GaussianArrayCurveFitter create(final double peakTol,
 		final int deg)
 	{
 		return new GaussianArrayCurveFitter(null, Integer.MAX_VALUE, peakTol, deg);
@@ -81,7 +81,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * @param newStart new start point (initial guess)
 	 * @return a new instance.
 	 */
-	public GaussianArrayCurveFitter withStartPoint(final double[] newStart) {
+	GaussianArrayCurveFitter withStartPoint(final double[] newStart) {
 		return new GaussianArrayCurveFitter(newStart.clone(), maxIter, peakTol,
 			deg);
 	}
@@ -143,7 +143,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * Guesses the parameters {@code norm}, {@code mean}, and {@code sigma} of a
 	 * {@link GaussianArray.Parametric} based on the specified observed points.
 	 */
-	public static class ParameterGuesser {
+	static class ParameterGuesser {
 
 		/** Normalization factor. */
 		private RealVector norm = new ArrayRealVector();
@@ -166,7 +166,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * @throws NullArgumentException if {@code observations} is {@code null}.
 		 * @throws NumberIsTooSmallException if there are less than 3 observations.
 		 */
-		public ParameterGuesser(
+		ParameterGuesser(
 			final Collection<WeightedObservedPoint> observations,
 			final double peakTol, final int deg)
 		{
@@ -204,7 +204,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 *         <li>Standard deviation</li>
 		 *         </ul>
 		 */
-		public double[] guess() {
+		double[] guess() {
 			RealVector guess = new ArrayRealVector();
 			guess = guess.append(poly);
 			for (int vv = 0; vv < norm.getDimension(); vv++) {
@@ -457,7 +457,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * {@code GaussianArray.Parametric} for applied constraints, based on the
 	 * specified points and initial guess.
 	 */
-	public static class GaussianArrayParameterValidator implements
+	private static class GaussianArrayParameterValidator implements
 		ParameterValidator
 	{
 
@@ -469,7 +469,7 @@ public class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private final double maxMeanDiff;
 		private final int gNumber;
 
-		public GaussianArrayParameterValidator(final double[] initialGuess,
+		private GaussianArrayParameterValidator(final double[] initialGuess,
 			final double[] xtarget, final double[] ytarget)
 		{
 			this.gNumber = (initialGuess.length - (int) initialGuess[0] - 2) / 3; // #

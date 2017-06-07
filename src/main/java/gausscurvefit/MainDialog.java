@@ -82,8 +82,8 @@ import ij.gui.Overlay;
 import ij.gui.Roi;
 import ij.gui.TextRoi;
 
-@SuppressWarnings("serial")
-public class MainDialog extends JFrame implements ActionListener,
+@SuppressWarnings("serial") 
+class MainDialog extends JFrame implements ActionListener,
 	ChangeListener, DocumentListener, ItemListener, MouseMotionListener,
 	MouseListener, MouseWheelListener, WindowListener
 {
@@ -112,7 +112,8 @@ public class MainDialog extends JFrame implements ActionListener,
 	private String roiSelected = "none";
 	private String roiPreviouslySelected = "none";
 
-	private final String warningFit = "The current plots will be reset and the current fitting data will be lost.";
+	private final String warningFit =
+		"The current plots will be reset and the current fitting data will be lost.";
 
 	private Plotter plotter;
 	private Fitter fitter;
@@ -161,9 +162,7 @@ public class MainDialog extends JFrame implements ActionListener,
 	private JPanel dialogPanel;
 	private final JFrame frame;
 
-	public MainDialog(final Context context, final String string,
-		final ImagePlus imp)
-	{
+	MainDialog(final Context context, final String string, final ImagePlus imp) {
 		context.inject(this);
 		frame = new JFrame(string);
 		rois = new ArrayList<>();
@@ -175,11 +174,11 @@ public class MainDialog extends JFrame implements ActionListener,
 		// Default lane size/offset (Just center 4 lanes in the image)
 		IW = imp.getWidth();
 		IH = imp.getHeight();
-		//		LW = 91;
-		//		LH = 531;
-		//		LSp = 108;
-		//		LHOff = 161;
-		//		LVOff = 87;
+		// LW = 91;
+		// LH = 531;
+		// LSp = 108;
+		// LHOff = 161;
+		// LVOff = 87;
 		LW = (int) Math.round(0.8 * IW / nLanes);
 		LH = (int) Math.round(IH * 0.8);
 		LSp = Math.round((IW - LW * nLanes) / (nLanes + 1));
@@ -340,15 +339,15 @@ public class MainDialog extends JFrame implements ActionListener,
 			title = "ADD PEAK";
 			action = "add";
 			message = "If the new peak is located less than " +
-					(int) Fitter.peakDistanceTol +
-					" px away from an exisitng peak,\nthe existing peak will be replaced with the new one.";
+				(int) Fitter.peakDistanceTol +
+				" px away from an exisitng peak,\nthe existing peak will be replaced with the new one.";
 			fromTo = "to the custom list";
 		}
 		else {
 			title = "REMOVE PEAK";
 			action = "remove";
 			message =
-					"The custom peak that is closest\n to this peak will be removed";
+				"The custom peak that is closest\n to this peak will be removed";
 			fromTo = "from the custom list.";
 		}
 
@@ -388,12 +387,12 @@ public class MainDialog extends JFrame implements ActionListener,
 		if (!foundCustom) fwhmValue = 5.0;
 		final GenericDialog gd = new GenericDialog(title);
 		if (add || (!add && foundCustom)) {
-			gd.addMessage("You are about to " + action + " this peak\n" +	fromTo);
+			gd.addMessage("You are about to " + action + " this peak\n" + fromTo);
 			gd.addMessage(message);
 			gd.addMessage(String.format("Lane: \t%2d", lane));
 			gd.addMessage(String.format("Distance: \t%10.1f", y));
 			gd.addMessage(String.format("Intensity: \t%.0f", a));
-		} 
+		}
 		else if (!add && !foundCustom) {
 			gd.addMessage("No custom peak found nearby. Try again!");
 		}
@@ -454,24 +453,6 @@ public class MainDialog extends JFrame implements ActionListener,
 		}
 	}
 
-	private boolean isEqualRoi(Roi roiA, Roi roiB) {
-		if (!roiA.getName().equals(roiB.getName())) return false;
-		if (roiA.getType() != roiB.getType()) return false;
-
-		if (roiA.getType() == Roi.RECTANGLE) {
-			Rectangle rA = roiA.getBounds();
-			Rectangle rB = roiA.getBounds();
-			if (rA.getWidth()  != rB.getWidth()  || 
-					rA.getHeight() != rB.getHeight() || 
-					rA.getMinX()   != rB.getMinX()   || 
-					rA.getMinY()   != rB.getMinY()) {
-				return false;
-			}
-		}		
-		// Add conditions for future supported types here
-		return true;
-	}
-
 	private void reDrawROIs(final ImagePlus imgPlus, final String roiName) {
 		if (!auto) {
 			// Housekeeping: Sort the rois based on name and remove null elements
@@ -497,6 +478,7 @@ public class MainDialog extends JFrame implements ActionListener,
 					return 0;
 				}
 			};
+			
 			Collections.sort(rois, nameComparator);
 			final Iterator<Roi> roisIter = rois.iterator();
 			int nullIndex = 0;
@@ -623,7 +605,7 @@ public class MainDialog extends JFrame implements ActionListener,
 		for (final Roi r : rois) {
 			final Rectangle rect = r.getBounds();
 			if (rect.getMinX() < 0.95 * IW && rect.getMinY() < 0.95 * IH) plotter
-			.updateProfile(r);
+				.updateProfile(r);
 		}
 		plotter.plotsMontage();
 	}
@@ -689,7 +671,7 @@ public class MainDialog extends JFrame implements ActionListener,
 	/**
 	 * @return ROI identified by title. Typically "Lane n", where int n > 0
 	 */
-	public Roi getRoi(final String title) {
+	private Roi getRoi(final String title) {
 		final Iterator<Roi> roiIter = rois.iterator();
 		while (roiIter.hasNext()) {
 			final Roi roi = roiIter.next();
@@ -800,7 +782,7 @@ public class MainDialog extends JFrame implements ActionListener,
 		if (e.getSource().equals(buttonFit)) {
 			if (fitDone && !askUser(warningFit)) return;
 			if (displayServ.getDisplay("Results Display") != null) displayServ
-			.getDisplay("Results Display").close();
+				.getDisplay("Results Display").close();
 
 			addPeak = false;
 			removePeak = false;
@@ -815,7 +797,7 @@ public class MainDialog extends JFrame implements ActionListener,
 				while (dataIter.hasNext()) {
 					final DataSeries d = dataIter.next();
 					if (d.getType() != DataSeries.PROFILE && d
-							.getType() != DataSeries.CUSTOMPEAKS) dataIter.remove();
+						.getType() != DataSeries.CUSTOMPEAKS) dataIter.remove();
 				}
 			}
 
@@ -852,7 +834,7 @@ public class MainDialog extends JFrame implements ActionListener,
 		if (e.getSource().equals(buttonAuto)) {
 			if (!auto) { // NOT already AUTO
 				if (askUser(
-						"When switching to AUTO mode, the current lane selections will be reset!"))
+					"When switching to AUTO mode, the current lane selections will be reset!"))
 				{
 					auto = true;
 					setSliderPanelEnabled(true);
@@ -889,7 +871,7 @@ public class MainDialog extends JFrame implements ActionListener,
 		if (e.getSource().equals(buttonResetCustomPeaks)) {
 			final GenericDialog gd = new GenericDialog("RESET CUSTOM PEAKS");
 			gd.addMessage(
-					"Select the plots from which the custom peaks must be removed");
+				"Select the plots from which the custom peaks must be removed");
 			final int[] lanes = getAllLaneNumbers();
 			final int rows = lanes.length;
 			final boolean[] defaultValues = new boolean[rows];
@@ -963,7 +945,8 @@ public class MainDialog extends JFrame implements ActionListener,
 						plotter.removeVLine(roiPN);
 					}
 					plotter.plotsMontage();
-					//					if (roiCurrent.equals("none") && imp.getRoi() != null) imp.killRoi();
+					// if (roiCurrent.equals("none") && imp.getRoi() != null)
+					// imp.killRoi();
 				}
 				else {
 					if (!roiSelected.equals("none")) { // Moving inside same ROI
@@ -1030,7 +1013,7 @@ public class MainDialog extends JFrame implements ActionListener,
 					// Fitter has 1 CustomPeaks object for each plot/lane
 					if (addPeak && !removePeak) { // Add Peak
 						final double sd = askPeak(true, lane, y, intensity) / (2 * FastMath
-								.sqrt(2 * FastMath.log(2)));
+							.sqrt(2 * FastMath.log(2)));
 						if (sd != 0.0) { // not cancelled
 							fitter.addCustomPeak(lane, new Peak(lane, intensity, y, sd));
 						}
@@ -1067,27 +1050,29 @@ public class MainDialog extends JFrame implements ActionListener,
 				final Roi roiNew = imp.getRoi();
 				if (roiNew != null) {
 					// If ROI exists and larger that 100 px
-					Rectangle rN = roiNew.getBounds();
-					if (rN.getWidth() * rN.getHeight() > 100) {	
+					final Rectangle rN = roiNew.getBounds();
+					if (rN.getWidth() * rN.getHeight() > 100) {
 						if (roiNew.getName() == null) { // It's a new ROI
 							log.info("Add Roi");
 							// Creating New ROI
 							// Find an available integer for lane name
 							boolean inRoiList = false;
 							int i = 0;
-							while (++i <= rois.size() + 1) {							
-								for (Roi r : rois) {
-									if (i == Integer.parseInt(r.getName().substring(5)))
-									{
-										inRoiList = true; break;
+							while (++i <= rois.size() + 1) {
+								for (final Roi r : rois) {
+									if (i == Integer.parseInt(r.getName().substring(5))) {
+										inRoiList = true;
+										break;
 									}
 								}
 								if (!inRoiList) {
-									roiNew.setName("Lane " + i); break;
+									roiNew.setName("Lane " + i);
+									break;
 								}
 								inRoiList = false;
 							}
-						}	else {
+						}
+						else {
 							log.info("Modify Roi");
 							// Moving/Resizing a specific ROI
 							final Iterator<Roi> roisIter = rois.iterator();
@@ -1100,7 +1085,7 @@ public class MainDialog extends JFrame implements ActionListener,
 							}
 						}
 						rois.add(roiNew);
-						roiSelected = roiNew.getName();		
+						roiSelected = roiNew.getName();
 						reDrawROIs(imp, roiSelected);
 						redoProfilePlots();
 					}
@@ -1131,39 +1116,39 @@ public class MainDialog extends JFrame implements ActionListener,
 	}
 
 	@Override
-	public void windowOpened(WindowEvent e) {
+	public void windowOpened(final WindowEvent e) {
 		// Nothing to do
 	}
 
 	@Override
-	public void windowClosing(WindowEvent e) {
+	public void windowClosing(final WindowEvent e) {
 		if (e.getSource() == imp.getWindow()) {
 			frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING));
 		}
 	}
 
 	@Override
-	public void windowClosed(WindowEvent e) {
+	public void windowClosed(final WindowEvent e) {
 		// Nothing to do
 	}
 
 	@Override
-	public void windowIconified(WindowEvent e) {
+	public void windowIconified(final WindowEvent e) {
 		// Nothing to do
 	}
 
 	@Override
-	public void windowDeiconified(WindowEvent e) {
+	public void windowDeiconified(final WindowEvent e) {
 		// Nothing to do
 	}
 
 	@Override
-	public void windowActivated(WindowEvent e) {
+	public void windowActivated(final WindowEvent e) {
 		// Nothing to do
 	}
 
 	@Override
-	public void windowDeactivated(WindowEvent e) {
+	public void windowDeactivated(final WindowEvent e) {
 		// Nothing to do
 	}
 }

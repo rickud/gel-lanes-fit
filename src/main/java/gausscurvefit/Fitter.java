@@ -187,7 +187,7 @@ class Fitter {
 		return outputAll;
 	}
 
-	public ArrayList<DataSeries> doFit(final DataSeries in) {
+	private ArrayList<DataSeries> doFit(final DataSeries in) {
 		final int lane = in.getLane();
 		final RealVector xvals = in.getX();
 		final RealVector yvals = in.getY();
