@@ -18,14 +18,38 @@
 
 package gausscurvefit;
 
+import java.awt.BasicStroke;
+import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.GridLayout;
+import java.awt.event.WindowEvent;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 
+import javax.swing.JFrame;
+import javax.swing.JPanel;
+import javax.swing.WindowConstants;
+import javax.swing.border.EmptyBorder;
+
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.chart.plot.XYPlot;
+import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
+import org.jfree.data.Range;
+import org.jfree.data.xy.XYDataset;
+import org.jfree.data.xy.XYSeries;
+import org.jfree.data.xy.XYSeriesCollection;
+import org.jfree.ui.ApplicationFrame;
+import org.jfree.ui.RectangleEdge;
+import org.jfree.ui.RectangleInsets;
+import org.jfree.ui.RefineryUtilities;
+
 
 import ij.IJ;
 import ij.ImagePlus;
@@ -36,30 +60,31 @@ import ij.gui.Roi;
 import ij.process.ColorProcessor;
 import ij.process.ImageProcessor;
 
-public class Plotter {
+class Plotter2 extends JFrame {
 
+	
 	private final ImagePlus plotImage = new ImagePlus();
 	private final ImagePlus imp;
-	private ArrayList<MyPlot> plots;
+	private final ArrayList<MyPlot> plots;
 
 	private final int rows = 2; // Number of plot Rows in display
 	private final int cols = 2; // Number of plot Rows in display
 
 	// Colors are listed here for consistent, easy modification
-	public static final Color vLineRegColor = new Color(127, 127, 127);
-	public static final Color vLineAddPeakColor = new Color(0, 185, 19);
-	public static final Color vLineRemovePeakColor = new Color(185, 7, 0);
+	static final Color vLineRegColor = new Color(127, 127, 127);
+	static final Color vLineAddPeakColor = new Color(0, 185, 19);
+	static final Color vLineRemovePeakColor = new Color(185, 7, 0);
 	// Colors for DataSeries in plots
-	public static final Color profileColor = Color.BLACK;
-	public static final Color gaussColor = Color.RED;
-	public static final Color bgColor = Color.BLUE;
-	public static final Color fittedColor = new Color(255, 153, 0);
+	private static final Color profileColor = Color.BLACK;
+	static final Color gaussColor = Color.RED;
+	static final Color bgColor = Color.BLUE;
+	static final Color fittedColor = new Color(255, 153, 0);
 	// Background Color of selected plot
-	public static final Color plotSelColor = new Color(240, 240, 240);
-	public static final Color plotAddSelColor = new Color(192, 255, 185);
-	public static final Color plotRemoveSelColor = new Color(255, 188, 185);
+	static final Color plotSelColor = new Color(240, 240, 240);
+	static final Color plotAddSelColor = new Color(192, 255, 185);
+	static final Color plotRemoveSelColor = new Color(255, 188, 185);
 
-	public Plotter(final ImagePlus imp, final ArrayList<Roi> rois) {
+	Plotter2(final ImagePlus imp, final ArrayList<Roi> rois) {
 		this.imp = imp;
 		this.plots = new ArrayList<>();
 		plotImage.setTitle("Profiles of " + imp.getShortTitle());
@@ -94,7 +119,7 @@ public class Plotter {
 			y), profile, Color.BLACK);
 	}
 
-	public void updateProfile(final Roi roi) {
+	void updateProfile(final Roi roi) {
 		final int roiNumber = Integer.parseInt(roi.getName().substring(5));
 		final DataSeries profile = getLaneProfile(roi);
 		profile.setColor(profileColor);
@@ -113,9 +138,7 @@ public class Plotter {
 		plots.add(newPlot);
 	}
 
-	public void setVLine(final int laneNumber, final double x,
-		final Color color)
-	{
+	void setVLine(final int laneNumber, final double x, final Color color) {
 		final Iterator<MyPlot> plotIter = plots.iterator();
 		while (plotIter.hasNext()) {
 			final MyPlot p = plotIter.next();
@@ -145,7 +168,7 @@ public class Plotter {
 		}
 	}
 
-	public void removeVLine(final int laneNumber) {
+	void removeVLine(final int laneNumber) {
 		for (final MyPlot p : plots) {
 			if (p.getNumber() == laneNumber) {
 				final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
@@ -162,7 +185,7 @@ public class Plotter {
 		}
 	}
 
-	public void removeCustomPeaks(final MyPlot p) {
+	private void removeCustomPeaks(final MyPlot p) {
 		final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
 		while (dataIter.hasNext()) {
 			final DataSeries d = dataIter.next();
@@ -173,7 +196,7 @@ public class Plotter {
 		p.updatePlot();
 	}
 
-	public void updateCustomPeaks(final int lane, final ArrayList<Peak> pl) {
+	void updateCustomPeaks(final int lane, final ArrayList<Peak> pl) {
 		for (final MyPlot p : plots) {
 			if (p.getNumber() == lane) {
 				removeCustomPeaks(p);
@@ -195,7 +218,7 @@ public class Plotter {
 	/**
 	 * Method to output plot collage to plotImage
 	 */
-	public void plotsMontage() {
+	void plotsMontage() {
 		// Construct the plot image
 		final int plotSpacing = 5; // black border
 		final ImageProcessor plot0 = plots.get(0).getPlot().getProcessor();
@@ -271,14 +294,193 @@ public class Plotter {
 		return plots;
 	}
 
-	public void resetPlots() {
-		plots = new ArrayList<>();
-	}
-
-	public void closePlot() {
+	void closePlot() {
 		if (plotImage.getWindow() != null) plotImage.getWindow().close();
 	}
 }
+
+class Plotter extends JFrame {
+	private ImagePlus imp;
+	private ArrayList<JFreeChart> plots;
+	private ArrayList<ArrayList<DataSeries>> plotsData;
+  private JPanel plotsPanel;
+	
+	private final int rows = 2; // Number of plot Rows in display
+	private final int cols = 2; // Number of plot Rows in display
+
+	// Colors are listed here for consistent, easy modification
+	static final Color vLineRegColor = new Color(127, 127, 127);
+	static final Color vLineAddPeakColor = new Color(0, 185, 19);
+	static final Color vLineRemovePeakColor = new Color(185, 7, 0);
+	// Colors for DataSeries in plots
+	private static final Color profileColor = Color.BLACK;
+	static final Color gaussColor = Color.RED;
+	static final Color bgColor = Color.BLUE;
+	static final Color fittedColor = new Color(255, 153, 0);
+	// Background Color of selected plot
+	static final Color plotSelColor = new Color(240, 240, 240);
+	static final Color plotUnSelColor = Color.WHITE;
+	static final Color plotAddSelColor = new Color(192, 255, 185);
+	static final Color plotRemoveSelColor = new Color(255, 188, 185);
+
+
+  public Plotter(ImagePlus imp, ArrayList<Roi> rois) {
+		this.imp = imp;
+		this.plots = new ArrayList<>();
+		this.setTitle("Profiles of " + imp.getShortTitle());
+    setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
+    setBounds(100, 100, 700, 500);
+    plotsPanel = new JPanel();
+    plotsPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+    plotsPanel.setLayout(new GridLayout(rows, cols));
+		for (final Roi r : rois) {
+			updateProfile(r);
+			for (JFreeChart p : plots) {
+				if (p.getTitle().getText().equals(r.getName()))
+					plotsPanel.add(new ChartPanel(p));
+			}
+		}
+    this.getContentPane().add(plotsPanel, BorderLayout.CENTER);
+    this.setVisible(true);
+  }
+
+
+	/**
+	 * Profile data from Roi, ready for fitting (null if not possible)
+	 *
+	 * @param roi
+	 */
+	private DataSeries getLaneProfile(final Roi roi) {
+		imp.setRoi(roi);
+		final String name = roi.getName();
+		final int lane = Integer.parseInt(name.substring(5));
+		final ProfilePlot profileP = new ProfilePlot(imp, true); // get the profile
+		final RealVector profile = new ArrayRealVector(profileP.getProfile());
+		if (profile.getDimension() < 2) return null;
+		imp.killRoi();
+		final double y0 = roi.getBounds().getMinY();
+		final double[] y = new double[profile.getDimension()];
+		for (int p = 0; p < y.length; p++)
+			y[p] = y0 + p;
+		return new DataSeries(name, lane, DataSeries.PROFILE, new ArrayRealVector(
+			y), profile, Plotter.profileColor);
+	}
+  
+	void updateProfile(Roi roi) {
+		final DataSeries profile = getLaneProfile(roi);
+		final String xLabel = "Distance (px)";
+		final String yLabel = "Grayscale Value";
+		final XYSeriesCollection dataset = new XYSeriesCollection();
+		final XYLineAndShapeRenderer renderer = new XYLineAndShapeRenderer();
+		
+		dataset.addSeries(profile.getXYSeries());
+		renderer.setSeriesPaint(0, Plotter.profileColor);
+		final JFreeChart newPlot = ChartFactory.createXYLineChart(roi.getName(),
+  		xLabel, yLabel, dataset, PlotOrientation.VERTICAL, true, true, false);
+		newPlot.setBackgroundPaint(plotUnSelColor);
+		newPlot.getLegend().setVisible(false);
+		newPlot.getLegend().setPosition(RectangleEdge.RIGHT);
+		newPlot.getTitle().setMargin(new RectangleInsets(15,5,15,5));
+		newPlot.getTitle().setPaint(Color.BLACK);
+		
+		final Iterator<JFreeChart> plotIter = plots.iterator();
+		while (plotIter.hasNext()) {
+			final JFreeChart plot = plotIter.next();
+			if (plot.getTitle().equals(roi.getName())) plotIter.remove();
+		}
+		plots.add(newPlot);
+	}
+	
+//	void setVLine(final int ln, final double x, final Color color) {
+//		
+//		for (JFreeChart p : plots) {
+//			boolean vline = false;
+//			if (p.getTitle().equals("Lane " + ln)) {
+//				p.getXYPlot().getDataset().removeSeries();
+//				final Range minmax = p.getXYPlot().getDataRange(p.getXYPlot().getRangeAxis());
+//				final RealVector xvals = new ArrayRealVector(new double[] { x, x });
+//				final RealVector yvals = new ArrayRealVector(new double[] { minmax.getLowerBound(), minmax.getUpperBound() });
+//				final XYSeries l = new XYSeries(DataSeries.VLINE, xvals, yvals, color);
+//				for (final DataSeries d : p.getDataSeries()) {
+//					if (d.getType() == DataSeries.VLINE) {
+//						d.setX(xvals.toArray());
+//						d.setY(yvals.toArray());
+//						vline = true;
+//						break;
+//					}
+//				}
+//				if (!vline) {
+//					p.setSelected(true);
+//					p.addDataSeries(l);
+//				}
+//
+//				break;
+//			}
+//		}
+//	}
+//
+//	void removeVLine(final int laneNumber) {
+//		for (final MyPlot p : plots) {
+//			if (p.getNumber() == laneNumber) {
+//				final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
+//				while (dataIter.hasNext()) {
+//					if (dataIter.next().getType() == DataSeries.VLINE) {
+//						dataIter.remove();
+//						break;
+//					}
+//				}
+//				p.setSelected(false);
+//				p.updatePlot();
+//				break;
+//			}
+//		}
+//	}
+
+//	private void removeCustomPeaks(final MyPlot p) {
+//		final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
+//		while (dataIter.hasNext()) {
+//			final DataSeries d = dataIter.next();
+//			if (d.getType() == DataSeries.CUSTOMPEAKS) {
+//				dataIter.remove();
+//			}
+//		}
+//		p.updatePlot();
+//	}
+
+//	void updateCustomPeaks(final int lane, final ArrayList<Peak> pl) {
+//		for (final MyPlot p : plots) {
+//			if (p.getNumber() == lane) {
+//				removeCustomPeaks(p);
+//				RealVector xadd = new ArrayRealVector();
+//				RealVector yadd = new ArrayRealVector();
+//				for (final Peak fp : pl) {
+//					xadd = xadd.append(fp.getMean());
+//					yadd = yadd.append(fp.getNorm());
+//				}
+//				final DataSeries customPeaks = new DataSeries("CP ADD", lane,
+//					DataSeries.CUSTOMPEAKS, xadd, yadd, Plotter.vLineAddPeakColor);
+//				p.addDataSeries(customPeaks);
+//				p.updatePlot();
+//			}
+//		}
+//
+//	}
+	
+	public ArrayList<DataSeries> getProfiles() {
+		final ArrayList<DataSeries> profiles = new ArrayList<>();
+		for (final ArrayList<DataSeries> p : plotsData) {
+			for (DataSeries d : p) {
+				if (d.getType() == DataSeries.PROFILE) profiles.add(d);
+			}
+		}
+		return profiles;
+	}
+	
+	void closePlot() {
+		this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
+	}
+}
+
 
 class MyPlot implements Comparable<MyPlot> {
 
@@ -480,7 +682,15 @@ class DataSeries implements Comparable<DataSeries> {
 	public RealVector getY() {
 		return y;
 	}
-
+	public XYSeries getXYSeries() {
+		XYSeries output = new XYSeries(this.getName());
+		double[] xval = x.toArray();
+		double[] yval = y.toArray();
+		for (int i = 0; i < xval.length; i++) {
+			output.add(xval[i], yval[i]);
+		}
+		return output;
+	}
 	public Color getColor() {
 		return color;
 	}

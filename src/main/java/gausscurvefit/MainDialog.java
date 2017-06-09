@@ -607,7 +607,6 @@ class MainDialog extends JFrame implements ActionListener,
 			if (rect.getMinX() < 0.95 * IW && rect.getMinY() < 0.95 * IH) plotter
 				.updateProfile(r);
 		}
-		plotter.plotsMontage();
 	}
 
 	private void cleanupAndClose() {
@@ -781,9 +780,16 @@ class MainDialog extends JFrame implements ActionListener,
 	public void actionPerformed(final ActionEvent e) {
 		if (e.getSource().equals(buttonFit)) {
 			if (fitDone && !askUser(warningFit)) return;
+			
+			// Close results table
+			// TODO: Chose between these 2 methods
 			if (displayServ.getDisplay("Results Display") != null) displayServ
 				.getDisplay("Results Display").close();
-
+			
+			for (final Display<?> d : displayServ.getDisplays()) {
+				if (d.getName().equals("Results Display")) d.close();
+			}
+			
 			addPeak = false;
 			removePeak = false;
 			buttonAddPeak.setSelected(false);
@@ -791,15 +797,15 @@ class MainDialog extends JFrame implements ActionListener,
 			buttonResetCustomPeaks.setSelected(false);
 
 			// Remove everything in the plots, but the profile
-			for (final MyPlot p : plotter.getPlots()) {
-				p.setSelectedBGColor(Plotter.plotSelColor);
-				final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
-				while (dataIter.hasNext()) {
-					final DataSeries d = dataIter.next();
-					if (d.getType() != DataSeries.PROFILE && d
-						.getType() != DataSeries.CUSTOMPEAKS) dataIter.remove();
-				}
-			}
+//			for (final MyPlot p : plotter.getPlots()) {
+//				p.setSelectedBGColor(Plotter.plotSelColor);
+//				final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
+//				while (dataIter.hasNext()) {
+//					final DataSeries d = dataIter.next();
+//					if (d.getType() != DataSeries.PROFILE && d
+//						.getType() != DataSeries.CUSTOMPEAKS) dataIter.remove();
+//				}
+//			}
 
 			// Reset fit
 			if (fitDone) {
@@ -809,20 +815,15 @@ class MainDialog extends JFrame implements ActionListener,
 				fitter.setInputData(plotter.getProfiles());
 			}
 
-			// Close results table
-			for (final Display<?> d : displayServ.getDisplays()) {
-				if (d.getName().equals("Results Display")) d.close();
-			}
-
 			final ArrayList<ArrayList<DataSeries>> fitted = fitter.doFit();
 			fitDone = true;
 
-			for (final ArrayList<DataSeries> f : fitted) {
-				final MyPlot plot = plotter.getPlots().get(fitted.indexOf(f));
-				plot.addDataSeries(f);
-				plot.updatePlot();
-			}
-			plotter.plotsMontage();
+//			for (final ArrayList<DataSeries> f : fitted) {
+//				final MyPlot plot = plotter.getPlots().get(fitted.indexOf(f));
+//				plot.addDataSeries(f);
+//				plot.updatePlot();
+//			}
+			//plotter.plotsMontage();
 			chkBoxBands.setEnabled(true);
 			chkBoxBands.setSelected(true);
 			buttonAddPeak.setEnabled(true);
@@ -848,56 +849,56 @@ class MainDialog extends JFrame implements ActionListener,
 			setSliderPanelEnabled(false);
 		}
 
-		if (e.getSource().equals(buttonAddPeak)) {
-			addPeak = !addPeak;
-			removePeak = false;
-			buttonRemovePeak.setSelected(false);
-			final Color plotBGColor = addPeak ? Plotter.plotAddSelColor
-				: Plotter.plotSelColor;
-			for (final MyPlot p : plotter.getPlots())
-				p.setSelectedBGColor(plotBGColor);
-		}
+//		if (e.getSource().equals(buttonAddPeak)) {
+//			addPeak = !addPeak;
+//			removePeak = false;
+//			buttonRemovePeak.setSelected(false);
+//			final Color plotBGColor = addPeak ? Plotter.plotAddSelColor
+//				: Plotter.plotSelColor;
+//			for (final MyPlot p : plotter.getPlots())
+//				p.setSelectedBGColor(plotBGColor);
+//		}
 
-		if (e.getSource().equals(buttonRemovePeak)) {
-			addPeak = false;
-			removePeak = !removePeak;
-			buttonAddPeak.setSelected(false);
-			final Color plotBGColor = removePeak ? Plotter.plotRemoveSelColor
-				: Plotter.plotSelColor;
-			for (final MyPlot p : plotter.getPlots())
-				p.setSelectedBGColor(plotBGColor);
-		}
+//		if (e.getSource().equals(buttonRemovePeak)) {
+//			addPeak = false;
+//			removePeak = !removePeak;
+//			buttonAddPeak.setSelected(false);
+//			final Color plotBGColor = removePeak ? Plotter.plotRemoveSelColor
+//				: Plotter.plotSelColor;
+//			for (final MyPlot p : plotter.getPlots())
+//				p.setSelectedBGColor(plotBGColor);
+//		}
 
-		if (e.getSource().equals(buttonResetCustomPeaks)) {
-			final GenericDialog gd = new GenericDialog("RESET CUSTOM PEAKS");
-			gd.addMessage(
-				"Select the plots from which the custom peaks must be removed");
-			final int[] lanes = getAllLaneNumbers();
-			final int rows = lanes.length;
-			final boolean[] defaultValues = new boolean[rows];
-			final String[] labels = new String[rows];
-			for (final int i : lanes) {
-				labels[i - 1] = "Lane " + i;
-				defaultValues[i - 1] = false;
-			}
-			gd.addCheckboxGroup(rows, 1, labels, defaultValues);
-			gd.showDialog();
-			if (gd.wasOKed()) {
-				for (final int i : lanes) {
-					if (gd.getNextBoolean()) {
-						fitter.resetCustomPeaks(i);
-						for (final MyPlot p : plotter.getPlots()) {
-							if (p.getNumber() == i) {
-								plotter.updateCustomPeaks(i, fitter.getCustomPeaks(i));
-							}
-						}
-					}
-				}
-				reDrawROIs(imp, "none");
-				plotter.plotsMontage();
-			}
-
-		}
+//		if (e.getSource().equals(buttonResetCustomPeaks)) {
+//			final GenericDialog gd = new GenericDialog("RESET CUSTOM PEAKS");
+//			gd.addMessage(
+//				"Select the plots from which the custom peaks must be removed");
+//			final int[] lanes = getAllLaneNumbers();
+//			final int rows = lanes.length;
+//			final boolean[] defaultValues = new boolean[rows];
+//			final String[] labels = new String[rows];
+//			for (final int i : lanes) {
+//				labels[i - 1] = "Lane " + i;
+//				defaultValues[i - 1] = false;
+//			}
+//			gd.addCheckboxGroup(rows, 1, labels, defaultValues);
+//			gd.showDialog();
+//			if (gd.wasOKed()) {
+//				for (final int i : lanes) {
+//					if (gd.getNextBoolean()) {
+//						fitter.resetCustomPeaks(i);
+//						for (final MyPlot p : plotter.getPlots()) {
+//							if (p.getNumber() == i) {
+//								plotter.updateCustomPeaks(i, fitter.getCustomPeaks(i));
+//							}
+//						}
+//					}
+//				}
+//				reDrawROIs(imp, "none");
+//				plotter.plotsMontage();
+//			}
+//
+//		}
 
 		if (e.getSource().equals(buttonClose)) {
 			if (askUser("Would you like to quit Gel Lanes Fit?")) {
@@ -942,9 +943,9 @@ class MainDialog extends JFrame implements ActionListener,
 					if (!roiPreviouslySelected.equals("none")) {
 						final int roiPN = Integer.parseInt(roiPreviouslySelected.substring(
 							5));
-						plotter.removeVLine(roiPN);
+//						plotter.removeVLine(roiPN);
 					}
-					plotter.plotsMontage();
+//					plotter.plotsMontage();
 					// if (roiCurrent.equals("none") && imp.getRoi() != null)
 					// imp.killRoi();
 				}
@@ -959,8 +960,8 @@ class MainDialog extends JFrame implements ActionListener,
 							lineColor = Color.white;
 							System.out.println("Something wrong with the booleans");
 						}
-						plotter.setVLine(roiN, y, lineColor);
-						plotter.plotsMontage();
+//						plotter.setVLine(roiN, y, lineColor);
+//						plotter.plotsMontage();
 					}
 				}
 			}
@@ -1030,8 +1031,8 @@ class MainDialog extends JFrame implements ActionListener,
 						}
 					}
 					reDrawROIs(imp, "none");
-					plotter.updateCustomPeaks(lane, fitter.getCustomPeaks(lane));
-					plotter.plotsMontage();
+//					plotter.updateCustomPeaks(lane, fitter.getCustomPeaks(lane));
+//					plotter.plotsMontage();
 				}
 			}
 		}

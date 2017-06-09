@@ -147,6 +147,15 @@
 			<groupId>net.imagej</groupId>
 			<artifactId>imagej</artifactId>
 		</dependency>
+		<dependency>
+            <groupId>org.jfree</groupId>
+            <artifactId>jcommon</artifactId>
+        </dependency>
+		<!-- https://mvnrepository.com/artifact/org.jfree/jfreechart -->
+		<dependency>
+    		<groupId>org.jfree</groupId>
+    		<artifactId>jfreechart</artifactId>
+		</dependency>
 	</dependencies>
 </project>
 

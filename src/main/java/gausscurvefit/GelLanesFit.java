@@ -88,14 +88,14 @@ public class GelLanesFit implements Command {
 
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
-		final ImageWindow pwin = plotter.getPlotImage().getWindow();
+//		final ImageWindow pwin = plotter.getPlotImage().getWindow();
 		if (iwin == null) return;
 
 		final Dimension imageSize = iwin.getSize();
 		final Point imageLoc = iwin.getLocation();
 
 		iwin.setLocation(0, 100);
-		pwin.setLocation(imageSize.width + 30, imageLoc.y);
+//		pwin.setLocation(imageSize.width + 30, imageLoc.y);
 		iwin.getCanvas().requestFocus();
 
 		// thread for plotting in the background
