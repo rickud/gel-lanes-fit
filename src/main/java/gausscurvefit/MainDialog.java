@@ -169,6 +169,7 @@ class MainDialog extends JFrame implements ActionListener,
 		this.imp = imp;
 		setupMainDialog();
 		frame.setLocation(0, (int) screenHeight/8);
+		frame.setSize((int) screenWidth/3, (int) screenHeight/2);
 	}
 
 	private void setupMainDialog() {

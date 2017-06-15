@@ -18,13 +18,10 @@
 
 package gausscurvefit;
 
-import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Paint;
-import java.awt.Shape;
-import java.awt.Component;
 import java.awt.GridLayout;
+import java.awt.Shape;
 import java.awt.event.WindowEvent;
 import java.awt.geom.Ellipse2D;
 import java.util.ArrayList;
@@ -44,260 +41,33 @@ import org.apache.commons.math3.linear.RealVector;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
-import org.jfree.chart.LegendItem;
-import org.jfree.chart.LegendItemCollection;
-import org.jfree.chart.LegendItemSource;
 import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.chart.plot.SeriesRenderingOrder;
 import org.jfree.chart.plot.XYPlot;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
-import org.jfree.chart.title.LegendTitle;
-import org.jfree.data.Range;
-import org.jfree.data.xy.XYDataset;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
-import org.jfree.ui.ApplicationFrame;
-import org.jfree.ui.RectangleEdge;
 import org.jfree.ui.RectangleInsets;
-import org.jfree.ui.RefineryUtilities;
-import org.jfree.util.ShapeUtilities;
 
-import ij.IJ;
 import ij.ImagePlus;
-import ij.ImageStack;
 import ij.gui.Plot;
 import ij.gui.ProfilePlot;
 import ij.gui.Roi;
-import ij.process.ColorProcessor;
-import ij.process.ImageProcessor;
-
-class Plotter2 extends JFrame {
-
-	
-	private final ImagePlus plotImage = new ImagePlus();
-	private final ImagePlus imp;
-	private final ArrayList<MyPlot> plots;
-
-	private final int rows = 2; // Number of plot Rows in display
-	private final int cols = 2; // Number of plot Rows in display
-	
-	// Colors are listed here for consistent, easy modification
-	static final Color vLineRegColor = new Color(127, 127, 127);
-	static final Color vLineAddPeakColor = new Color(0, 185, 19);
-	static final Color vLineRemovePeakColor = new Color(185, 7, 0);
-	// Colors for DataSeries in plots
-	private static final Color profileColor = Color.BLACK;
-	static final Color gaussColor = Color.RED;
-	static final Color bgColor = Color.BLUE;
-	static final Color fittedColor = new Color(255, 153, 0);
-	// Background Color of selected plot
-	static final Color plotSelColor = new Color(240, 240, 240);
-	static final Color plotAddSelColor = new Color(192, 255, 185);
-	static final Color plotRemoveSelColor = new Color(255, 188, 185);
-
-	Plotter2(final ImagePlus imp, final ArrayList<Roi> rois) {
-		this.imp = imp;
-		this.plots = new ArrayList<>();
-		plotImage.setTitle("Profiles of " + imp.getShortTitle());
-		for (final Roi r : rois)
-			updateProfile(r);
-		plotsMontage();
-		plotImage.show();
-	}
-
-	public ImagePlus getPlotImage() {
-		return plotImage;
-	}
-
-	/**
-	 * Profile data from Roi, ready for fitting (null if not possible)
-	 *
-	 * @param roi
-	 */
-	private DataSeries getLaneProfile(final Roi roi) {
-		imp.setRoi(roi);
-		final String name = roi.getName();
-		final int lane = Integer.parseInt(name.substring(5));
-		final ProfilePlot profileP = new ProfilePlot(imp, true); // get the profile
-		final RealVector profile = new ArrayRealVector(profileP.getProfile());
-		if (profile.getDimension() < 2) return null;
-		imp.killRoi();
-		final double y0 = roi.getBounds().getMinY();
-		final double[] y = new double[profile.getDimension()];
-		for (int p = 0; p < y.length; p++)
-			y[p] = y0 + p;
-		return new DataSeries(name, lane, DataSeries.PROFILE, new ArrayRealVector(
-			y), profile, profileColor);
-	}
-
-	void updateProfile(final Roi roi) {
-		final int roiNumber = Integer.parseInt(roi.getName().substring(5));
-		final DataSeries profile = getLaneProfile(roi);
-		profile.setColor(profileColor);
-		final String xLabel = "Distance (px)";
-		final String yLabel = "Grayscale Value";
-		final MyPlot newPlot = new MyPlot(roi.getName(), xLabel, yLabel);
-		newPlot.setSelectedBGColor(plotSelColor);
-		newPlot.addDataSeries(profile);
-		newPlot.updatePlot();
-
-		final Iterator<MyPlot> plotIter = plots.iterator();
-		while (plotIter.hasNext()) {
-			final MyPlot plot = plotIter.next();
-			if (plot.getNumber() == (roiNumber)) plotIter.remove();
-		}
-		plots.add(newPlot);
-	}
-
-	void setVLine(final int laneNumber, final double x, final Color color) {
-		final Iterator<MyPlot> plotIter = plots.iterator();
-		while (plotIter.hasNext()) {
-			final MyPlot p = plotIter.next();
-			boolean vline = false;
-			if (p.getNumber() == laneNumber) {
-				final double[] minmax = p.getDataMinMax();
-				final RealVector xvals = new ArrayRealVector(new double[] { x, x });
-				final RealVector yvals = new ArrayRealVector(new double[] { minmax[2],
-					minmax[3] });
-				final DataSeries l = new DataSeries("", laneNumber, DataSeries.VLINE,
-					xvals, yvals, color);
-				for (final DataSeries d : p.getDataSeries()) {
-					if (d.getType() == DataSeries.VLINE) {
-						d.setX(xvals.toArray());
-						d.setY(yvals.toArray());
-						vline = true;
-						break;
-					}
-				}
-				if (!vline) {
-					p.setSelected(true);
-					p.addDataSeries(l);
-				}
-				p.updatePlot();
-				break;
-			}
-		}
-	}
-
-	void removeVLine(final int laneNumber) {
-		for (final MyPlot p : plots) {
-			if (p.getNumber() == laneNumber) {
-				final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
-				while (dataIter.hasNext()) {
-					if (dataIter.next().getType() == DataSeries.VLINE) {
-						dataIter.remove();
-						break;
-					}
-				}
-				p.setSelected(false);
-				p.updatePlot();
-				break;
-			}
-		}
-	}
-
-	private void removeCustomPeaks(final MyPlot p) {
-	
-		p.updatePlot();
-	}
-
-	/**
-	 * Method to output plot collage to plotImage
-	 */
-	void plotsMontage() {
-		// Construct the plot image
-		final int plotSpacing = 5; // black border
-		final ImageProcessor plot0 = plots.get(0).getPlot().getProcessor();
-		final int plotW = plot0.getWidth();
-		final int plotH = plot0.getHeight();
-		final int plotsWidth = plotSpacing + cols * (plotW + plotSpacing);
-		final int plotsHeight = plotSpacing + rows * (plotH + plotSpacing);
-		final ImageProcessor blank = plot0.duplicate();
-		IJ.setForegroundColor(255, 255, 255);
-		blank.fill();
-
-		final ArrayList<ImageProcessor> pageMontages = new ArrayList<>();
-		final Iterator<MyPlot> plotIter = plots.iterator();
-		int psel = 0; // selected page
-		while (plotIter.hasNext()) {
-			final ImageProcessor plotsMontage = new ColorProcessor(plotsWidth,
-				plotsHeight);
-			MyPlot subplot;
-			ImageProcessor subplotProcessor;
-			String subplotTitle;
-			for (int r = 0; r < rows; r++) {
-				for (int c = 0; c < cols; c++) {
-					if (plotIter.hasNext()) {
-						subplot = plotIter.next();
-						if (subplot.getPlot().getProcessor() == null) System.out.println(
-							"Stop!");
-						if (subplot.isSelected()) psel = pageMontages.size() + 1;
-						subplotProcessor = subplot.getPlot().getProcessor();
-						subplotTitle = subplot.getPlot().getTitle();
-					}
-					else {
-						subplotProcessor = blank;
-						subplotTitle = "";
-					}
-					plotsMontage.insert(subplotProcessor, plotSpacing + c * (plotSpacing +
-						plotW), plotSpacing + r * (plotSpacing + plotH));
-
-					plotsMontage.drawString(subplotTitle, plotSpacing + plotW / 2 + c *
-						(plotSpacing + plotW), plotSpacing + plotH / 5 + r * (plotSpacing +
-							plotH), Color.LIGHT_GRAY);
-				}
-			}
-			pageMontages.add(plotsMontage);
-		}
-		plotImage.setProcessor(pageMontages.get(0));
-		final ImageStack plotStack = plotImage.createEmptyStack();
-		final Iterator<ImageProcessor> montageIter = pageMontages.iterator();
-		int p = 0;
-		while (montageIter.hasNext()) {
-			plotStack.addSlice("Lanes " + (rows * cols * p + 1) + "-" + (rows * cols *
-				p + rows * cols), montageIter.next(), p);
-			p++;
-		}
-		plotImage.setStack(plotStack);
-		if (psel != 0) plotImage.setSlice(psel);
-		plotImage.updateImage();
-		plotImage.show();
-		if (plotImage.getRoi() != null) plotImage.killRoi();
-	}
-
-	public ArrayList<DataSeries> getProfiles() {
-		final ArrayList<DataSeries> profiles = new ArrayList<>();
-		for (final MyPlot p : plots) {
-			final ArrayList<DataSeries> dlist = p.getDataSeries();
-			for (final DataSeries d : dlist) {
-				if (d.getType() == DataSeries.PROFILE) profiles.add(d);
-			}
-		}
-		return profiles;
-	}
-
-	public ArrayList<MyPlot> getPlots() {
-		return plots;
-	}
-
-	void closePlot() {
-		if (plotImage.getWindow() != null) plotImage.getWindow().close();
-	}
-}
 
 class Plotter extends JFrame {
-	private ImagePlus imp;
-	//private ArrayList<JFreeChart> plots;
+
+	private final ImagePlus imp;
+	// private ArrayList<JFreeChart> plots;
 	private ArrayList<ChartPanel> chartPanels;
 	private ArrayList<DataSeries> plotsData;
-  private JPanel chartsMainPanel;
-  private JScrollPane chartsScrollPane;
-	
-	private int rows = 2; 					// Number of plot Rows in display
-	private final int cols = 2; 		// Number of plot Rows in display
-	private int selected; 	 				// Which plot is highlighted
+	private final JPanel chartsMainPanel;
+	private final JScrollPane chartsScrollPane;
+
+	private int rows = 2; // Number of plot Rows in display
+	private final int cols = 2; // Number of plot Rows in display
+	private int selected; // Which plot is highlighted
 	private int plotMode = regMode;
-	
+
 	// Colors are listed here for consistent, easy modification
 	static final Color vLineRegColor = new Color(127, 127, 127);
 	static final Color vLineAddPeakColor = new Color(0, 185, 19);
@@ -312,23 +82,25 @@ class Plotter extends JFrame {
 	static final int regMode = 0;
 	static final int addMode = 1;
 	static final int remMode = 2;
-	
+
 	static final Color plotSelColor = new Color(240, 240, 240);
 	static final Color plotUnselColor = Color.WHITE;
 	static final Color plotAddSelColor = new Color(192, 255, 185);
 	static final Color plotRemoveSelColor = new Color(255, 188, 185);
 
+	public Plotter(final ImagePlus imp, final ArrayList<Roi> rois,
+		final double screenHeight, final double screenWidth)
+	{
+		setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
+		setBounds((int) screenWidth / 2, 0, (int) screenWidth / 2,
+			(int) screenHeight);
 
-  public Plotter(ImagePlus imp, ArrayList<Roi> rois, double screenHeight, double screenWidth) {
-    setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
-    setBounds((int) screenWidth/2, 0, (int) screenWidth/2, (int)screenHeight);
-    
-    chartsMainPanel = new JPanel();
-    chartsMainPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
-    chartsMainPanel.setLayout(new GridLayout(rows, cols));
-    selected = selectedNone;
-  	
-    this.imp = imp;
+		chartsMainPanel = new JPanel();
+		chartsMainPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+		chartsMainPanel.setLayout(new GridLayout(rows, cols));
+		selected = selectedNone;
+
+		this.imp = imp;
 		this.chartPanels = new ArrayList<>();
 		this.plotsData = new ArrayList<>();
 		this.setTitle("Profiles of " + imp.getShortTitle());
@@ -336,16 +108,16 @@ class Plotter extends JFrame {
 		for (final Roi r : rois) {
 			updateProfile(r);
 		}
-		for (ChartPanel p : chartPanels) {
+		for (final ChartPanel p : chartPanels) {
 			chartsMainPanel.add(p);
 		}
 		chartsScrollPane = new JScrollPane(chartsMainPanel);
 		chartsMainPanel.setBounds(chartsScrollPane.getVisibleRect());
-		chartsScrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-    this.getContentPane().add(chartsScrollPane, BorderLayout.CENTER);
-    this.setVisible(true);
-  }
-
+		chartsScrollPane.setHorizontalScrollBarPolicy(
+			ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+		this.getContentPane().add(chartsScrollPane, BorderLayout.CENTER);
+		this.setVisible(true);
+	}
 
 	/**
 	 * Profile data from Roi, ready for fitting (null if not possible)
@@ -367,26 +139,29 @@ class Plotter extends JFrame {
 		return new DataSeries(name, lane, DataSeries.PROFILE, new ArrayRealVector(
 			y), profile, Plotter.profileColor);
 	}
-	
+
 	public void addDataSeries(final ArrayList<DataSeries> d) {
 		plotsData.addAll(d);
 	}
-	
+
 	void setVLine(final int ln, final double x) {
-		for (ChartPanel p : chartPanels) {
+		for (final ChartPanel p : chartPanels) {
 			if (p.getChart().getTitle().getText().equals("Lane " + ln)) {
 				boolean vline = false;
-				final XYSeriesCollection dataset = (XYSeriesCollection) p.getChart().getXYPlot().getDataset();
-				XYSeries profile = dataset.getSeries(String.format("%d",DataSeries.PROFILE));
+				final XYSeriesCollection dataset = (XYSeriesCollection) p.getChart()
+					.getXYPlot().getDataset();
+				final XYSeries profile = dataset.getSeries(String.format("%d",
+					DataSeries.PROFILE));
 				final double min = 0.95 * profile.getMinY();
 				final double max = 1.05 * profile.getMaxY();
 				final RealVector xvals = new ArrayRealVector(new double[] { x, x });
 				final RealVector yvals = new ArrayRealVector(new double[] { min, max });
-				DataSeries newVLine = new DataSeries("", ln, DataSeries.VLINE, xvals, yvals, vLineRegColor);
-				for (DataSeries d : plotsData) {
+				final DataSeries newVLine = new DataSeries("", ln, DataSeries.VLINE,
+					xvals, yvals, vLineRegColor);
+				for (final DataSeries d : plotsData) {
 					if (d.getLane() == ln && d.getType() == DataSeries.VLINE) {
-							vline = true;
-							plotsData.set(plotsData.indexOf(d), newVLine);
+						vline = true;
+						plotsData.set(plotsData.indexOf(d), newVLine);
 					}
 				}
 				if (!vline) {
@@ -396,13 +171,13 @@ class Plotter extends JFrame {
 			}
 		}
 	}
-	
+
 	void removeVLine(final int ln) {
 		final Iterator<DataSeries> dataIter = plotsData.iterator();
 		while (dataIter.hasNext()) {
-			DataSeries d = dataIter.next();
+			final DataSeries d = dataIter.next();
 			if (d.getLane() == ln && d.getType() == DataSeries.VLINE) {
-					dataIter.remove();
+				dataIter.remove();
 			}
 		}
 		selected = selectedNone;
@@ -411,32 +186,32 @@ class Plotter extends JFrame {
 
 	public ArrayList<DataSeries> getProfiles() {
 		final ArrayList<DataSeries> profiles = new ArrayList<>();
-		for (DataSeries d : plotsData) {
+		for (final DataSeries d : plotsData) {
 			if (d.getType() == DataSeries.PROFILE) profiles.add(d);
 		}
 		return profiles;
 	}
-	
+
 	int getPlotMode() {
 		return this.plotMode;
 	}
-	
-	void setPlotMode(int plotMode) {
+
+	void setPlotMode(final int plotMode) {
 		this.plotMode = plotMode;
 	}
-	
-	public void setSelected(int selected) {
+
+	public void setSelected(final int selected) {
 		this.selected = selected;
 	}
-	
-	public void setMode(int plotMode) {
+
+	public void setMode(final int plotMode) {
 		this.plotMode = plotMode;
 	}
-	
+
 	private void sortDataSeries() {
 		Collections.sort(plotsData);
 		int nullIndex = 0;
-		Iterator<DataSeries> dataIter = plotsData.iterator();
+		final Iterator<DataSeries> dataIter = plotsData.iterator();
 		while (dataIter.hasNext()) {
 			final DataSeries d = dataIter.next();
 			if (d == null) break;
@@ -444,15 +219,16 @@ class Plotter extends JFrame {
 		}
 		plotsData = new ArrayList<>(plotsData.subList(0, nullIndex));
 	}
-	
+
 	void updateCustomPeaks(final int lane, final ArrayList<Peak> pl) {
 		for (final ChartPanel p : chartPanels) {
-			int plotNumber = Integer.parseInt(p.getChart().getTitle().getText().substring(5));
+			final int plotNumber = Integer.parseInt(p.getChart().getTitle().getText()
+				.substring(5));
 			if (plotNumber == lane) {
 				final Iterator<DataSeries> dataIter = plotsData.iterator();
 				while (dataIter.hasNext()) {
-					DataSeries d = dataIter.next();
-					if (d.getLane() == lane && d.getType() == DataSeries.CUSTOMPEAKS) 
+					final DataSeries d = dataIter.next();
+					if (d.getLane() == lane && d.getType() == DataSeries.CUSTOMPEAKS)
 						dataIter.remove();
 				}
 				RealVector xadd = new ArrayRealVector();
@@ -469,7 +245,8 @@ class Plotter extends JFrame {
 		}
 
 	}
-	void updateProfile(Roi roi) {
+
+	void updateProfile(final Roi roi) {
 		final DataSeries profile = getLaneProfile(roi);
 		// Assume plotsData, chartsMainPanel was reset
 		plotsData.add(profile);
@@ -477,11 +254,11 @@ class Plotter extends JFrame {
 		final String yLabel = "Grayscale Value";
 		final XYSeriesCollection dataset = new XYSeriesCollection();
 		XYPlot thePlot = new XYPlot();
-		XYSeries profileSeries = profile.getXYSeries();
+		final XYSeries profileSeries = profile.getXYSeries();
 		profileSeries.setKey(String.format("%d", DataSeries.PROFILE));
 		dataset.addSeries(profile.getXYSeries());
 		boolean found = false;
-		for (ChartPanel c : chartPanels) {
+		for (final ChartPanel c : chartPanels) {
 			thePlot = c.getChart().getXYPlot();
 			if (c.getChart().getTitle().getText().equals(roi.getName())) {
 				found = true;
@@ -490,43 +267,42 @@ class Plotter extends JFrame {
 		}
 		if (!found) {
 			final JFreeChart newChart = ChartFactory.createXYLineChart(roi.getName(),
-	  		xLabel, yLabel, dataset, PlotOrientation.VERTICAL, false, true, false);
-			XYPlot newPlot = newChart.getXYPlot();
-			newChart.getTitle().setMargin(new RectangleInsets(15,5,15,5));
+				xLabel, yLabel, dataset, PlotOrientation.VERTICAL, false, true, false);
+			final XYPlot newPlot = newChart.getXYPlot();
+			newChart.getTitle().setMargin(new RectangleInsets(15, 5, 15, 5));
 			newChart.getTitle().setPaint(Color.BLACK);
 
 			newPlot.setDomainGridlinePaint(Color.DARK_GRAY);
 			newPlot.setRangeGridlinePaint(Color.DARK_GRAY);
-			//newPlot.setAxisOffset(new RectangleInsets(0,0,0,0));
+			// newPlot.setAxisOffset(new RectangleInsets(0,0,0,0));
 			thePlot = newPlot;
-			ChartPanel chartPanel = new ChartPanel(newChart);
+			final ChartPanel chartPanel = new ChartPanel(newChart);
 			chartPanels.add(chartPanel);
 			chartsMainPanel.add(chartPanel);
-	    if (chartPanels.size() % cols == 0) rows = chartPanels.size()/cols;
-	    else rows = chartPanels.size()/cols + 1;
+			if (chartPanels.size() % cols == 0) rows = chartPanels.size() / cols;
+			else rows = chartPanels.size() / cols + 1;
 			chartsMainPanel.setLayout(new GridLayout(rows, cols));
 			chartsMainPanel.validate();
 		}
 		selected = selectedNone;
-		
+
 		thePlot.getDomainAxis().setLowerMargin(0);
 		thePlot.getDomainAxis().setUpperMargin(0);
 		thePlot.getRangeAxis().setLowerMargin(0);
 		thePlot.getRangeAxis().setUpperMargin(0);
-		double min = 0.95 * profile.getY().getMinValue();
-		double max = 1.05 * profile.getY().getMaxValue();
+		final double min = 0.95 * profile.getY().getMinValue();
+		final double max = 1.05 * profile.getY().getMaxValue();
 //		Range r = new Range(min, max);
 		thePlot.getRangeAxis().setLowerBound(min);
 		thePlot.getRangeAxis().setUpperBound(max);
-		
+
 		updatePlot(Integer.parseInt(roi.getName().substring(5)));
 	}
 
+	public void updatePlot(final int ln) {
 
-	public void updatePlot(int ln) {
-		
 		Color plotBGColor = plotSelColor;
-		Color pkColor = vLineAddPeakColor;
+		final Color pkColor = vLineAddPeakColor;
 		Color vLineColor;
 
 		if (plotMode == Plotter.addMode) {
@@ -541,45 +317,49 @@ class Plotter extends JFrame {
 			plotBGColor = plotSelColor;
 			vLineColor = vLineRegColor;
 		}
-		
-		XYSeriesCollection dataset = new XYSeriesCollection();
-		//sortDataSeries();
+
+		final XYSeriesCollection dataset = new XYSeriesCollection();
+		// sortDataSeries();
 		int PKCount = 0;
-		ArrayList<String> keys = new ArrayList<>();
+		final ArrayList<String> keys = new ArrayList<>();
 		Collections.sort(plotsData);
-		for (DataSeries d : plotsData) {
+		for (final DataSeries d : plotsData) {
 			if (d.getLane() == ln) {
-				XYSeries dataSeries = d.getXYSeries();
+				final XYSeries dataSeries = d.getXYSeries();
 				int k = d.getType();
 				if (k == DataSeries.GAUSS_BG) {
-					k += PKCount; PKCount++;
+					k += PKCount;
+					PKCount++;
 				}
-				keys.add(String.format("%d",k));
-				dataSeries.setKey(String.format("%d",k));
+				keys.add(String.format("%d", k));
+				dataSeries.setKey(String.format("%d", k));
 				dataset.addSeries(dataSeries);
 			}
 		}
-		for (ChartPanel p: chartPanels) {
-			int plotNumber = Integer.parseInt(p.getChart().getTitle().getText().substring(5));
+		for (final ChartPanel p : chartPanels) {
+			final int plotNumber = Integer.parseInt(p.getChart().getTitle().getText()
+				.substring(5));
 			if (plotNumber == ln) {
-				JFreeChart c = p.getChart();
+				final JFreeChart c = p.getChart();
 				c.getXYPlot().setDataset(dataset);
-				if (plotNumber == selected) { 
+				if (plotNumber == selected) {
 					c.getXYPlot().setBackgroundPaint(plotBGColor);
 					c.setBackgroundPaint(plotBGColor);
-				} else {
+				}
+				else {
 					c.getXYPlot().setBackgroundPaint(plotUnselColor);
 					c.setBackgroundPaint(plotUnselColor);
 				}
-				
-				p.getChart().getXYPlot().setSeriesRenderingOrder(SeriesRenderingOrder.FORWARD);
-				XYLineAndShapeRenderer renderer = 
-						(XYLineAndShapeRenderer) p.getChart().getXYPlot().getRenderer();
+
+				p.getChart().getXYPlot().setSeriesRenderingOrder(
+					SeriesRenderingOrder.FORWARD);
+				final XYLineAndShapeRenderer renderer = (XYLineAndShapeRenderer) p
+					.getChart().getXYPlot().getRenderer();
 				PKCount = 0;
 
-				for (String k : keys){
-					int seriesIdx  = dataset.getSeriesIndex(k);
-					int seriesType = Integer.parseInt(k);
+				for (final String k : keys) {
+					final int seriesIdx = dataset.getSeriesIndex(k);
+					final int seriesType = Integer.parseInt(k);
 					if (seriesType == DataSeries.VLINE) {
 						renderer.setSeriesPaint(seriesIdx, vLineColor);
 					}
@@ -596,20 +376,20 @@ class Plotter extends JFrame {
 					if (seriesType == DataSeries.FITTED) {
 						renderer.setSeriesPaint(seriesIdx, fittedColor);
 					}
-					if (seriesType == DataSeries.CUSTOMPEAKS){
+					if (seriesType == DataSeries.CUSTOMPEAKS) {
 						renderer.setSeriesPaint(seriesIdx, pkColor);
-						Shape dot = new Ellipse2D.Double(0,0,6,6);
+						final Shape dot = new Ellipse2D.Double(0, 0, 6, 6);
 						renderer.setSeriesShape(seriesIdx, dot);
 						renderer.setSeriesShapesVisible(seriesIdx, true);
 						renderer.setSeriesLinesVisible(seriesIdx, false);
 					}
-					
+
 					// Update the Legend
 //					LegendItemCollection legendItemsOld = c.getXYPlot().getLegendItems();
 //					final LegendItemCollection legendItemsNew = new LegendItemCollection();
 //
 //					for(int i = 0; i< legendItemsOld.getItemCount(); i++){
-//						LegendItem li = legendItemsOld.get(i);	
+//						LegendItem li = legendItemsOld.get(i);
 //						if (li.getLabel().equals(String.format("%d", DataSeries.PROFILE))){
 //							LegendItem newLi = new LegendItem("Lane " + ln + " Profile");
 //							newLi.setSeriesIndex(li.getSeriesIndex());
@@ -629,7 +409,7 @@ class Plotter extends JFrame {
 //						LegendItemCollection lic = new LegendItemCollection();
 //						{lic.addAll(legendItemsNew);}
 //						@Override
-//						public LegendItemCollection getLegendItems() {  
+//						public LegendItemCollection getLegendItems() {
 //							return lic;
 //						}
 //					};
@@ -640,21 +420,19 @@ class Plotter extends JFrame {
 			}
 		}
 	}
-	
+
 	void closePlot() {
 		this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
 	}
 
-
 	public void removeFit() {
-		Iterator<DataSeries> dataIter = plotsData.iterator();
+		final Iterator<DataSeries> dataIter = plotsData.iterator();
 		while (dataIter.hasNext()) {
-			DataSeries d = dataIter.next();
-			if (d.getType() != DataSeries.PROFILE && d.getType() != DataSeries.CUSTOMPEAKS)
-				dataIter.remove();
+			final DataSeries d = dataIter.next();
+			if (d.getType() != DataSeries.PROFILE && d
+				.getType() != DataSeries.CUSTOMPEAKS) dataIter.remove();
 		}
 	}
-
 
 //	private void removeCustomPeaks(final MyPlot p) {
 //		final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
@@ -685,13 +463,14 @@ class Plotter extends JFrame {
 //		}
 //
 //	}
-	
+
 	public void resetData() {
 		plotsData = new ArrayList<>();
 		chartPanels = new ArrayList<>();
 		chartsMainPanel.removeAll();
 	}
 }
+
 class MyPlot implements Comparable<MyPlot> {
 
 	private Plot plot;
@@ -862,7 +641,7 @@ class DataSeries implements Comparable<DataSeries> {
 	public DataSeries(final String name, final int lane, final int type,
 		final RealVector x, final UnivariateFunction function, final Color color)
 	{
-		
+
 		this.name = name;
 		this.lane = lane;
 		this.type = type;
@@ -893,16 +672,17 @@ class DataSeries implements Comparable<DataSeries> {
 	public RealVector getY() {
 		return y;
 	}
+
 	public XYSeries getXYSeries() {
-		XYSeries output = new XYSeries(this.getType());
-		double[] xval = x.toArray();
-		double[] yval = y.toArray();
+		final XYSeries output = new XYSeries(this.getType());
+		final double[] xval = x.toArray();
+		final double[] yval = y.toArray();
 		for (int i = 0; i < xval.length; i++) {
 			output.add(xval[i], yval[i]);
 		}
 		return output;
 	}
-	
+
 	public Color getColor() {
 		return color;
 	}
@@ -924,9 +704,9 @@ class DataSeries implements Comparable<DataSeries> {
 
 	@Override
 	public int compareTo(final DataSeries d) {
-		int t = type - d.getType();
-		int l = lane - d.getLane();
-		
+		final int t = type - d.getType();
+		final int l = lane - d.getLane();
+
 		if (l == 0) {
 			return t;
 		}
