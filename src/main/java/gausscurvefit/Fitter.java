@@ -176,11 +176,11 @@ class Fitter {
 		return area;
 	}
 
-	public ArrayList<ArrayList<DataSeries>> doFit() {
+	public ArrayList<DataSeries> doFit() {
 		int progress = 1;
-		final ArrayList<ArrayList<DataSeries>> outputAll = new ArrayList<>();
+		final ArrayList<DataSeries> outputAll = new ArrayList<>();
 		for (final DataSeries d : inputData) {
-			outputAll.add(doFit(d));
+			outputAll.addAll(doFit(d));
 			statusServ.showProgress(++progress, inputData.size());
 		}
 		updateResultsTable();

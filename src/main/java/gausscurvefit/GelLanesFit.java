@@ -69,33 +69,29 @@ public class GelLanesFit implements Command {
 	 * Initialization method
 	 */
 	public void init() {
-		//		final double SW = IJ.getScreenSize().getWidth();
-		//		final double SH = IJ.getScreenSize().getHeight();
+		final double SW = IJ.getScreenSize().getWidth();
+		final double SH = IJ.getScreenSize().getHeight();
 
 		imp = IJ.getImage();
 		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
 			"."));
 		about();
-		final String title = "[v" + version + "] Gel Lanes Gauss Fitting: " + imp
+		final String title = "[v" + version + "] Gel Lanes Fit: " + imp
 			.getTitle();
-		final MainDialog md = new MainDialog(context, title, imp);
+		final MainDialog md = new MainDialog(context, title, imp, SH, SW);
 
 		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
 			.getTolPK());
-		final Plotter plotter = new Plotter(imp, md.getRois());
+		final Plotter plotter = new Plotter(imp, md.getRois(), SH, SW);
 		md.setPlotter(plotter);
 		md.setFitter(fitter);
 
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
-//		final ImageWindow pwin = plotter.getPlotImage().getWindow();
 		if (iwin == null) return;
-
-		final Dimension imageSize = iwin.getSize();
-		final Point imageLoc = iwin.getLocation();
-
-		iwin.setLocation(0, 100);
-//		pwin.setLocation(imageSize.width + 30, imageLoc.y);
+		
+		iwin.setLocation(0, (int) SH/2);
+		iwin.setSize((int) SW/2, (int) SH/2);
 		iwin.getCanvas().requestFocus();
 
 		// thread for plotting in the background
@@ -138,7 +134,7 @@ public class GelLanesFit implements Command {
 		}
 		catch (final IOException e) {
 			e.printStackTrace();
-			log.info("Gauss Fit - v[unknown]");
+			log.info("Gel Lanes Fit - v[unknown]");
 		}
 	}
 
@@ -155,7 +151,7 @@ public class GelLanesFit implements Command {
 			"src//main//resources//sample//03_05_16_refs.tif");
 		// display it via ImageJ
 		iPlus.show();
-		iPlus.getCanvas().setLocation(0, 100);
+		// iPlus.getCanvas().setLocation(0, 100);
 		// wrap it into an ImgLib image (no copying)
 		// final Img image = ImagePlusAdapter.wrap(imp);
 		// display it via ImgLib using ImageJ

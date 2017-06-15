@@ -162,12 +162,13 @@ class MainDialog extends JFrame implements ActionListener,
 	private JPanel dialogPanel;
 	private final JFrame frame;
 
-	MainDialog(final Context context, final String string, final ImagePlus imp) {
+	MainDialog(final Context context, final String string, final ImagePlus imp, double screenHeight, double screenWidth) {
 		context.inject(this);
 		frame = new JFrame(string);
 		rois = new ArrayList<>();
 		this.imp = imp;
 		setupMainDialog();
+		frame.setLocation(0, (int) screenHeight/8);
 	}
 
 	private void setupMainDialog() {
@@ -602,6 +603,8 @@ class MainDialog extends JFrame implements ActionListener,
 		buttonAddPeak.setEnabled(false);
 		buttonRemovePeak.setEnabled(false);
 		buttonResetCustomPeaks.setEnabled(false);
+		plotter.resetData();
+		plotter.setMode(Plotter.regMode);
 		for (final Roi r : rois) {
 			final Rectangle rect = r.getBounds();
 			if (rect.getMinX() < 0.95 * IW && rect.getMinY() < 0.95 * IH) plotter
@@ -797,15 +800,9 @@ class MainDialog extends JFrame implements ActionListener,
 			buttonResetCustomPeaks.setSelected(false);
 
 			// Remove everything in the plots, but the profile
-//			for (final MyPlot p : plotter.getPlots()) {
-//				p.setSelectedBGColor(Plotter.plotSelColor);
-//				final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
-//				while (dataIter.hasNext()) {
-//					final DataSeries d = dataIter.next();
-//					if (d.getType() != DataSeries.PROFILE && d
-//						.getType() != DataSeries.CUSTOMPEAKS) dataIter.remove();
-//				}
-//			}
+			plotter.setSelected(Plotter.selectedNone);
+			plotter.removeFit();
+			plotter.setMode(Plotter.regMode);
 
 			// Reset fit
 			if (fitDone) {
@@ -815,15 +812,12 @@ class MainDialog extends JFrame implements ActionListener,
 				fitter.setInputData(plotter.getProfiles());
 			}
 
-			final ArrayList<ArrayList<DataSeries>> fitted = fitter.doFit();
+			final ArrayList<DataSeries> fitted = fitter.doFit();
 			fitDone = true;
-
-//			for (final ArrayList<DataSeries> f : fitted) {
-//				final MyPlot plot = plotter.getPlots().get(fitted.indexOf(f));
-//				plot.addDataSeries(f);
-//				plot.updatePlot();
-//			}
-			//plotter.plotsMontage();
+			plotter.addDataSeries(fitted);
+			for (int i :getAllLaneNumbers())
+				plotter.updatePlot(i);
+			
 			chkBoxBands.setEnabled(true);
 			chkBoxBands.setSelected(true);
 			buttonAddPeak.setEnabled(true);
@@ -849,56 +843,49 @@ class MainDialog extends JFrame implements ActionListener,
 			setSliderPanelEnabled(false);
 		}
 
-//		if (e.getSource().equals(buttonAddPeak)) {
-//			addPeak = !addPeak;
-//			removePeak = false;
-//			buttonRemovePeak.setSelected(false);
-//			final Color plotBGColor = addPeak ? Plotter.plotAddSelColor
-//				: Plotter.plotSelColor;
-//			for (final MyPlot p : plotter.getPlots())
-//				p.setSelectedBGColor(plotBGColor);
-//		}
+		if (e.getSource().equals(buttonAddPeak)) {
+			addPeak = !addPeak;
+			removePeak = false;
+			buttonRemovePeak.setSelected(false);
+			if (addPeak) plotter.setMode(Plotter.addMode);
+			else plotter.setMode(Plotter.regMode);
+			
+			}
 
-//		if (e.getSource().equals(buttonRemovePeak)) {
-//			addPeak = false;
-//			removePeak = !removePeak;
-//			buttonAddPeak.setSelected(false);
-//			final Color plotBGColor = removePeak ? Plotter.plotRemoveSelColor
-//				: Plotter.plotSelColor;
-//			for (final MyPlot p : plotter.getPlots())
-//				p.setSelectedBGColor(plotBGColor);
-//		}
-
-//		if (e.getSource().equals(buttonResetCustomPeaks)) {
-//			final GenericDialog gd = new GenericDialog("RESET CUSTOM PEAKS");
-//			gd.addMessage(
-//				"Select the plots from which the custom peaks must be removed");
-//			final int[] lanes = getAllLaneNumbers();
-//			final int rows = lanes.length;
-//			final boolean[] defaultValues = new boolean[rows];
-//			final String[] labels = new String[rows];
-//			for (final int i : lanes) {
-//				labels[i - 1] = "Lane " + i;
-//				defaultValues[i - 1] = false;
-//			}
-//			gd.addCheckboxGroup(rows, 1, labels, defaultValues);
-//			gd.showDialog();
-//			if (gd.wasOKed()) {
-//				for (final int i : lanes) {
-//					if (gd.getNextBoolean()) {
-//						fitter.resetCustomPeaks(i);
-//						for (final MyPlot p : plotter.getPlots()) {
-//							if (p.getNumber() == i) {
-//								plotter.updateCustomPeaks(i, fitter.getCustomPeaks(i));
-//							}
-//						}
-//					}
-//				}
-//				reDrawROIs(imp, "none");
-//				plotter.plotsMontage();
-//			}
-//
-//		}
+		if (e.getSource().equals(buttonRemovePeak)) {
+			addPeak = false;
+			removePeak = !removePeak;
+			buttonAddPeak.setSelected(false);
+			if (removePeak) plotter.setMode(Plotter.remMode);
+			else plotter.setMode(Plotter.regMode);
+		}
+		
+		
+		if (e.getSource().equals(buttonResetCustomPeaks)) {
+			final GenericDialog gd = new GenericDialog("RESET CUSTOM PEAKS");
+			gd.addMessage(
+				"Select the plots from which the custom peaks must be removed");
+			final int[] lanes = getAllLaneNumbers();
+			final int rows = lanes.length;
+			final boolean[] defaultValues = new boolean[rows];
+			final String[] labels = new String[rows];
+			for (final int i : lanes) {
+				labels[i - 1] = "Lane " + i;
+				defaultValues[i - 1] = false;
+			}
+			gd.addCheckboxGroup(rows, 1, labels, defaultValues);
+			gd.showDialog();
+			if (gd.wasOKed()) {
+				for (final int i : lanes) {
+					if (gd.getNextBoolean()) {
+						fitter.resetCustomPeaks(i);
+						plotter.updateCustomPeaks(i, fitter.getCustomPeaks(i));
+						plotter.updatePlot(i);
+					}
+				}
+				reDrawROIs(imp, "none");
+			}
+		}
 
 		if (e.getSource().equals(buttonClose)) {
 			if (askUser("Would you like to quit Gel Lanes Fit?")) {
@@ -928,40 +915,36 @@ class MainDialog extends JFrame implements ActionListener,
 			statusServ.showStatus("[" + x + ":" + y + "]");
 			if (!selectionUpdate) { // Not dragging an ROI
 				String roiCurrent = "none"; // None selected
-				final Iterator<Roi> roisIter = rois.iterator();
-				while (roisIter.hasNext()) {
-					final Roi roi = roisIter.next();
-					if (roi.contains(x, y)) {
-						roiCurrent = roi.getName(); // This selected
+				for (Roi r : rois) {
+					if (r.contains(x, y)) {
+						roiCurrent = r.getName(); // This selected
 					}
 				}
+
+				reDrawROIs(imp, roiCurrent);
+				if (roiCurrent.equals("none") && imp.getRoi() != null)
+					imp.killRoi();
 
 				if (!(roiCurrent.equals(roiSelected))) {
 					roiPreviouslySelected = roiSelected;
 					roiSelected = roiCurrent;
-					reDrawROIs(imp, roiCurrent);
-					if (!roiPreviouslySelected.equals("none")) {
-						final int roiPN = Integer.parseInt(roiPreviouslySelected.substring(
-							5));
-//						plotter.removeVLine(roiPN);
+					if (!roiCurrent.equals("none")) {
+						int ln = Integer.parseInt(roiCurrent.substring(5));
+						plotter.setSelected(ln);
+						plotter.setVLine(ln, y);
+					} else {
+						plotter.setSelected(Plotter.selectedNone);
 					}
-//					plotter.plotsMontage();
-					// if (roiCurrent.equals("none") && imp.getRoi() != null)
-					// imp.killRoi();
-				}
-				else {
-					if (!roiSelected.equals("none")) { // Moving inside same ROI
-						Color lineColor;
-						final int roiN = Integer.parseInt(roiCurrent.substring(5));
-						if (removePeak) lineColor = Plotter.vLineRemovePeakColor;
-						else if (addPeak) lineColor = Plotter.vLineAddPeakColor;
-						else if (!addPeak && !removePeak) lineColor = Plotter.vLineRegColor;
-						else {
-							lineColor = Color.white;
-							System.out.println("Something wrong with the booleans");
-						}
-//						plotter.setVLine(roiN, y, lineColor);
-//						plotter.plotsMontage();
+
+					if (!roiPreviouslySelected.equals("none")) {
+						final int roiPS = Integer.parseInt(roiPreviouslySelected.substring(
+							5));
+						plotter.removeVLine(roiPS);
+					}
+				} else { // Moving inside same ROI
+					if (!roiCurrent.equals("none")) {
+						int ln = Integer.parseInt(roiCurrent.substring(5));
+						plotter.setVLine(ln, y);
 					}
 				}
 			}
@@ -1031,8 +1014,8 @@ class MainDialog extends JFrame implements ActionListener,
 						}
 					}
 					reDrawROIs(imp, "none");
-//					plotter.updateCustomPeaks(lane, fitter.getCustomPeaks(lane));
-//					plotter.plotsMontage();
+					plotter.updateCustomPeaks(lane, fitter.getCustomPeaks(lane));
+					plotter.updatePlot(lane);
 				}
 			}
 		}
@@ -1054,7 +1037,7 @@ class MainDialog extends JFrame implements ActionListener,
 					final Rectangle rN = roiNew.getBounds();
 					if (rN.getWidth() * rN.getHeight() > 100) {
 						if (roiNew.getName() == null) { // It's a new ROI
-							log.info("Add Roi");
+							// log.info("Add Roi");
 							// Creating New ROI
 							// Find an available integer for lane name
 							boolean inRoiList = false;
@@ -1074,7 +1057,7 @@ class MainDialog extends JFrame implements ActionListener,
 							}
 						}
 						else {
-							log.info("Modify Roi");
+							// log.info("Modify Roi");
 							// Moving/Resizing a specific ROI
 							final Iterator<Roi> roisIter = rois.iterator();
 							while (roisIter.hasNext()) {
