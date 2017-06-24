@@ -19,10 +19,12 @@
 package gausscurvefit;
 
 import java.awt.BorderLayout;
+import java.awt.Checkbox;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.ItemSelectable;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -41,6 +43,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.Vector;
 
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
@@ -49,6 +52,7 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JSlider;
@@ -155,6 +159,7 @@ class MainDialog extends JFrame implements ActionListener,
 	private JTextField textDegBG;
 	private JTextField textTolPK;
 	private JCheckBox chkBoxBands;
+	private JCheckBox chkBoxRef;
 	private JToggleButton buttonAddPeak;
 	private JToggleButton buttonRemovePeak;
 	private JButton buttonResetCustomPeaks;
@@ -263,10 +268,11 @@ class MainDialog extends JFrame implements ActionListener,
 		textTolPK.setText("" + tolPK);
 		textTolPK.getDocument().addDocumentListener(this);
 		chkBoxBands = new JCheckBox("Show Bands");
+		chkBoxRef = new JCheckBox("Use Reference Ladder");
 		buttonAddPeak = new JToggleButton("Add Peak");
 		buttonRemovePeak = new JToggleButton("Remove Peak");
 		buttonResetCustomPeaks = new JButton("Reset Custom Peaks");
-
+		
 		degPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
 		degPanel.add(labelDegBG);
 		degPanel.add(textDegBG);
@@ -276,6 +282,9 @@ class MainDialog extends JFrame implements ActionListener,
 		chkBoxBands.addItemListener(this);
 		chkBoxBands.setSelected(false);
 		chkBoxBands.setEnabled(false);
+		chkBoxRef.addItemListener(this);
+		chkBoxRef.setSelected(false);
+		chkBoxRef.setEnabled(false);
 		buttonAddPeak.addActionListener(this);
 		buttonAddPeak.setEnabled(false);
 		buttonRemovePeak.addActionListener(this);
@@ -283,10 +292,13 @@ class MainDialog extends JFrame implements ActionListener,
 		buttonResetCustomPeaks.addActionListener(this);
 		buttonResetCustomPeaks.setEnabled(false);
 
+		
+		
 		settingsPanel.setLayout(new GridLayout(10, 1));
 		settingsPanel.add(degPanel);
 		settingsPanel.add(tolPanel);
 		settingsPanel.add(chkBoxBands);
+		settingsPanel.add(chkBoxRef);
 		settingsPanel.add(buttonAddPeak);
 		settingsPanel.add(buttonRemovePeak);
 		settingsPanel.add(buttonResetCustomPeaks);
@@ -821,6 +833,7 @@ class MainDialog extends JFrame implements ActionListener,
 			
 			chkBoxBands.setEnabled(true);
 			chkBoxBands.setSelected(true);
+			chkBoxRef.setEnabled(true);
 			buttonAddPeak.setEnabled(true);
 			buttonRemovePeak.setEnabled(true);
 			buttonResetCustomPeaks.setEnabled(true);
@@ -863,29 +876,17 @@ class MainDialog extends JFrame implements ActionListener,
 		
 		
 		if (e.getSource().equals(buttonResetCustomPeaks)) {
-			final GenericDialog gd = new GenericDialog("RESET CUSTOM PEAKS");
-			gd.addMessage(
-				"Select the plots from which the custom peaks must be removed");
-			final int[] lanes = getAllLaneNumbers();
-			final int rows = lanes.length;
-			final boolean[] defaultValues = new boolean[rows];
-			final String[] labels = new String[rows];
-			for (final int i : lanes) {
-				labels[i - 1] = "Lane " + i;
-				defaultValues[i - 1] = false;
-			}
-			gd.addCheckboxGroup(rows, 1, labels, defaultValues);
-			gd.showDialog();
-			if (gd.wasOKed()) {
+			String title = "RESET CUSTOM PEAKS";
+			String message = "Select the plots from which the custom peaks must be removed";
+			ArrayList<Integer> lanes = getSelectedLanes(title, message, true);
+			if (lanes != null) {
 				for (final int i : lanes) {
-					if (gd.getNextBoolean()) {
-						fitter.resetCustomPeaks(i);
-						plotter.updateCustomPeaks(i, fitter.getCustomPeaks(i));
-						plotter.updatePlot(i);
-					}
+							fitter.resetCustomPeaks(i);
+							plotter.updateCustomPeaks(i, fitter.getCustomPeaks(i));
+							plotter.updatePlot(i);
 				}
 				reDrawROIs(imp, "none");
-			}
+		  }
 		}
 
 		if (e.getSource().equals(buttonClose)) {
@@ -897,10 +898,77 @@ class MainDialog extends JFrame implements ActionListener,
 
 	@Override
 	public void itemStateChanged(final ItemEvent e) {
-		if (e.getItemSelectable() == chkBoxBands) {
+		ItemSelectable item = e.getItemSelectable();
+		if (item == chkBoxBands) {
 			reDrawROIs(imp, "none");
 		}
+		if (item == chkBoxRef) {
+			JCheckBox box = (JCheckBox) item;
+			if (box.isSelected()) {
+				String title = "REFERENCE LANE";
+				String message = "Select the lane to be used as reference.";
+				ArrayList<Integer> lanes = getSelectedLanes(title, message, false);
+				if (lanes.size() != 1) {
+					chkBoxRef.setSelected(false);
+				}
+			}
+		}
 	}
+	
+	@SuppressWarnings("unchecked")
+	private ArrayList<Integer> getSelectedLanes(String title, String message, boolean allLanes) {
+		final GenericDialog gd = new GenericDialog(title);
+		gd.addMessage(message);
+		final int[] lanes = getAllLaneNumbers();
+		int rows = 0;
+		if (allLanes) {
+			rows = lanes.length + 1;
+		} else {
+			rows = lanes.length;
+		}
+		ArrayList<Integer> selectedLanes = new ArrayList<>();
+		final boolean[] defaultValues = new boolean[rows];
+		final String[] labels = new String[rows];
+		for (final int i : lanes) {
+			labels[i - 1] = "Lane " + i;
+			defaultValues[i - 1] = false;
+		}
+		
+		if (allLanes) {
+			labels[labels.length - 1] = "All Lanes";
+			defaultValues[defaultValues.length - 1] = false;
+			gd.addCheckboxGroup(rows, 1, labels, defaultValues);
+		} else {
+			gd.addRadioButtonGroup(null, labels, rows, 1, labels[0]);
+		}
+		
+		gd.showDialog();
+		if (gd.wasOKed()) {
+			if (allLanes) {
+				Vector<Checkbox> v = gd.getCheckboxes();
+				for (Checkbox cb : v) {
+					if (cb.getState()) {
+						selectedLanes.add(v.indexOf(cb) + 1);
+					}
+				}
+			} else {
+				selectedLanes.add(Integer.parseInt(gd.getNextRadioButton().substring(5)));
+			}
+		}
+		if (selectedLanes.contains(rows)){
+			// 'All Lanes' is selected
+			if (selectedLanes.size() != 1) { // Not just 'All lanes'
+				JOptionPane.showMessageDialog(null, "Only select 'All Lanes' if you want to select all lanes", "WARNING!", JOptionPane.INFORMATION_MESSAGE);
+				return null; 
+			}
+			for (int i=0; i< lanes.length; i++) {
+				selectedLanes.add(lanes[i]);
+			}
+		}
+		return selectedLanes;
+	} 
+	
+	
 
 	@Override
 	public void mouseDragged(final MouseEvent e) {
