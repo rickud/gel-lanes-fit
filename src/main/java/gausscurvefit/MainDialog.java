@@ -106,6 +106,7 @@ class MainDialog extends JFrame implements ActionListener,
 	private static final Color fit = Color.MAGENTA;
 	private static final Color selected = Color.YELLOW;
 	private static final Color unselected = Color.RED;
+	private static final Color reference = Color.BLUE;
 
 	private boolean auto = true; // AUTO Lane size mode is ON
 	private boolean selectionUpdate = false; // active updating is off
@@ -115,6 +116,7 @@ class MainDialog extends JFrame implements ActionListener,
 
 	private String roiSelected = "none";
 	private String roiPreviouslySelected = "none";
+	private String roiReference = "none";
 
 	private final String warningFit =
 		"The current plots will be reset and the current fitting data will be lost.";
@@ -292,8 +294,6 @@ class MainDialog extends JFrame implements ActionListener,
 		buttonResetCustomPeaks.addActionListener(this);
 		buttonResetCustomPeaks.setEnabled(false);
 
-		
-		
 		settingsPanel.setLayout(new GridLayout(10, 1));
 		settingsPanel.add(degPanel);
 		settingsPanel.add(tolPanel);
@@ -526,8 +526,13 @@ class MainDialog extends JFrame implements ActionListener,
 				if (buttonManual.isSelected() && !roiName.equals("none")) {
 					imgPlus.setRoi(roi);
 				}
-			}
-			else {
+			} else if (roi.getName().equals(roiReference)) {
+					if (!roiReference.equals("none") && !roiReference.equals(roiName)) {
+						roi.setStrokeWidth(3);
+						roi.setStrokeColor(MainDialog.reference);
+						labelRoi.setFillColor(MainDialog.reference);
+					}
+			} else {
 				roi.setStrokeWidth(1);
 				roi.setStrokeColor(MainDialog.unselected);
 				labelRoi.setFillColor(MainDialog.unselected);
@@ -765,7 +770,7 @@ class MainDialog extends JFrame implements ActionListener,
 		}
 		resetAutoROIs(LW, LH, LSp, LHOff, LVOff, nLanes);
 		reDrawROIs(imp, "none");
-
+		chkBoxRef.setSelected(false);
 		redoProfilePlots();
 		fitter.resetAllFitter();
 		fitter.setInputData(plotter.getProfiles());
@@ -910,7 +915,37 @@ class MainDialog extends JFrame implements ActionListener,
 				ArrayList<Integer> lanes = getSelectedLanes(title, message, false);
 				if (lanes.size() != 1) {
 					chkBoxRef.setSelected(false);
+					log.error("Too many or no lanes selected");
+					return;
 				}
+				roiReference = "Lane " + lanes.get(0);
+				for (Roi r : rois) {
+					int ln = Integer.parseInt(r.getName().substring(5));
+					if (ln != lanes.get(0)) {
+						ArrayList<Peak> peaks = fitter.getFittedPeaks(lanes.get(0));
+						ArrayList<DataSeries> bands = new ArrayList<>();
+						
+						for (Peak p : peaks) {
+							RealVector x = new ArrayRealVector(new double[] { p.getMean(), p.getMean() });
+							double[] limits = plotter.getPlotLimits(ln);
+							RealVector y = new ArrayRealVector(new double[] { limits[2], limits[3] });
+							DataSeries d = new DataSeries("Band", ln, DataSeries.BLINE, x, y, Color.RED);
+							bands.add(d);
+						}
+						plotter.addDataSeries(bands);
+						plotter.updatePlot(ln);
+					}
+				}
+			} else {
+				roiReference = "none";
+				ArrayList<DataSeries> plotsData = plotter.getPlotsData();
+				Iterator<DataSeries> dataIter = plotsData.iterator();
+				while (dataIter.hasNext()) {
+					if (dataIter.next().getType() == DataSeries.BLINE)
+						dataIter.remove();
+				}
+				for (int i : getAllLaneNumbers())
+					plotter.updatePlot(i);
 			}
 		}
 	}

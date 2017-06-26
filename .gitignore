@@ -5,3 +5,4 @@
 /output/
 /src/main/resources/*.java
 /.settings/
+/bin/

@@ -18,10 +18,12 @@
 
 package gausscurvefit;
 
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.GridLayout;
 import java.awt.Shape;
+import java.awt.Stroke;
 import java.awt.event.WindowEvent;
 import java.awt.geom.Ellipse2D;
 import java.util.ArrayList;
@@ -41,10 +43,14 @@ import org.apache.commons.math3.linear.RealVector;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
+import org.jfree.chart.event.ChartChangeEvent;
+import org.jfree.chart.event.ChartChangeEventType;
+import org.jfree.chart.event.ChartChangeListener;
 import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.chart.plot.SeriesRenderingOrder;
 import org.jfree.chart.plot.XYPlot;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
+import org.jfree.data.Range;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
 import org.jfree.ui.RectangleInsets;
@@ -54,7 +60,7 @@ import ij.gui.Plot;
 import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 
-class Plotter extends JFrame {
+class Plotter extends JFrame implements ChartChangeListener {
 
 	private final ImagePlus imp;
 	// private ArrayList<JFreeChart> plots;
@@ -67,6 +73,7 @@ class Plotter extends JFrame {
 	private final int cols = 2; // Number of plot Rows in display
 	private int selected; // Which plot is highlighted
 	private int plotMode = regMode;
+	private int referencePlotNumber = -1;
 
 	// Colors are listed here for consistent, easy modification
 	static final Color vLineRegColor = new Color(127, 127, 127);
@@ -74,6 +81,7 @@ class Plotter extends JFrame {
 	static final Color vLineRemovePeakColor = new Color(185, 7, 0);
 	// Colors for DataSeries in plots
 	static final Color profileColor = Color.BLACK;
+	static final Color bLineColor = new Color(255, 153, 153);
 	static final Color gaussColor = Color.RED;
 	static final Color bgColor = Color.BLUE;
 	static final Color fittedColor = new Color(255, 153, 0);
@@ -82,6 +90,7 @@ class Plotter extends JFrame {
 	static final int regMode = 0;
 	static final int addMode = 1;
 	static final int remMode = 2;
+	static final int refMode = 2;
 
 	static final Color plotSelColor = new Color(240, 240, 240);
 	static final Color plotUnselColor = Color.WHITE;
@@ -109,6 +118,7 @@ class Plotter extends JFrame {
 			updateProfile(r);
 		}
 		for (final ChartPanel p : chartPanels) {
+			p.getChart().addChangeListener(this);
 			chartsMainPanel.add(p);
 		}
 		chartsScrollPane = new JScrollPane(chartsMainPanel);
@@ -191,7 +201,27 @@ class Plotter extends JFrame {
 		}
 		return profiles;
 	}
-
+	
+	public ArrayList<DataSeries> getPlotsData() {
+		return plotsData;
+	}
+	
+	double[] getPlotLimits(int ln) {
+		double[] limits = new double[4];
+		for (ChartPanel p : chartPanels) {
+			if (p.getChart().getTitle().getText().equals("Lane " + ln)) {
+				XYPlot pl = p.getChart().getXYPlot();
+				Range xrange = pl.getDataRange(pl.getDomainAxis());
+				Range yrange = pl.getDataRange(pl.getRangeAxis());
+				limits[0] = xrange.getLowerBound();
+				limits[1] = xrange.getUpperBound();
+				limits[2] = yrange.getLowerBound();
+				limits[3] = yrange.getUpperBound();
+			}
+		}
+		return limits;
+	}
+	
 	int getPlotMode() {
 		return this.plotMode;
 	}
@@ -207,7 +237,11 @@ class Plotter extends JFrame {
 	public void setMode(final int plotMode) {
 		this.plotMode = plotMode;
 	}
-
+	
+  void setReferencePlot(int i) {
+  	this.referencePlotNumber = i;
+  }
+  
 	private void sortDataSeries() {
 		Collections.sort(plotsData);
 		int nullIndex = 0;
@@ -319,29 +353,17 @@ class Plotter extends JFrame {
 		}
 
 		final XYSeriesCollection dataset = new XYSeriesCollection();
-		// sortDataSeries();
-		int PKCount = 0;
-		final ArrayList<String> keys = new ArrayList<>();
 		Collections.sort(plotsData);
-		for (final DataSeries d : plotsData) {
-			if (d.getLane() == ln) {
-				final XYSeries dataSeries = d.getXYSeries();
-				int k = d.getType();
-				if (k == DataSeries.GAUSS_BG) {
-					k += PKCount;
-					PKCount++;
-				}
-				keys.add(String.format("%d", k));
-				dataSeries.setKey(String.format("%d", k));
-				dataset.addSeries(dataSeries);
-			}
-		}
+
 		for (final ChartPanel p : chartPanels) {
 			final int plotNumber = Integer.parseInt(p.getChart().getTitle().getText()
 				.substring(5));
 			if (plotNumber == ln) {
+				int gcount = 0;
+				int bcount = 0;
+				
 				final JFreeChart c = p.getChart();
-				c.getXYPlot().setDataset(dataset);
+				
 				if (plotNumber == selected) {
 					c.getXYPlot().setBackgroundPaint(plotBGColor);
 					c.setBackgroundPaint(plotBGColor);
@@ -354,72 +376,102 @@ class Plotter extends JFrame {
 				p.getChart().getXYPlot().setSeriesRenderingOrder(
 					SeriesRenderingOrder.FORWARD);
 				final XYLineAndShapeRenderer renderer = (XYLineAndShapeRenderer) p
-					.getChart().getXYPlot().getRenderer();
-				PKCount = 0;
-
-				for (final String k : keys) {
-					final int seriesIdx = dataset.getSeriesIndex(k);
-					final int seriesType = Integer.parseInt(k);
-					if (seriesType == DataSeries.VLINE) {
-						renderer.setSeriesPaint(seriesIdx, vLineColor);
+						.getChart().getXYPlot().getRenderer();
+				Stroke basestroke = new BasicStroke(2.0f);
+				Stroke vstroke = new BasicStroke(1.0f);
+				Stroke bstroke = new BasicStroke(0.75f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[] {12.0f, 5.0f}, 0.0f);
+				for (final DataSeries d : plotsData) {
+					if (d.getLane() == ln) {
+						
+						if (ln == referencePlotNumber) {
+							//TODO:
+						}
+						final XYSeries xyds = d.getXYSeries();
+						int k = d.getType();
+						String key = "";
+						if (k == DataSeries.BLINE) {
+							key = String.format("%d", k + bcount);
+							bcount++;
+						}	else if (k == DataSeries.GAUSS_BG) {
+							key = String.format("%d", k + gcount);
+							gcount++;
+						} else {
+							key = String.format("%d", k);
+						}
+						xyds.setKey(key);
+						dataset.addSeries(xyds);
+						dataset.getSeries(key);
+						final int seriesIdx = dataset.getSeriesIndex(key);
+						if (k == DataSeries.VLINE) {
+							renderer.setSeriesPaint(seriesIdx, vLineColor);
+							renderer.setSeriesStroke(seriesIdx, vstroke);
+						}
+						if (k == DataSeries.BLINE) {
+							renderer.setSeriesPaint(seriesIdx, bLineColor);
+							renderer.setSeriesStroke(seriesIdx, bstroke);
+						}
+						if (k == DataSeries.PROFILE) {
+							renderer.setSeriesPaint(seriesIdx, profileColor);
+							renderer.setSeriesStroke(seriesIdx, basestroke);
+						}
+						if (k == DataSeries.BACKGROUND) {
+							renderer.setSeriesPaint(seriesIdx, bgColor);
+							renderer.setSeriesStroke(seriesIdx, basestroke);
+						}
+						if (k == DataSeries.GAUSS_BG) {
+							renderer.setSeriesPaint(seriesIdx, gaussColor);
+							renderer.setSeriesStroke(seriesIdx, basestroke);
+						}
+						if (k == DataSeries.FITTED) {
+							renderer.setSeriesPaint(seriesIdx, fittedColor);
+							renderer.setSeriesStroke(seriesIdx, basestroke);
+						}
+						if (k == DataSeries.CUSTOMPEAKS) {
+							renderer.setSeriesPaint(seriesIdx, pkColor);
+							final Shape dot = new Ellipse2D.Double(0, 0, 6, 6);
+							renderer.setSeriesShape(seriesIdx, dot);
+							renderer.setSeriesShapesVisible(seriesIdx, true);
+							renderer.setSeriesLinesVisible(seriesIdx, false);
+						}
 					}
-					if (seriesType == DataSeries.PROFILE) {
-						renderer.setSeriesPaint(seriesIdx, profileColor);
-					}
-					if (seriesType == DataSeries.BACKGROUND) {
-						renderer.setSeriesPaint(seriesIdx, bgColor);
-					}
-					if (seriesType == DataSeries.GAUSS_BG + PKCount) {
-						renderer.setSeriesPaint(seriesIdx, gaussColor);
-						PKCount++;
-					}
-					if (seriesType == DataSeries.FITTED) {
-						renderer.setSeriesPaint(seriesIdx, fittedColor);
-					}
-					if (seriesType == DataSeries.CUSTOMPEAKS) {
-						renderer.setSeriesPaint(seriesIdx, pkColor);
-						final Shape dot = new Ellipse2D.Double(0, 0, 6, 6);
-						renderer.setSeriesShape(seriesIdx, dot);
-						renderer.setSeriesShapesVisible(seriesIdx, true);
-						renderer.setSeriesLinesVisible(seriesIdx, false);
-					}
-
-					// Update the Legend
-//					LegendItemCollection legendItemsOld = c.getXYPlot().getLegendItems();
-//					final LegendItemCollection legendItemsNew = new LegendItemCollection();
-//
-//					for(int i = 0; i< legendItemsOld.getItemCount(); i++){
-//						LegendItem li = legendItemsOld.get(i);
-//						if (li.getLabel().equals(String.format("%d", DataSeries.PROFILE))){
-//							LegendItem newLi = new LegendItem("Lane " + ln + " Profile");
-//							newLi.setSeriesIndex(li.getSeriesIndex());
-//							li = newLi;
-//						} else if (li.getSeriesKey().equals(String.format("%d", DataSeries.BACKGROUND))) {
-//							li.setDescription("Background Polynomial");
-//							legendItemsNew.add(li);
-//						} else if (li.getSeriesKey().equals(String.format("%d", DataSeries.GAUSS_BG))) {
-//							li.setDescription("Gaussian Peaks");
-//							legendItemsNew.add(li);
-//						} else if (li.getSeriesKey().equals(String.format("%d", DataSeries.FITTED))) {
-//							li.setDescription("Fitted Curve");
-//							legendItemsNew.add(li);
-//						}
-//					}
-//					LegendItemSource source = new LegendItemSource() {
-//						LegendItemCollection lic = new LegendItemCollection();
-//						{lic.addAll(legendItemsNew);}
-//						@Override
-//						public LegendItemCollection getLegendItems() {
-//							return lic;
-//						}
-//					};
-//					c.addLegend(new LegendTitle(source));
-//					c.getLegend().setPosition(RectangleEdge.RIGHT);
-//					c.getLegend().setVisible(true);
 				}
+				c.getXYPlot().setDataset(dataset);
+				// Update the Legend
+				//					LegendItemCollection legendItemsOld = c.getXYPlot().getLegendItems();
+				//					final LegendItemCollection legendItemsNew = new LegendItemCollection();
+				//
+				//					for(int i = 0; i< legendItemsOld.getItemCount(); i++){
+				//						LegendItem li = legendItemsOld.get(i);
+				//						if (li.getLabel().equals(String.format("%d", DataSeries.PROFILE))){
+				//							LegendItem newLi = new LegendItem("Lane " + ln + " Profile");
+				//							newLi.setSeriesIndex(li.getSeriesIndex());
+				//							li = newLi;
+				//						} else if (li.getSeriesKey().equals(String.format("%d", DataSeries.BACKGROUND))) {
+				//							li.setDescription("Background Polynomial");
+				//							legendItemsNew.add(li);
+				//						} else if (li.getSeriesKey().equals(String.format("%d", DataSeries.GAUSS_BG))) {
+				//							li.setDescription("Gaussian Peaks");
+				//							legendItemsNew.add(li);
+				//						} else if (li.getSeriesKey().equals(String.format("%d", DataSeries.FITTED))) {
+				//							li.setDescription("Fitted Curve");
+				//							legendItemsNew.add(li);
+				//						}
+				//					}
+				//					LegendItemSource source = new LegendItemSource() {
+				//						LegendItemCollection lic = new LegendItemCollection();
+				//						{lic.addAll(legendItemsNew);}
+				//						@Override
+				//						public LegendItemCollection getLegendItems() {
+				//							return lic;
+				//						}
+				//					};
+				//					c.addLegend(new LegendTitle(source));
+				//					c.getLegend().setPosition(RectangleEdge.RIGHT);
+				//					c.getLegend().setVisible(true);
 			}
 		}
 	}
+
 
 	void closePlot() {
 		this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
@@ -468,6 +520,20 @@ class Plotter extends JFrame {
 		plotsData = new ArrayList<>();
 		chartPanels = new ArrayList<>();
 		chartsMainPanel.removeAll();
+	}
+
+	/* (non-Javadoc)
+	 * @see org.jfree.chart.event.ChartChangeListener#chartChanged(org.jfree.chart.event.ChartChangeEvent)
+	 */
+	@Override
+	public void chartChanged(ChartChangeEvent e) {
+		XYPlot p = e.getChart().getXYPlot();
+		int ln = Integer.parseInt(e.getChart().getTitle().getText().substring(5));
+		for (DataSeries d : plotsData) {
+			if (d.getLane() == ln && (d.getType() == DataSeries.VLINE || d.getType() == DataSeries.BLINE)) {
+				
+			}
+		}
 	}
 }
 
@@ -605,12 +671,12 @@ class DataSeries implements Comparable<DataSeries> {
 
 	// Possible Types
 	final static int VLINE = 0;
-
-	final static int PROFILE = 1;
-	final static int BACKGROUND = 2;
-	final static int GAUSS_BG = 3;
-	final static int FITTED = 400;
-	final static int CUSTOMPEAKS = 401;
+	final static int BLINE = 1;
+	final static int PROFILE = 400;
+	final static int BACKGROUND = 401;
+	final static int GAUSS_BG = 402;
+	final static int FITTED = 800;
+	final static int CUSTOMPEAKS = 801;
 
 	public DataSeries(final String name, final int lane, final int type,
 		final RealVector x, final RealVector y, final Color color)
