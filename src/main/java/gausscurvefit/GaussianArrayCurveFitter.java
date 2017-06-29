@@ -67,7 +67,6 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 *
 	 * @return a curve fitter.
 	 * @see #withStartPoint(double[])
-	 * @see #withMaxIterations(int)
 	 */
 	static GaussianArrayCurveFitter create(final double peakTol,
 		final int deg)
@@ -86,15 +85,6 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			deg);
 	}
 
-	/**
-	 * Configure the maximum number of iterations.
-	 *
-	 * @param newMaxIter maximum number of iterations
-	 * @return a new instance.
-	 */
-	public GaussianArrayCurveFitter withMaxIterations(final int newMaxIter) {
-		return new GaussianArrayCurveFitter(initialGuess, newMaxIter, peakTol, deg);
-	}
 
 	/** {@inheritDoc} */
 	@Override

@@ -18,8 +18,6 @@
 
 package gausscurvefit;
 
-import java.awt.Dimension;
-import java.awt.Point;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;

@@ -48,15 +48,12 @@ import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
 import org.jfree.chart.LegendItem;
 import org.jfree.chart.LegendItemCollection;
-import org.jfree.chart.LegendItemSource;
 import org.jfree.chart.annotations.XYTextAnnotation;
-import org.jfree.chart.plot.Marker;
 import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.chart.plot.SeriesRenderingOrder;
 import org.jfree.chart.plot.ValueMarker;
 import org.jfree.chart.plot.XYPlot;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
-import org.jfree.chart.title.LegendTitle;
 import org.jfree.data.Range;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
@@ -67,7 +64,6 @@ import org.jfree.ui.TextAnchor;
 import org.scijava.Context;
 
 import ij.ImagePlus;
-import ij.gui.Plot;
 import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 
@@ -195,7 +191,7 @@ class Plotter extends JFrame {
 						found = true;
 						m.setName(String.format("%1$.1f", x));
 						m.setValue(x);
-						m.setColor(vMarkerColor);
+						m.setPaint(vMarkerColor);
 					}
 				}
 				if (!found) {					
@@ -297,18 +293,6 @@ class Plotter extends JFrame {
 		}
 	}
   
-	private void sortDataSeries() {
-		Collections.sort(plotsData);
-		int nullIndex = 0;
-		final Iterator<DataSeries> dataIter = plotsData.iterator();
-		while (dataIter.hasNext()) {
-			final DataSeries d = dataIter.next();
-			if (d == null) break;
-			nullIndex++;
-		}
-		plotsData = new ArrayList<>(plotsData.subList(0, nullIndex));
-	}
-
 	void updateCustomPeaks(final int lane, final ArrayList<Peak> pl) {
 		for (final ChartPanel p : chartPanels) {
 			final int plotNumber = Integer.parseInt(p.getChart().getTitle().getText()
@@ -445,7 +429,7 @@ class Plotter extends JFrame {
 						label.setRotationAngle(-Math.PI / 2);
 						
 						c.getXYPlot().addAnnotation(label);
-						c.getXYPlot().addDomainMarker(m.getMarker(), Layer.BACKGROUND);
+						c.getXYPlot().addDomainMarker(m, Layer.BACKGROUND);
 					}
 				}
 				
@@ -534,36 +518,6 @@ class Plotter extends JFrame {
 		}
 	}
 
-//	private void removeCustomPeaks(final MyPlot p) {
-//		final Iterator<DataSeries> dataIter = p.getDataSeries().iterator();
-//		while (dataIter.hasNext()) {
-//			final DataSeries d = dataIter.next();
-//			if (d.getType() == DataSeries.CUSTOMPEAKS) {
-//				dataIter.remove();
-//			}
-//		}
-//		p.updatePlot();
-//	}
-
-//	void updateCustomPeaks(final int lane, final ArrayList<Peak> pl) {
-//		for (final MyPlot p : plots) {
-//			if (p.getNumber() == lane) {
-//				removeCustomPeaks(p);
-//				RealVector xadd = new ArrayRealVector();
-//				RealVector yadd = new ArrayRealVector();
-//				for (final Peak fp : pl) {
-//					xadd = xadd.append(fp.getMean());
-//					yadd = yadd.append(fp.getNorm());
-//				}
-//				final DataSeries customPeaks = new DataSeries("CP ADD", lane,
-//					DataSeries.CUSTOMPEAKS, xadd, yadd, Plotter.vLineAddPeakColor);
-//				p.addDataSeries(customPeaks);
-//				p.updatePlot();
-//			}
-//		}
-//
-//	}
-
 	public void resetData() {
 		plotsData = new ArrayList<>();
 		chartPanels = new ArrayList<>();
@@ -585,131 +539,7 @@ class Plotter extends JFrame {
 }
 
 
-
-
-class MyPlot implements Comparable<MyPlot> {
-
-	private Plot plot;
-
-	private final int number;
-
-	private final String title;
-	private final String xLabel;
-	private final String yLabel;
-
-	private ArrayList<DataSeries> data = new ArrayList<>();
-	private double xmin;
-	private double xmax;
-	private double ymin;
-	private double ymax;
-
-	private boolean selected = false;
-
-	private final Color unselectedBG = Color.white;
-
-	private Color selectedBG = Color.white;
-
-	public MyPlot(final String title, final String xLabel, final String yLabel) {
-		this.title = title;
-		this.xLabel = xLabel;
-		this.yLabel = yLabel;
-		this.number = Integer.parseInt(title.substring(5));
-	}
-
-	private void sortDataSeries() {
-		Collections.sort(data);
-		// Every time the DataSeries are sorted, the min/max are aslo updated
-		final Iterator<DataSeries> dataIter = data.iterator();
-		int nullIndex = 0;
-		xmin = Double.MAX_VALUE;
-		xmax = Double.MIN_VALUE;
-		ymin = Double.MAX_VALUE;
-		ymax = Double.MIN_VALUE;
-		while (dataIter.hasNext()) {
-			final DataSeries d = dataIter.next();
-			if (d == null) break;
-			double xmin2, xmax2, ymin2, ymax2;
-			final RealVector x = new ArrayRealVector(d.getX());
-			final RealVector y = new ArrayRealVector(d.getY());
-			xmin2 = x.getMinValue();
-			xmax2 = x.getMaxValue();
-			ymin2 = y.getMinValue();
-			ymax2 = y.getMaxValue();
-			if (xmin2 < xmin) xmin = xmin2;
-			if (xmax2 > xmax) xmax = xmax2;
-			if (ymin2 < ymin) ymin = ymin2;
-			if (ymax2 > ymax) ymax = ymax2;
-			nullIndex++;
-		}
-		data = new ArrayList<>(data.subList(0, nullIndex));
-	}
-
-	public void addDataSeries(final DataSeries d) {
-		data.add(d);
-		sortDataSeries();
-	}
-
-	public void addDataSeries(final ArrayList<DataSeries> d) {
-		data.addAll(d);
-		sortDataSeries();
-	}
-
-	public double[] getDataMinMax() {
-		return new double[] { xmin, xmax, ymin, ymax };
-	}
-
-	public ArrayList<DataSeries> getDataSeries() {
-		return data;
-	}
-
-	public int getNumber() {
-		return number;
-	}
-
-	public Plot getPlot() {
-		return plot;
-	}
-
-	public boolean isSelected() {
-		return selected;
-	}
-
-	public void setSelected(final boolean s) {
-		selected = s;
-	}
-
-	public void setSelectedBGColor(final Color color) {
-		selectedBG = color;
-	}
-
-	public void updatePlot() {
-		final Plot newPlot = new Plot(title, xLabel, yLabel);
-		newPlot.useTemplate(plot, Plot.COPY_LABELS + Plot.COPY_LEGEND +
-			Plot.COPY_SIZE);
-		if (plot != null) plot.dispose();
-		plot = newPlot;
-		if (selected) plot.setBackgroundColor(selectedBG);
-		else plot.setBackgroundColor(unselectedBG);
-		sortDataSeries();
-		for (final DataSeries d : data) {
-			plot.setColor(d.getColor());
-			if (d.getType() == DataSeries.CUSTOMPEAKS) {
-				plot.addPoints(d.getX().toArray(), d.getY().toArray(), Plot.CIRCLE);
-			}
-			else {
-				plot.addPoints(d.getX().toArray(), d.getY().toArray(), Plot.LINE);
-			}
-		}
-		plot.setLimits(xmin, xmax, ymin, ymax);
-	}
-
-	@Override
-	public int compareTo(final MyPlot p) {
-		return (number - p.getNumber());
-	}
-}
-
-class VerticalMarker {
+class VerticalMarker extends ValueMarker {
 	// Possible types
 	final static int VMARK = 0;	// Vertical Position
 	final static int BMARK = 1;	// Molecular Weight bands
@@ -718,21 +548,14 @@ class VerticalMarker {
 	private final int lane; 		// Reference GEL LANE
 	private final int type;
 	private String name;				// Name for reference
-	private Color color;
-	private Stroke stroke;
-	private double x;
-	private Marker m;
-	
+
 	public VerticalMarker(final String name, final int lane, final int type,
 		final double x, final Color color, final Stroke stroke)
 	{
+		super(x, color, stroke);
 		this.name = name;
 		this.lane = lane;
 		this.type = type;
-		this.color = color;
-		this.stroke = stroke;
-		this.x = x;
-		this.m = new ValueMarker(x, color, stroke);
 	}
 	
 	void setName(String name) {
@@ -743,10 +566,6 @@ class VerticalMarker {
 		return lane;
 	}
 	
-	Marker getMarker() {
-		return m;
-	}
-	
 	String getName() {
 		return name;
 	}
@@ -754,21 +573,8 @@ class VerticalMarker {
 	int getType() {
 		return type;
 	}
-	
-	double getValue() {
-		return x;
-	}
-
-	void setColor(Color color) {
-		this.color = color;
-		m.setPaint(color);
-	}
-
-	void setValue(double x) {
-		this.x = x;
-		m = new ValueMarker(x, color, stroke);
-	}
 }
+
 
 class DataSeries extends XYSeries implements Comparable<DataSeries> {
 

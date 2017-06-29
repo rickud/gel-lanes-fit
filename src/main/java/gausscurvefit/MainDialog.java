@@ -49,7 +49,6 @@ import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JSlider;
@@ -963,11 +962,12 @@ class MainDialog extends JFrame implements ActionListener,
 		}
 		
 		// CheckBoxes ------------------------------------------------------------------------------------
-		if (e.getSource().equals(chkBoxBands) && chkBoxBands.isSelected() && fitDone) {
+		if (e.getSource().equals(chkBoxBands)) {
 			reDrawROIs(imp, "none");
 		}
 		
-		if (e.getSource().equals(chkBoxRef) && chkBoxRef.isSelected() && fitDone) {
+		if (e.getSource().equals(chkBoxRef)) {
+			if (chkBoxRef.isSelected() && fitDone) {
 			//chkBoxRef.setSelected(chkBoxRef.isSelected());
 			askReferenceLane();
 			if (!roiReference.equals("none")) {
@@ -976,7 +976,6 @@ class MainDialog extends JFrame implements ActionListener,
 				String label = refLabel + ": " + roiReference;
 				chkBoxRef.setText(label);
 				plotter.setReferencePlot(refLn, fitter.getFittedPeaks(refLn));
-				reDrawROIs(imp, "none");
 				for (int i : getAllLaneNumbers()){
 					plotter.updatePlot(i);
 				}
@@ -996,6 +995,8 @@ class MainDialog extends JFrame implements ActionListener,
 			for (int i : getAllLaneNumbers())
 				plotter.updatePlot(i);
 		}
+		reDrawROIs(imp, "none");
+	}
 
 		
 		if (e.getSource().equals(buttonClose)) {
