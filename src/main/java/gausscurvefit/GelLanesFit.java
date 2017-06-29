@@ -82,7 +82,7 @@ public class GelLanesFit implements Command {
 
 		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
 			.getTolPK());
-		final Plotter plotter = new Plotter(imp, md.getRois(), SH, SW);
+		final Plotter plotter = new Plotter(context, imp, md.getRois(), SH, SW);
 		md.setPlotter(plotter);
 		md.setFitter(fitter);
 
@@ -148,15 +148,8 @@ public class GelLanesFit implements Command {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
 		final ImagePlus iPlus = new Opener().openImage(
-			"src//main//resources//sample//03_05_16_refs.tif");
-		// display it via ImageJ
+			"src//main//resources//sample//SumTimeSeriesBright[100-40ms].tif");
 		iPlus.show();
-		// iPlus.getCanvas().setLocation(0, 100);
-		// wrap it into an ImgLib image (no copying)
-		// final Img image = ImagePlusAdapter.wrap(imp);
-		// display it via ImgLib using ImageJ
-		// ImageJFunctions.show(image);
-		// Launch the "OpenImage" command.
 		ij.command().run(GelLanesFit.class, true);
 	}
 }
