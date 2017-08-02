@@ -132,7 +132,6 @@
 				<filtering>true</filtering>
 				<includes>
 					<include>sample/*.tif</include>
-					<include>**/*.properties</include>
 				</includes>
 			</resource>
 		</resources>
@@ -155,6 +154,11 @@
 		<dependency>
     		<groupId>org.jfree</groupId>
     		<artifactId>jfreechart</artifactId>
+		</dependency>
+		<dependency>
+  			<groupId>org.apache.maven</groupId>
+  			<artifactId>maven-model</artifactId>
+  			<version>3.3.9</version>
 		</dependency>
 	</dependencies>
 </project>

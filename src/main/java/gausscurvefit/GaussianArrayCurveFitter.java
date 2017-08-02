@@ -29,6 +29,7 @@ import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.DiagonalMatrix;
 import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.util.FastMath;
+import org.jfree.util.Log;
 
 class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
@@ -456,22 +457,22 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private final double minX;
 		private final double minY;
 		private final double minSD;
+		private final double maxSD;
 		private final double maxMeanDiff;
 		private final int gNumber;
 
 		private GaussianArrayParameterValidator(final double[] initialGuess,
 			final double[] xtarget, final double[] ytarget)
 		{
-			this.gNumber = (initialGuess.length - (int) initialGuess[0] - 2) / 3; // #
-																																						// //
-																																						// peaks
-			this.initialParameterSet = initialGuess;
-			this.minX = new ArrayRealVector(xtarget).getMinValue();
-			this.maxX = new ArrayRealVector(xtarget).getMaxValue();
-			this.minY = new ArrayRealVector(ytarget).getMinValue();
-			this.maxMeanDiff = FastMath.min((maxX - minX) / gNumber, (maxX - minX) /
+			gNumber = (initialGuess.length - (int) initialGuess[0] - 2) / 3; // peaks
+			initialParameterSet = initialGuess;
+			minX = new ArrayRealVector(xtarget).getMinValue();
+			maxX = new ArrayRealVector(xtarget).getMaxValue();
+			minY = new ArrayRealVector(ytarget).getMinValue();
+			maxMeanDiff = FastMath.min((maxX - minX) / gNumber, (maxX - minX) /
 				500);
-			this.minSD = 2.0;
+			minSD = 1e-2;
+			maxSD = 40;
 		}
 
 		private double peakDistance(final int i) {
@@ -488,7 +489,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					count++;
 				}
 			}
-			return peakDistance / count;
+			peakDistance = Math.min(Math.abs(peakDistance / count), maxSD);
+			return peakDistance;
 		}
 
 		@Override
@@ -565,6 +567,8 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 		double output = 0;
 		final int degPoly = (int) poly.getEntry(0);
 		for (int i = 0; i < norms.getDimension(); i++) {
+			if (sds.getEntry(i) <= 0.0) 
+				System.out.println("sd = " + sds.getEntry(i));
 			output += new Gaussian(norms.getEntry(i), means.getEntry(i), sds.getEntry(
 				i)).value(x);
 		}

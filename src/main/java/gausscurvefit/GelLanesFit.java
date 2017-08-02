@@ -18,12 +18,15 @@
 
 package gausscurvefit;
 
+import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.Properties;
+import java.util.prefs.Preferences;
 
 import net.imagej.ImageJ;
 
+import org.apache.maven.model.Model;
+import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
+import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
@@ -34,6 +37,7 @@ import org.scijava.plugin.Plugin;
 
 import ij.IJ;
 import ij.ImagePlus;
+import ij.Prefs;
 import ij.gui.ImageWindow;
 import ij.io.Opener;
 
@@ -53,7 +57,9 @@ public class GelLanesFit implements Command {
 	@Parameter
 	private static Context context;
 
-	// Default Parameters
+	// Preference keys for this class
+  private static final String VERSION = "version";
+  
 	// TODO: private Thread mainWindowThread; // thread for the main window
 	private Thread plotThread; // thread for plotting
 
@@ -67,20 +73,22 @@ public class GelLanesFit implements Command {
 	 * Initialization method
 	 */
 	public void init() {
+		Preferences prefs = Preferences.userRoot().node(this.getClass().getName());
 		final double SW = IJ.getScreenSize().getWidth();
 		final double SH = IJ.getScreenSize().getHeight();
 
 		imp = IJ.getImage();
+
 		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
 			"."));
-		about();
+		about(prefs);
 		final String title = "[v" + version + "] Gel Lanes Fit: " + imp
 			.getTitle();
-		final MainDialog md = new MainDialog(context, title, imp, SH, SW);
+		final MainDialog md = new MainDialog(context, title, imp, prefs);
 
 		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
 			.getTolPK());
-		final Plotter plotter = new Plotter(context, imp, md.getRois(), SH, SW);
+		final Plotter plotter = new Plotter(context, imp, md.getRois());
 		md.setPlotter(plotter);
 		md.setFitter(fitter);
 
@@ -121,19 +129,17 @@ public class GelLanesFit implements Command {
 	/**
 	 * General info About the Software
 	 */
-	public void about() {
-		final ClassLoader loader = Thread.currentThread().getContextClassLoader();
-		final Properties props = new Properties();
-		try (InputStream input = loader.getResourceAsStream("about.properties")) {
-			props.load(input);
-			version = props.getProperty("version");
-			log.info("Gauss Fit - v" + version + "\n");
-			input.close();
+	public void about(Preferences prefs) {
+		MavenXpp3Reader reader = new MavenXpp3Reader();
+    try {
+			Model model = reader.read(new FileReader("pom.xml"));
+	    version = model.getVersion();
+	    prefs.put(VERSION, version);
 		}
-		catch (final IOException e) {
-			e.printStackTrace();
-			log.info("Gel Lanes Fit - v[unknown]");
+		catch (IOException | XmlPullParserException exc) {
+			version = "[unknown]";
 		}
+		log.info("Gauss Fit - v" + version + "\n");
 	}
 
 	/**
@@ -146,7 +152,7 @@ public class GelLanesFit implements Command {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
 		final ImagePlus iPlus = new Opener().openImage(
-			"src//main//resources//sample//SumTimeSeriesBright[100-40ms].tif");
+			"src//main//resources//sample//Destained [10s exposure].tif");
 		iPlus.show();
 		ij.command().run(GelLanesFit.class, true);
 	}
