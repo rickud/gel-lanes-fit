@@ -35,7 +35,12 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
 import java.io.BufferedReader;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.FileReader;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -88,7 +93,7 @@ import ij.gui.Overlay;
 import ij.gui.Roi;
 import ij.gui.TextRoi;
 
-@SuppressWarnings("serial")
+
 class MainDialog extends JFrame implements ActionListener, ChangeListener, 
 	SeriesChangeListener,	DocumentListener, MouseMotionListener, MouseListener, 
 	MouseWheelListener, WindowListener
@@ -127,8 +132,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private boolean auto; // AUTO ROI mode; all lanes same size
 	private boolean selectionUpdate = false; // active updating is off
 	private boolean fitDone = false; // Keep track of whether fit data exists
-	private boolean addPeak = false;
-	private boolean removePeak = false;
 
 	private String roiSelected = "none";
 	private String roiPreviouslySelected = "none";
@@ -152,7 +155,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private final Preferences prefs;
 
 	private final ImagePlus imp;
-	private List<Roi> rois;
+	private ArrayList<Roi> rois;
 
 	private int iw, ih, lw, lh, lsp, lhoff, lvoff;
 
@@ -197,8 +200,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private JComboBox<String> cmbBoxLadderLane;
 	private JComboBox<String> cmbBoxLadderType;
 	private JComboBox<String> cmbBoxDist;
-	private JToggleButton buttonAddPeak;
-	private JToggleButton buttonRemovePeak;
+	private JToggleButton buttonEditPeaks;
 	private JButton buttonResetCustomPeaks;
 
 	private JPanel dialogPanel;
@@ -212,6 +214,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		frame = new JFrame(string);
 		rois = new ArrayList<>();
 		this.imp = imp;
+		auto = prefs.getBoolean(AUTO, true);
 		setupMainDialog();
 		frame.setLocation(0, (int) SH / 8);
 		frame.setSize((int) (SW / 3), (int) (SH * 0.6));
@@ -240,10 +243,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		AMButtonsPanel = new JPanel();
 		buttonAuto = new JRadioButton("Automatic Rectangle Selection");
 		buttonAuto.setActionCommand("Auto");
-		buttonAuto.setSelected(true);
+		buttonAuto.setSelected(auto);
 		buttonAuto.addActionListener(this);
 		buttonManual = new JRadioButton("Manual Rectangle Selection");
 		buttonManual.setActionCommand("Manual");
+		buttonManual.setSelected(!auto);
 		buttonManual.addActionListener(this);
 		AMButtons = new ButtonGroup();
 		AMButtonsPanel.setLayout(new BoxLayout(AMButtonsPanel, BoxLayout.Y_AXIS));
@@ -334,8 +338,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		cmbBoxDist = new JComboBox<>(distStr);
 		cmbBoxLadderType = new JComboBox<>(ladderStr);
 
-		buttonAddPeak = new JToggleButton("Add Peak");
-		buttonRemovePeak = new JToggleButton("Remove Peak");
+		buttonEditPeaks = new JToggleButton("Edit Custom Peaks");
 		buttonResetCustomPeaks = new JButton("Reset Custom Peaks");
 
 		degPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
@@ -348,8 +351,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		chkBoxBands.addActionListener(this);
 		chkBoxBands.setSelected(false);
 		chkBoxBands.setEnabled(false);
-		cmbBoxLadderLane.addActionListener(this);
 		cmbBoxLadderLane.setSelectedIndex(0);
+		cmbBoxLadderLane.addActionListener(this);
+		
 
 		cmbBoxLadderType.setSelectedIndex(0);
 		cmbBoxLadderType.setEnabled(false);
@@ -358,10 +362,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		cmbBoxDist.setEnabled(false);
 		cmbBoxDist.addActionListener(this);
 		
-		buttonAddPeak.addActionListener(this);
-		buttonAddPeak.setEnabled(false);
-		buttonRemovePeak.addActionListener(this);
-		buttonRemovePeak.setEnabled(false);
+		buttonEditPeaks.addActionListener(this);
+		buttonEditPeaks.setEnabled(false);
 		buttonResetCustomPeaks.addActionListener(this);
 		buttonResetCustomPeaks.setEnabled(false);
 
@@ -374,8 +376,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		settingsPanel.add(cmbBoxLadderLane);
 		settingsPanel.add(cmbBoxLadderType);
 		settingsPanel.add(cmbBoxDist);
-		settingsPanel.add(buttonAddPeak);
-		settingsPanel.add(buttonRemovePeak);
+		settingsPanel.add(buttonEditPeaks);
 		settingsPanel.add(buttonResetCustomPeaks);
 
 		dialogPanel = new JPanel();
@@ -400,9 +401,19 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			}
 		});
 
-		resetAutoROIs();
+		if (auto) 
+			resetAutoROIs();
+		else{
+			if (!readRois() || rois.size() == 0) {
+			  auto = true;
+			  buttonAuto.setSelected(true);
+			  sliderPanel.setEnabled(true);
+			  resetAutoROIs();
+			}
+		}
+		
 		while (rois.size() == 0) {
-			System.out.println("Loading...");
+			log.info("Loading...");
 			IJ.wait(500); // delay to make sure ROIs have updated
 		}
 
@@ -418,84 +429,34 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		return false;
 	}
 
-	private void askPeak(final boolean add, final int lane, double y,
+	private Peak askPeak(final int lane, double y,
 		double a)
 	{
-		String title, action, message, fromTo;
+		String title, message;
 		final String fwhmString = "FWHM = \u03C3 * (2 * \u221A (2 * ln(2))";
-		double fwhmValue = 0.0;
+		double fwhmValue = 5.0;
 
-		if (add) {
-			title = "ADD PEAK";
-			action = "add";
-			message = "If the new peak is located less than " +
+		title = "ADD PEAK";
+		message = "If the new peak is located less than " +
 				(int) Fitter.peakDistanceTol +
 				" px away from an exisitng peak,\nthe existing peak will be replaced with the new one.";
-			fromTo = "to the custom list";
-		} else {
-			title = "REMOVE PEAK";
-			action = "remove";
-			message =
-				"The custom peak that is closest\n to this peak will be removed";
-			fromTo = "from the custom list.";
-		}
 
-		boolean foundGuess = false;
-		boolean foundCustom = false;
-		for (final Peak p : fitter.getGuessPeaks(lane)) {
-			if (FastMath.abs(y - p.getMean()) <= Fitter.peakDistanceTol) {
-				y = p.getMean();
-				a = p.getNorm();
-				fwhmValue = p.getSigma();
-				foundGuess = true;
-				break;
-			}
-		}
-		for (final Peak p : fitter.getCustomPeaks(lane)) {
-			if (FastMath.abs(y - p.getMean()) <= Fitter.peakDistanceTol) {
-				y = p.getMean();
-				a = p.getNorm();
-				fwhmValue = p.getSigma();
-				foundCustom = true;
-				break;
-			}
-		}
-
-		if (add && (foundCustom || foundGuess)) {
-			action = "replace";
-			if (foundCustom && foundGuess) {
-				fromTo = " in the custom list and the guesslist.";
-			}
-			else if (foundCustom && !foundGuess) {
-				fromTo = " in the custom list.";
-			}
-			else if (!foundCustom && foundGuess) {
-				fromTo = " in the guesslist.";
-			}
-		}
-		if (!foundCustom) fwhmValue = 5.0;
 		final GenericDialog gd = new GenericDialog(title);
-		if (add || (!add && foundCustom)) {
-			gd.addMessage("You are about to " + action + " this peak\n" + fromTo);
-			gd.addMessage(message);
-			gd.addMessage(String.format("Lane: \t%2d", lane));
-			gd.addMessage(String.format("Distance: \t%10.1f", y));
-			gd.addMessage(String.format("Intensity: \t%.0f", a));
-		}
-		else if (!add && !foundCustom) {
-			gd.addMessage("No custom peak found nearby. Try again!");
-		}
-		if (add) {
-			gd.addMessage("Estimate the full width at half maximum,\n" + fwhmString);
-			gd.addNumericField("FWHM", fwhmValue, 1);
-		}
+		
+		gd.addMessage("You are about to add this peak\n");
+		gd.addMessage(message);
+		gd.addMessage(String.format("Lane: \t%2d", lane));
+		gd.addMessage(String.format("Distance: \t%10.1f", y));
+		gd.addMessage(String.format("Intensity: \t%.0f", a));
+		gd.addMessage("Estimate the full width at half maximum,\n" + fwhmString);
+		gd.addNumericField("FWHM", fwhmValue, 1);
+
 		gd.showDialog();
 		if (gd.wasOKed()) {
-			if (add)
-				fitter.addCustomPeak(lane, new Peak(lane, a, y, gd.getNextNumber()));
-			else if (!add && !foundCustom) 
-				fitter.removeCustomPeak(lane, new Peak(lane, a, y));
+			double sd = gd.getNextNumber()/Fitter.sd2FWHM;
+			return new Peak(lane, a, y, sd);
 		}
+		return null;
 	}
 
 	@SuppressWarnings("unchecked")
@@ -563,8 +524,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private JSlider makeTitledSlider(final String string, final Color color,
-		final int minVal, final int maxVal, final int val)
+		final int minVal, final int maxVal, int val)
 	{
+		if (val < minVal) val = minVal;
+		if (val > maxVal) val = maxVal;
 		final JSlider slider = new JSlider(SwingConstants.HORIZONTAL, minVal,
 			maxVal, val);
 		final TitledBorder tb = new TitledBorder(BorderFactory.createEtchedBorder(),
@@ -609,7 +572,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private void reDrawROIs(final ImagePlus imgPlus, final String roiName) {
 		if (!auto) {
 			// Housekeeping: Sort the rois based on name and remove null elements
-			final Comparator<Roi> nameComparator = new Comparator<Roi>() {
+			final Comparator<Roi> roiNameComparator = new Comparator<Roi>() {
 
 				@Override
 				public int compare(final Roi r1, final Roi r2) {
@@ -632,7 +595,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				}
 			};
 
-			Collections.sort(rois, nameComparator);
+			Collections.sort(rois, roiNameComparator);
 			final Iterator<Roi> roisIter = rois.iterator();
 			int nullIndex = 0;
 			while (roisIter.hasNext()) {
@@ -640,6 +603,20 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				nullIndex++;
 			}
 			rois = new ArrayList<>(rois.subList(0, nullIndex));
+		//Rename Rois in order
+			int i = 1;
+			Iterator<Roi> roiIter2 = rois.iterator();
+			while (roiIter2.hasNext()) {
+				final Roi roi = roiIter2.next();
+				int roiN = Integer.parseInt(roi.getName().substring(5));
+				if (roiReference.equals(roi.getName())) {
+					roiReference = "Lane " + i;
+				}
+				if (roiN != i) {
+					roi.setName("Lane " + i);
+				}
+				i++;
+			}
 		}
 		final Overlay overlay = new Overlay();
 		final Iterator<Roi> roiIter = rois.iterator();
@@ -748,10 +725,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			prefs.putInt(NLANES, nLanes);
 			resetAutoROIs();
 			reDrawROIs(imp, "none");
-			cmbBoxLadderLane.removeAllItems();
-			cmbBoxLadderLane.addItem("Select Ladder Lane");
-			for (final Roi r : rois)
-				cmbBoxLadderLane.addItem(r.getName());
+			updateLaneComboBox();
 			redoProfilePlots();
 			fitter.resetAllFitter();
 			fitter.setInputData(plotter.getProfiles());
@@ -770,8 +744,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitDone = false;
 		chkBoxBands.setSelected(false);
 		chkBoxBands.setEnabled(false);
-		buttonAddPeak.setEnabled(false);
-		buttonRemovePeak.setEnabled(false);
+		buttonEditPeaks.setEnabled(false);
 		buttonResetCustomPeaks.setEnabled(false);
 		plotter.resetData();
 		plotter.setMode(Plotter.regMode);
@@ -782,10 +755,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				plotter.updateProfile(r);
 				RealVector empty = new ArrayRealVector();
 				DataSeries d = new DataSeries("Custom Points", ln, DataSeries.CUSTOMPEAKS,
-					empty, empty, Plotter.vMarkerAddPeakColor);
+					empty, empty, Plotter.vMarkerEditPeakColor);
 				d.addChangeListener(this);
 				plotter.addDataSeries(d);
 			}
+			plotter.reloadTabs();
 		}
 	}
 
@@ -808,7 +782,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 					}	 
 			}
       buffer.close();	
-	  }catch(Exception e){
+	  } catch(Exception e){
 	      e.printStackTrace();
 	  }
 		if (fragmentLength.size() != fragmentFrequency.size())		return null;
@@ -825,7 +799,63 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// 2 columns MW, Relative Frequency
 		return out;
 	}
+	
 
+	private boolean readRois() {
+		rois = new ArrayList<>();
+		try (ObjectInputStream ois = 
+				new ObjectInputStream(new FileInputStream("savedrois.bak"))) {
+			try
+			{
+				int i = 1;
+			  while (true)
+			  {
+			    Rectangle r = (Rectangle) ois.readObject();
+			    Roi roi = new Roi(r);
+			    roi.setName("Lane " + i++);
+			    rois.add(roi);
+			  }
+			}
+			catch (Exception e) { /* Exit */ }
+			ois.close();
+		  return true;
+		} catch (IOException e) {
+			log.error("Could not read ROIs");
+			e.printStackTrace();
+			return false;
+		}
+	}
+	
+	private boolean saveRois() {
+		try (ObjectOutputStream oos = 
+				new ObjectOutputStream(new FileOutputStream("savedrois.bak"))) {
+			for (Roi r : rois) {
+				oos.writeObject(r.getBounds());
+			}
+			
+			return true;
+		} catch (IOException e) {
+		  log.error("ROI file not Found. Creating a new one.");
+			e.printStackTrace();
+			return false;
+		}
+	}
+	
+	private void updateLaneComboBox() {
+		int idx = cmbBoxLadderLane.getSelectedIndex();
+		cmbBoxLadderLane.removeActionListener(this);
+		String str = cmbBoxLadderLane.getItemAt(0);
+		cmbBoxLadderLane.removeAllItems();
+		cmbBoxLadderLane.addItem(str);
+		
+		for (Roi r : rois)
+			cmbBoxLadderLane.addItem(r.getName());
+		
+		cmbBoxLadderLane.addActionListener(this);
+		cmbBoxLadderLane.setSelectedIndex(idx);
+	}
+	
+	
 	private void cleanupAndClose() {
 		// Remove Listeners on gel image and close plugin-associated windows in
 		// preparation for exit
@@ -837,9 +867,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			imp.getWindow().removeMouseMotionListener(this);
 			imp.setOverlay(null);
 		}
+
+		saveRois();
 		plotter.closePlot();
-		for (final Display<?> d : displayServ.getDisplays())
+		for (final Display<?> d : displayServ.getDisplays()) {
+			log.info(d.getName() + " is closing...");
 			d.close();
+		}
 		log.info("\nGel Lanes Fit terminated.");
 	}
 
@@ -926,25 +960,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		return roiPreviouslySelected;
 	}
 
-	void setCustomPeaks(final int lane, final List<Peak> pl) {
-		final Iterator<DataSeries> dataIter = plotter.getPlotsCustomPeaks().iterator();
-		while (dataIter.hasNext()) {
-			final DataSeries d = dataIter.next();
-			if (d.getLane() == lane && d.getType() == DataSeries.CUSTOMPEAKS)
-				d.removeChangeListener(this);
-				dataIter.remove();
+	void resetCustomPeaks(final int lane) {
+		fitter.resetCustomPeaks(lane);
+		for (DataSeries d : plotter.getPlotsCustomPeaks()) {
+			d.removeChangeListener(this);
+			d.clear();
+			d.addChangeListener(this);
 		}
-		RealVector empty = new ArrayRealVector();
-		final DataSeries customPeaks = new DataSeries("Custom Peaks", lane,
-			DataSeries.CUSTOMPEAKS, empty, empty, Plotter.vMarkerAddPeakColor);
-		for (final Peak fp : pl) {
-			customPeaks.add(fp.getMean(),fp.getNorm());
-		}
-
-		customPeaks.addChangeListener(this);
-		plotter.addDataSeries(customPeaks);
 		plotter.updatePlot(lane);
-
 	}
 	
 	public void setFitter(final Fitter fitter) {
@@ -957,7 +980,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		for (int i : getAllLaneNumbers()) {
 			RealVector empty = new ArrayRealVector();
 			DataSeries d = new DataSeries("Custom Points", i, DataSeries.CUSTOMPEAKS,
-				empty, empty, Plotter.vMarkerAddPeakColor);
+				empty, empty, Plotter.vMarkerEditPeakColor);
 			d.addChangeListener(this);
 			plotter.addDataSeries(d);
 		}
@@ -1013,8 +1036,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	@Override
 	public void seriesChanged(SeriesChangeEvent e) {
 		DataSeries d = (DataSeries) e.getSource();
-		if (d.getType() == DataSeries.CUSTOMPEAKS) { 
-			List<Peak> peaks = fitter.getCustomPeaks(d.getLane());
+		if (d.getType() == DataSeries.CUSTOMPEAKS) {
+			int lane = d.getLane();
+			List<Peak> peaks = fitter.getCustomPeaks(lane);
 			List<Double> m1 = new ArrayList<>();
 			List<Double> m2 = new ArrayList<>();
 			List<Double> n1 = new ArrayList<>();
@@ -1029,19 +1053,33 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				m2.add(peaks.indexOf(p), p.getMean());
 				n2.add(peaks.indexOf(p), p.getNorm());
 			}
-			if (m1.size() == m2.size() + 1) { // ADD
+			if (m1.size() > m2.size()) { // ADD
 		    for (double m : m1) {
-	        // .add() returns false if element already exists
-	        if (m2.add(m)) {
-	        	askPeak(true, d.getLane(), m, n1.get(m1.indexOf(m)));
+	        if (!m2.contains(m)) {
+	        	Peak peak = askPeak(d.getLane(), m, n1.get(m1.indexOf(m)));
+	        	if (peak == null) {
+	        		d.removeChangeListener(this);
+	        		d.remove(m);
+	        		d.addChangeListener(this);
+	        		log.info("Custom Peak not added: " + n1.get(m1.indexOf(m)) + ", " + m);
+	        	} else {
+	        		fitter.addCustomPeak(peak);
+	        		log.info("Custom Peak added: " + n1.get(m1.indexOf(m)) + ", " + m);
+	        	}	
 	        }
 		    }
-			} else if (m1.size() == m2.size() - 1) { // REMOVE
+			} else if (m1.size() < m2.size()) { // REMOVE
 				for (double m : m2) {
-	        if (m1.add(m)) {
-	        	askPeak(false, d.getLane(), m, n2.get(m2.indexOf(m)));
+	        if (!m1.contains(m)) {
+        		if (fitter.removeCustomPeak(new Peak(lane, n2.get(m2.indexOf(m)), m))) {
+        			log.info("Custom Peak Removed: " + n2.get(m2.indexOf(m)) + ", " + m);	
+        		}
 	        }
 				}
+			}
+			int peakNumber = fitter.getCustomPeaks(lane).size();
+			if (d.getItemCount() != peakNumber) {
+				log.error("Wrong custom peaks count: "+ d.getItemCount() + ", " + peakNumber);
 			}
 		} 
 	}
@@ -1078,10 +1116,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				return;
 			}
 
-			addPeak = false;
-			removePeak = false;
-			buttonAddPeak.setSelected(false);
-			buttonRemovePeak.setSelected(false);
+			buttonEditPeaks.setSelected(false);
 			buttonResetCustomPeaks.setSelected(false);
 
 			// Remove everything in the plots, but the profile
@@ -1097,8 +1132,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 			chkBoxBands.setEnabled(true);
 			chkBoxBands.setSelected(true);
-			buttonAddPeak.setEnabled(true);
-			buttonRemovePeak.setEnabled(true);
+			buttonEditPeaks.setEnabled(true);
 			buttonResetCustomPeaks.setEnabled(true);
 			
 			List<DataSeries> fitted = new ArrayList<>();
@@ -1147,46 +1181,43 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		if (e.getSource().equals(buttonAuto)) {
 			if (!auto) { // NOT already AUTO
-				if (askUser(
-					"When switching to AUTO mode, the current lane selections will be reset!"))
-				{
-					auto = true;
-					setSliderPanelEnabled(true);
-					prefs.putBoolean(AUTO, auto);
+				if (!saveRois()) {
+					if (!askUser(
+						"When switching to AUTO mode, the current lane selections will be reset!"))
+					{
+						buttonManual.setSelected(true); return;
+					}
 				}
-				else buttonManual.setSelected(true);
+				auto = true;
+				setSliderPanelEnabled(true);
+				prefs.putBoolean(AUTO, true);
+				resetAutoROIs();
+				reDrawROIs(imp, "none");
 			}
 		}
 
 		if (e.getSource().equals(buttonManual)) {
 			auto = false;
-			setSliderPanelEnabled(false);
 			prefs.putBoolean(AUTO, auto);
+			setSliderPanelEnabled(false);
+			readRois();
+		  if (rois.size() == 0) {
+		  	resetAutoROIs();
+		  	reDrawROIs(imp, "none");
+		  }
+			reDrawROIs(imp, "none");
 		}
 
-		if (e.getSource().equals(buttonAddPeak)) {
-			addPeak = !addPeak;
-			removePeak = false;
-			buttonRemovePeak.setSelected(false);
-			if (addPeak) plotter.setMode(Plotter.addMode);
-			else plotter.setMode(Plotter.regMode);
-
-		}
-
-		if (e.getSource().equals(buttonRemovePeak)) {
-			addPeak = false;
-			removePeak = !removePeak;
-			buttonAddPeak.setSelected(false);
-			if (removePeak) plotter.setMode(Plotter.remMode);
+		if (e.getSource().equals(buttonEditPeaks)) {
+			if (buttonEditPeaks.isSelected()) plotter.setMode(Plotter.editPeaksMode);
 			else plotter.setMode(Plotter.regMode);
 		}
+
 
 		if (e.getSource().equals(buttonResetCustomPeaks)) {
 			final int[] lanes = askResetCustomPoints(new boolean[rois.size() + 1]);
 			for (final int i : lanes) {
-				fitter.resetCustomPeaks(i);
-				setCustomPeaks(i, fitter.getCustomPeaks(i));
-				plotter.updatePlot(i);
+				resetCustomPeaks(i);
 			}
 			reDrawROIs(imp, "none");
 		}
@@ -1339,11 +1370,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 						final Roi roiRemove = roiIter.next();
 						if (roiRemove.getName().equals(roiSelected)) {
 							roiIter.remove();
-							// System.out.println(imp.getTitle() + ": " + roiSelected +
-							// " - REMOVED");
 						}
 					}
+					saveRois();
 					reDrawROIs(imp, "none");
+					updateLaneComboBox();
 					redoProfilePlots();
 				}
 			}
@@ -1352,8 +1383,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	@Override
 	public void mousePressed(final MouseEvent e) {
-		if (!(auto || addPeak || removePeak)) selectionUpdate = true;
+		if (!(auto || buttonEditPeaks.isSelected())) selectionUpdate = true;
 	}
+	
 
 	@Override
 	public void mouseReleased(final MouseEvent e) {
@@ -1399,6 +1431,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 						}
 						rois.add(roiNew);
 						roiSelected = roiNew.getName();
+						saveRois();
 						reDrawROIs(imp, roiSelected);
 						redoProfilePlots();
 					}
@@ -1419,6 +1452,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// Nothing to do
 		return;
 	}
+	
 
 	@Override
 	public void mouseWheelMoved(final MouseWheelEvent e) {
@@ -1427,6 +1461,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			redoProfilePlots();
 		}
 	}
+	
 
 	@Override
 	public void windowOpened(final WindowEvent e) {

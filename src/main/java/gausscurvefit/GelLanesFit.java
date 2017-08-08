@@ -18,8 +18,10 @@
 
 package gausscurvefit;
 
+import java.io.FileInputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.ObjectInputStream;
 import java.util.prefs.Preferences;
 
 import net.imagej.ImageJ;
@@ -37,7 +39,6 @@ import org.scijava.plugin.Plugin;
 
 import ij.IJ;
 import ij.ImagePlus;
-import ij.Prefs;
 import ij.gui.ImageWindow;
 import ij.io.Opener;
 
@@ -76,7 +77,7 @@ public class GelLanesFit implements Command {
 		Preferences prefs = Preferences.userRoot().node(this.getClass().getName());
 		final double SW = IJ.getScreenSize().getWidth();
 		final double SH = IJ.getScreenSize().getHeight();
-
+		
 		imp = IJ.getImage();
 
 		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
@@ -84,13 +85,16 @@ public class GelLanesFit implements Command {
 		about(prefs);
 		final String title = "[v" + version + "] Gel Lanes Fit: " + imp
 			.getTitle();
-		final MainDialog md = new MainDialog(context, title, imp, prefs);
 
-		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
-			.getTolPK());
-		final Plotter plotter = new Plotter(context, imp, md.getRois());
-		md.setPlotter(plotter);
-		md.setFitter(fitter);
+	    final MainDialog md = new MainDialog(context, title, imp, prefs);
+			final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
+				.getTolPK());
+			final Plotter plotter = new Plotter(context, imp, md.getRois());
+			md.setPlotter(plotter);
+			md.setFitter(fitter);
+
+		
+		
 
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
@@ -152,7 +156,7 @@ public class GelLanesFit implements Command {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
 		final ImagePlus iPlus = new Opener().openImage(
-			"src//main//resources//sample//Destained [10s exposure].tif");
+			"src//main//resources//sample//Planaria_G_exo_extrashot_060117.tif");
 		iPlus.show();
 		ij.command().run(GelLanesFit.class, true);
 	}

@@ -46,6 +46,7 @@ import org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.util.FastMath;
+import org.jfree.util.Log;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.display.DisplayService;
@@ -68,7 +69,7 @@ class Fitter {
 	static final int noLadderLane = -1;
 
 	public static final double peakDistanceTol = 2;
-	private static final double sd2FWHM = 2 * FastMath.sqrt(2 * FastMath.log(2));
+	public static final double sd2FWHM = 2 * FastMath.sqrt(2 * FastMath.log(2));
 
 	private int degBG;
 	private double tolPK;
@@ -96,8 +97,17 @@ class Fitter {
 		this.allFittedList = new ArrayList<>();
 		this.allCustomList = new ArrayList<>();
 	}
-
-	private double[] peaksToArray(final List<Peak> peaks) {
+	
+	private List<Peak> arrayToPeaks(final int ln, final double[] param) {
+		int gaussStart = (int) param[0] + 2;
+		List<Peak> peaks = new ArrayList<>();
+		for (int p = gaussStart; p < param.length; p += 3) {
+				peaks.add(new Peak(ln, param[p], param[p + 1], param[p + 2]));
+		}
+		return peaks;	
+	}
+	
+	private RealVector peaksToArray(final List<Peak> peaks) {
 		RealVector guessArray = new ArrayRealVector();
 		guessArray = guessArray.append(degBG).append(new ArrayRealVector(degBG +
 			1));
@@ -106,7 +116,7 @@ class Fitter {
 			guessArray = guessArray.append(p.getMean());
 			guessArray = guessArray.append(p.getSigma());
 		}
-		return guessArray.toArray();
+		return guessArray;
 	}
 
 	public void updateResultsTable() {
@@ -123,6 +133,9 @@ class Fitter {
 			int lane = d.getLane();
 			List<Peak> guess = getGuessPeaks(lane);
 			List<Peak> fitted = getFittedPeaks(lane);
+			if (guess.size() != fitted.size()) {
+				log.error("Size mismatch: " + guess.size() + ", " + fitted.size());
+			}
 			int band = 1;
 			for (int p = 0; p < guess.size(); p++) {
 				final double n = fitted.get(p).getNorm();
@@ -222,7 +235,7 @@ class Fitter {
 		return sdi;
 	}
 
-	private double[] doGuess(int lane, ParameterGuesser pg) {
+	private RealVector doGuess(int lane, ParameterGuesser pg) {
 		// Remove guess and fit for this lane
 		Iterator<Peak> peakIter = allGuessList.iterator();
 		while(peakIter.hasNext()) {
@@ -237,29 +250,20 @@ class Fitter {
 		List<Peak> peaks = new ArrayList<>();
 		if (fitMode == regMode || (fitMode == fragmentMode && lane == ladderLane)) {
 			// Guess a set of peaks a set of peaks automatically
-			final RealVector guess = new ArrayRealVector(pg.guess());
-			int gaussStart = 0;
-			if (guess.getEntry(0) != -1) gaussStart = (int) guess.getEntry(0) + 2;
-		
-			for (int b = gaussStart; b < guess.getDimension(); b += 3) {
-				// Initial Guess
-				final double n = guess.getEntry(b);
-				final double m = guess.getEntry(b + 1);
-				final double s = guess.getEntry(b + 2);
-				peaks.add(new Peak(lane, n, m, s));
-			}
+			peaks = arrayToPeaks(lane, pg.guess());
+			
 		} else if (fitMode == fragmentMode) {
 			if (ladder == null || dist == null) {
 				log.info("Missing ladder/distribution");
 				return null;
 			}
 			// Use the stored distribution as a guess dist[:][0] = MW
-			peaks = getFittedPeaks(ladderLane);
-			double[] meanLadder = new double[peaks.size()];
-			double[] sdLadder = new double[peaks.size()];
-			for (int p = 0; p < peaks.size(); p++) {
-				meanLadder[p] = peaks.get(p).getMean(); 
-				sdLadder[p] = peaks.get(p).getSigma();
+			List<Peak> ladderPeaks = getFittedPeaks(ladderLane);
+			double[] meanLadder = new double[ladderPeaks.size()];
+			double[] sdLadder = new double[ladderPeaks.size()];
+			for (int p = 0; p < ladderPeaks.size(); p++) {
+				meanLadder[p] = ladderPeaks.get(p).getMean(); 
+				sdLadder[p] = ladderPeaks.get(p).getSigma();
 			}
 			double[] means = interpolateDisplacement(meanLadder); 
 			double[] sds = interpolateSD(meanLadder, sdLadder, means);
@@ -286,10 +290,13 @@ class Fitter {
 			// Check if guessList contains peak and update
 			boolean found = false;
 			for (final Peak g : peaks) {
-				if (FastMath.abs(c.getMean() - g.getMean()) <= peakDistanceTol)
-				{
-					g.setSigma(c.getSigma());
+				if (FastMath.abs(c.getMean() - g.getMean()) <= peakDistanceTol) {
 					found = true;
+					log.info("Peak guess:    " + g.getNorm() + ", " + g.getMean() + ", " + g.getSigma());
+					g.setMean(c.getMean());
+					g.setNorm(c.getNorm());
+					g.setSigma(c.getSigma());
+					log.info("replaced with: " + c.getNorm() + ", " + c.getMean() + ", " + c.getSigma());
 					break;
 				}
 			}
@@ -359,7 +366,7 @@ class Fitter {
 		final ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(
 			obs.toList(), tolpk, degBG);
 		
-		double[] firstGuess = doGuess(lane, pg);
+		double[] firstGuess = doGuess(lane, pg).toArray();
 		final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(tolpk,
 			degBG).withStartPoint(firstGuess).getProblem(obs.toList());
 
@@ -386,9 +393,7 @@ class Fitter {
 			fittedPeaks.add(new Peak(lane, n, m, s));
 		}
 		allFittedList.addAll(fittedPeaks);
-		if (allGuessList.size() != allFittedList.size()) {
-			log.error("Size mismatch: " + allGuessList.size() + ", " + allFittedList.size());
-		}
+		
 		// Create new DataSeries for Plotter
 		final PolynomialFunction bg = new PolynomialFunction(poly.getSubVector(1,
 			degBG + 1).toArray());
@@ -414,11 +419,11 @@ class Fitter {
 		return output;
 	}
 
-	public void addCustomPeak(final int lane, final Peak peak) {
+	public void addCustomPeak(final Peak peak) {
 		boolean found = false;
 		// If close to existing replace
 		for (final Peak p : allCustomList) {
-			if (p.getLane() == lane) {
+			if (p.getLane() == peak.getLane()) {
 				if (FastMath.abs(peak.getMean() - p
 					.getMean()) <= Fitter.peakDistanceTol)
 				{
@@ -432,16 +437,20 @@ class Fitter {
 		Collections.sort(allCustomList);
 	}
 
-	public void removeCustomPeak(final int lane, final Peak peak) {
+	public boolean removeCustomPeak(final Peak peak) {
 		// Remove from custom list
 		final Iterator<Peak> peakIter = allCustomList.iterator();
 		while (peakIter.hasNext()) {
 			Peak p = peakIter.next();
-			if (p.getLane() == lane) {
+			if (p.getLane() == peak.getLane()) {
 				double diff = FastMath.abs(peak.getMean() - p.getMean());
-				if (diff <= Fitter.peakDistanceTol) peakIter.remove();
+				if (diff <= Fitter.peakDistanceTol) {
+					peakIter.remove();
+					return true;
+				}
 			}
 		}
+		return false;
 	}
 
 	public void resetCustomPeaks(final int lane) {
@@ -536,8 +545,8 @@ class Peak implements Comparable<Peak> {
 
 	private String name = "";
 	private final int lane;
-	private final double mean;
-	private final double norm;
+	private double mean;
+	private double norm;
 	private double sd;
 
 	public Peak(final int lane, final double norm, final double mean) {
@@ -581,10 +590,18 @@ class Peak implements Comparable<Peak> {
 		return name;
 	}
 
+	public void setMean(final double mean) {
+		this.mean = mean;
+	}
+	
 	public void setName(final String name) {
 		this.name = name;
 	}
-
+	
+	public void setNorm(final double norm) {
+		this.norm = norm;
+	}
+	
 	public void setSigma(final double sd) {
 		if (sd > 0) {
 			this.sd = sd;

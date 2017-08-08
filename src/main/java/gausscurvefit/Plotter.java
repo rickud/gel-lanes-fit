@@ -23,6 +23,7 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.Paint;
 import java.awt.Shape;
 import java.awt.Stroke;
 import java.awt.event.WindowEvent;
@@ -56,9 +57,7 @@ import org.jfree.chart.JFreeChart;
 import org.jfree.chart.LegendItem;
 import org.jfree.chart.LegendItemCollection;
 import org.jfree.chart.annotations.XYTextAnnotation;
-import org.jfree.chart.labels.StandardXYItemLabelGenerator;
 import org.jfree.chart.labels.StandardXYToolTipGenerator;
-import org.jfree.chart.labels.XYItemLabelGenerator;
 import org.jfree.chart.labels.XYToolTipGenerator;
 import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.chart.plot.SeriesRenderingOrder;
@@ -85,11 +84,11 @@ class Plotter extends JFrame implements ChartMouseListener {
 	final double SH = IJ.getScreenSize().getHeight();
 	
 	static final int noRefPlot = -1; // no reference plot
+	private int referencePlot = noRefPlot;
 
 	// Colors are listed here for consistent, easy modification
 	static final Color vMarkerRegColor = new Color(127, 127, 127);
-	static final Color vMarkerAddPeakColor = new Color(0, 185, 19);
-	static final Color vMarkerRemovePeakColor = new Color(185, 7, 0);
+	static final Color vMarkerEditPeakColor = new Color(0, 185, 19);
 	static final Stroke vMarkerStroke = new BasicStroke();
 	static final Color bMarkerColor = new Color(255, 128, 128);
 	static final Stroke bMarkerStroke = new BasicStroke(1.25f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[] {15.0f, 5.0f, 5.0f, 5.0f}, 0.0f);
@@ -104,22 +103,19 @@ class Plotter extends JFrame implements ChartMouseListener {
 	// Background Color of selected plot
 	static final int selectedNone = -1;
 	static final int regMode = 0;
-	static final int addMode = 1;
-	static final int remMode = 2;
+	static final int editPeaksMode = 1;
 	static final int refMode = 2;
 
 	static final Color plotSelColor = new Color(240, 240, 240);
 	static final Color plotUnselColor = Color.WHITE;
 	static final Color plotAddSelColor = new Color(192, 255, 185);
-	static final Color plotRemoveSelColor = new Color(255, 188, 185);
 	
-	private int referencePlot = noRefPlot;
 	private final ImagePlus imp;
 	private List<ChartPanel> chartPanels;
 	private List<DataSeries> plotsData;
 	private List<VerticalMarker> verticalMarkers;
 	
-	private final List<JPanel> chartTabs;
+	private List<JPanel> chartTabs;
 	private final JTabbedPane chartsTabbedPane;
 
 	private final int rows = 2; // Number of plot Rows in display
@@ -145,26 +141,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 		for (final Roi r : rois) {
 			updateProfile(r);
 		}
-		
-//		int nTabs = rois.size() / (rows * cols);
-//		nTabs = rois.size() % (rows * cols) == 0 ? nTabs : nTabs + 1;
-		Iterator<ChartPanel> chartIter = chartPanels.iterator();
-		int i = 0;
-		while (chartIter.hasNext()) {
-			JPanel p = new JPanel();
-			if (!chartTabs.isEmpty() && i < (rows * cols)) {
-				p = chartTabs.get(chartTabs.size() - 1);
-			}	else {
-				p.setBorder(new EmptyBorder(5, 5, 5, 5));
-				p.setLayout(new GridLayout(rows, cols));
-				chartTabs.add(p);
-				int tab = chartTabs.size() - 1;
-				chartsTabbedPane.addTab("Lanes " + (tab*(rows*cols) + 1) +" - " + (tab*(rows*cols) + 4), p);
-				i = 0;
-			}
-			p.add(chartIter.next());
-			i++;
-		}
+		reloadTabs();
 
 		this.getContentPane().add(chartsTabbedPane, BorderLayout.CENTER);
 		this.setVisible(true);
@@ -206,14 +183,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 	}
 
 	void setVLine(final int ln, final double x) {
-		Color vMarkerColor;
-		if (plotMode == Plotter.addMode) {
-			vMarkerColor = vMarkerAddPeakColor;
-		} else if (plotMode == Plotter.remMode) {
-			vMarkerColor = vMarkerRemovePeakColor;
-		} else { // (plotMode == Plotter.regMode)
-			vMarkerColor = vMarkerRegColor;
-		} 
+		Color vMarkerColor = vMarkerRegColor;
+		if (plotMode == Plotter.editPeaksMode) {
+			vMarkerColor = vMarkerEditPeakColor;
+		}
 		for (final ChartPanel p : chartPanels) {
 			if (p.getChart().getTitle().getText().equals("Lane " + ln)) {
 				boolean found = false;
@@ -396,17 +369,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 	public void updatePlot(final int ln) {
 		Color plotBGColor  = plotSelColor;
 		Color vMarkerColor = vMarkerRegColor;
-		if (plotMode == Plotter.addMode) {
+		
+		if (plotMode == Plotter.editPeaksMode) {
 			plotBGColor = plotAddSelColor;
-			vMarkerColor = vMarkerAddPeakColor;
-		}
-		else if (plotMode == Plotter.remMode) {
-			plotBGColor = plotRemoveSelColor;
-			vMarkerColor = vMarkerRemovePeakColor;
-		}
-		else { // (plotMode == Plotter.regMode)
-			plotBGColor = plotSelColor;
-			vMarkerColor = vMarkerRegColor;
+			vMarkerColor = vMarkerEditPeakColor;
 		}
 
 		final XYSeriesCollection dataset = new XYSeriesCollection();
@@ -508,7 +474,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 								legendItems.add(li);
 							}
 							if (k == DataSeries.CUSTOMPEAKS) {
-								renderer.setSeriesPaint(seriesIdx, vMarkerAddPeakColor);
+								renderer.setSeriesPaint(seriesIdx, vMarkerEditPeakColor);
 								final Shape dot = new Ellipse2D.Double(0, 0, 6, 6);
 								renderer.setSeriesShape(seriesIdx, dot);
 								renderer.setSeriesShapesVisible(seriesIdx, true);
@@ -541,10 +507,35 @@ class Plotter extends JFrame implements ChartMouseListener {
 		}
 	}
 
+	public void reloadTabs() {
+		chartsTabbedPane.removeAll();
+		chartTabs = new ArrayList<>();
+		Iterator<ChartPanel> chartIter = chartPanels.iterator();
+		int i = 0;
+		while (chartIter.hasNext()) {
+			JPanel p = new JPanel();
+			if (!chartTabs.isEmpty() && i < (rows * cols)) {
+				p = chartTabs.get(chartTabs.size() - 1);
+			}	else {
+				p.setBorder(new EmptyBorder(5, 5, 5, 5));
+				p.setLayout(new GridLayout(rows, cols));
+				chartTabs.add(p);
+				int tab = chartTabs.size() - 1;
+				chartsTabbedPane.addTab("Lanes " + (tab*(rows*cols) + 1) +" - " + (tab*(rows*cols) + 4), p);
+				i = 0;
+			}
+			p.add(chartIter.next());
+			i++;
+		}
+		if (selected == selectedNone)
+			chartsTabbedPane.setSelectedIndex(0);
+		else 
+			chartsTabbedPane.setSelectedIndex(selected/(rows*cols)-1);
+	}
+	
 	public void resetData() {
 		plotsData = new ArrayList<>();
 		chartPanels = new ArrayList<>();
-		chartsTabbedPane.removeAll();
 	}
 
 	
@@ -559,28 +550,30 @@ class Plotter extends JFrame implements ChartMouseListener {
 					Point2D pt = p.translateScreenToJava2D(e.getTrigger().getPoint());
 					Rectangle2D plotArea = p.getScreenDataArea();
 					double xi = plot.getDomainAxis().java2DToValue(pt.getX(), plotArea, plot.getDomainAxisEdge());
-					for (DataSeries d : getProfiles()) {		
-						if (d.getLane() == ln) {
-							double[] x = d.getX().toArray();
-							double[] y = d.getY().toArray();
-							final PolynomialSplineFunction f = new LinearInterpolator().interpolate(x, y);
-							double yi = f.value(xi);
-							
-							for (DataSeries cp : getPlotsCustomPeaks()) { 
-								if (cp.getLane() == ln) {
-									boolean found = false;
-									for (int i = 0; i < cp.getItemCount(); i++) {
-										if (FastMath.abs((double) cp.getX(i) - xi) <= Fitter.peakDistanceTol) {
-											found = true;
-											cp.remove(i); // REMOVE point
+					if (plotArea.contains(pt)) {
+						for (DataSeries d : getProfiles()) {
+							if (d.getLane() == ln) {
+								double[] x = d.getX().toArray();
+								double[] y = d.getY().toArray();
+								final PolynomialSplineFunction f = new LinearInterpolator().interpolate(x, y);
+								double yi = f.value(xi);
+								
+								for (DataSeries cp : getPlotsCustomPeaks()) { 
+									if (cp.getLane() == ln) {
+										boolean found = false;
+										for (int i = 0; i < cp.getItemCount(); i++) {
+											if (FastMath.abs((double) cp.getX(i) - xi) <= Fitter.peakDistanceTol) {
+												found = true;
+												cp.remove(i); // REMOVE point
+											}
+										} 
+										if (!found) {
+											cp.addOrUpdate(xi, yi); // ADD Point
 										}
-									} 
-									if (!found) {
-										cp.addOrUpdate(xi, yi); // ADD Point
 									}
 								}
+								updatePlot(ln);
 							}
-							updatePlot(ln);
 						}
 					}
 				}
@@ -596,27 +589,28 @@ class Plotter extends JFrame implements ChartMouseListener {
 		if (plotMode != Plotter.regMode) {
 			JFreeChart c = e.getChart();
 			for (ChartPanel p : chartPanels) {
-				XYPlot plot = (XYPlot) p.getChart().getPlot(); // your plot
-				double x = plot.getDomainAxis().getLowerBound() - 10.0;
-				double y = plot.getRangeAxis().getLowerBound() - 10.0;
+				XYPlot plot = (XYPlot) p.getChart().getPlot(); 
 				if (p.getChart().equals(c)) {
 					Point2D pt = p.translateScreenToJava2D(e.getTrigger().getPoint());
 					Rectangle2D plotArea = p.getScreenDataArea();
 					
-					x = plot.getDomainAxis().java2DToValue(pt.getX(), plotArea, plot.getDomainAxisEdge());
-					y = plot.getRangeAxis().java2DToValue(pt.getY(), plotArea, plot.getRangeAxisEdge());
+					double x = plot.getDomainAxis().java2DToValue(pt.getX(), plotArea, plot.getDomainAxisEdge());
+					double y = plot.getRangeAxis().java2DToValue(pt.getY(), plotArea, plot.getRangeAxisEdge());
 
-					Color crossHairColor = vMarkerRemovePeakColor;
-					if (plotMode == Plotter.addMode)
-						crossHairColor = vMarkerAddPeakColor;
+					Paint crossHairColor = plot.getDomainGridlinePaint();
+					if (plotMode == Plotter.editPeaksMode)
+						crossHairColor = vMarkerEditPeakColor;
 				
 					plot.setDomainCrosshairPaint(crossHairColor);
 					plot.setRangeCrosshairPaint(crossHairColor);
+					plot.setDomainCrosshairValue(x);
+					plot.setRangeCrosshairValue(y);
+					plot.setDomainCrosshairVisible(true);					
+					plot.setRangeCrosshairVisible(true);
+				} else {
 					plot.setDomainCrosshairVisible(false);
 					plot.setRangeCrosshairVisible(false);
 				}
-				plot.setDomainCrosshairValue(x);
-				plot.setRangeCrosshairValue(y);
 			}
 		}
 	}
