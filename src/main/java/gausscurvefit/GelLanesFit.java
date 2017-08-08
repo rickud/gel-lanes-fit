@@ -18,14 +18,17 @@
 
 package gausscurvefit;
 
-import java.awt.Dimension;
-import java.awt.Point;
+import java.io.FileInputStream;
+import java.io.FileReader;
 import java.io.IOException;
-import java.io.InputStream;
-import java.util.Properties;
+import java.io.ObjectInputStream;
+import java.util.prefs.Preferences;
 
 import net.imagej.ImageJ;
 
+import org.apache.maven.model.Model;
+import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
+import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
@@ -55,7 +58,9 @@ public class GelLanesFit implements Command {
 	@Parameter
 	private static Context context;
 
-	// Default Parameters
+	// Preference keys for this class
+  private static final String VERSION = "version";
+  
 	// TODO: private Thread mainWindowThread; // thread for the main window
 	private Thread plotThread; // thread for plotting
 
@@ -69,33 +74,34 @@ public class GelLanesFit implements Command {
 	 * Initialization method
 	 */
 	public void init() {
-		//		final double SW = IJ.getScreenSize().getWidth();
-		//		final double SH = IJ.getScreenSize().getHeight();
-
+		Preferences prefs = Preferences.userRoot().node(this.getClass().getName());
+		final double SW = IJ.getScreenSize().getWidth();
+		final double SH = IJ.getScreenSize().getHeight();
+		
 		imp = IJ.getImage();
+
 		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
 			"."));
-		about();
-		final String title = "[v" + version + "] Gel Lanes Gauss Fitting: " + imp
+		about(prefs);
+		final String title = "[v" + version + "] Gel Lanes Fit: " + imp
 			.getTitle();
-		final MainDialog md = new MainDialog(context, title, imp);
 
-		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
-			.getTolPK());
-		final Plotter plotter = new Plotter(imp, md.getRois());
-		md.setPlotter(plotter);
-		md.setFitter(fitter);
+	    final MainDialog md = new MainDialog(context, title, imp, prefs);
+			final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
+				.getTolPK());
+			final Plotter plotter = new Plotter(context, imp, md.getRois());
+			md.setPlotter(plotter);
+			md.setFitter(fitter);
+
+		
+		
 
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
-		final ImageWindow pwin = plotter.getPlotImage().getWindow();
 		if (iwin == null) return;
-
-		final Dimension imageSize = iwin.getSize();
-		final Point imageLoc = iwin.getLocation();
-
-		iwin.setLocation(0, 100);
-		pwin.setLocation(imageSize.width + 30, imageLoc.y);
+		
+		iwin.setLocation(0, (int) SH/2);
+		iwin.setSize((int) SW/2, (int) SH/2);
 		iwin.getCanvas().requestFocus();
 
 		// thread for plotting in the background
@@ -127,19 +133,17 @@ public class GelLanesFit implements Command {
 	/**
 	 * General info About the Software
 	 */
-	public void about() {
-		final ClassLoader loader = Thread.currentThread().getContextClassLoader();
-		final Properties props = new Properties();
-		try (InputStream input = loader.getResourceAsStream("about.properties")) {
-			props.load(input);
-			version = props.getProperty("version");
-			log.info("Gauss Fit - v" + version + "\n");
-			input.close();
+	public void about(Preferences prefs) {
+		MavenXpp3Reader reader = new MavenXpp3Reader();
+    try {
+			Model model = reader.read(new FileReader("pom.xml"));
+	    version = model.getVersion();
+	    prefs.put(VERSION, version);
 		}
-		catch (final IOException e) {
-			e.printStackTrace();
-			log.info("Gauss Fit - v[unknown]");
+		catch (IOException | XmlPullParserException exc) {
+			version = "[unknown]";
 		}
+		log.info("Gauss Fit - v" + version + "\n");
 	}
 
 	/**
@@ -152,15 +156,8 @@ public class GelLanesFit implements Command {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = net.imagej.Main.launch(args);
 		final ImagePlus iPlus = new Opener().openImage(
-			"src//main//resources//sample//03_05_16_refs.tif");
-		// display it via ImageJ
+			"src//main//resources//sample//Planaria_G_exo_extrashot_060117.tif");
 		iPlus.show();
-		iPlus.getCanvas().setLocation(0, 100);
-		// wrap it into an ImgLib image (no copying)
-		// final Img image = ImagePlusAdapter.wrap(imp);
-		// display it via ImgLib using ImageJ
-		// ImageJFunctions.show(image);
-		// Launch the "OpenImage" command.
 		ij.command().run(GelLanesFit.class, true);
 	}
 }

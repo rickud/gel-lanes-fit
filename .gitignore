@@ -5,3 +5,5 @@
 /output/
 /src/main/resources/*.java
 /.settings/
+/bin/
+/savedrois.bak
