@@ -12,7 +12,7 @@
 
 	<groupId>imagej-plugins</groupId>
 	<artifactId>GaussianFit</artifactId>
-	<version>1.0.4-SNAPSHOT</version>
+	<version>1.0.4</version>
 
 	<name>Gel Lanes Fit</name>
 	<description>This plugin fits Gaussians peaks at local maxima of a 1D gel electrophoreses linear lane profile.</description>
@@ -107,7 +107,7 @@
 		<url>https://github.com/rickud/gauss-curve-fit/</url>
 	</scm>
 	<issueManagement>
-		<system>GitHub Issues</system>
+		<system>GitHub</system>
 		<url>http://github.com/rickud/gauss-curve-fit/issues</url>
 	</issueManagement>
 	<ciManagement>
