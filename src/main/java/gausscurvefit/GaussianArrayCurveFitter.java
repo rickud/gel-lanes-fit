@@ -29,7 +29,6 @@ import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.DiagonalMatrix;
 import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.util.FastMath;
-import org.jfree.util.Log;
 
 class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
@@ -532,8 +531,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 						initialParameterSet[i] + sign * maxMeanDiff);
 				}
 				if ((i - gaussStart) % 3 == 2) {
-					final double maxSD = peakDistance(i);
-					if (param.getEntry(i) > maxSD) param.setEntry(i, maxSD);
+					final double maxD = FastMath.min(peakDistance(i), maxSD);
+					if (param.getEntry(i) > maxD) param.setEntry(i, maxD);
 				}
 			}
 			return param;
