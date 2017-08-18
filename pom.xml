@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>14.0.0</version>
+		<version>16.2.0</version>
 	</parent>
 
 	<groupId>imagej-plugins</groupId>
@@ -132,6 +132,7 @@
 				<filtering>true</filtering>
 				<includes>
 					<include>sample/*.tif</include>
+					<include>data/*.txt</include>
 				</includes>
 			</resource>
 		</resources>
@@ -140,25 +141,15 @@
 	<dependencies>
 		<dependency>
 			<groupId>net.imagej</groupId>
-			<artifactId>ij</artifactId>
-		</dependency>
-		<dependency>
-			<groupId>net.imagej</groupId>
 			<artifactId>imagej</artifactId>
 		</dependency>
 		<dependency>
-            <groupId>org.jfree</groupId>
-            <artifactId>jcommon</artifactId>
-        </dependency>
-		<!-- https://mvnrepository.com/artifact/org.jfree/jfreechart -->
+			<groupId>net.imagej</groupId>
+			<artifactId>ij</artifactId>
+		</dependency>
 		<dependency>
     		<groupId>org.jfree</groupId>
     		<artifactId>jfreechart</artifactId>
-		</dependency>
-		<dependency>
-  			<groupId>org.apache.maven</groupId>
-  			<artifactId>maven-model</artifactId>
-  			<version>3.3.9</version>
 		</dependency>
 	</dependencies>
 </project>

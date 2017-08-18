@@ -18,17 +18,15 @@
 
 package gausscurvefit;
 
-import java.io.FileInputStream;
-import java.io.FileReader;
 import java.io.IOException;
-import java.io.ObjectInputStream;
+import java.net.URL;
+import java.util.Enumeration;
+import java.util.jar.Attributes;
+import java.util.jar.Manifest;
 import java.util.prefs.Preferences;
 
 import net.imagej.ImageJ;
 
-import org.apache.maven.model.Model;
-import org.apache.maven.model.io.xpp3.MavenXpp3Reader;
-import org.codehaus.plexus.util.xml.pull.XmlPullParserException;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
@@ -57,9 +55,6 @@ public class GelLanesFit implements Command {
 	private StatusService statusServ;
 	@Parameter
 	private static Context context;
-
-	// Preference keys for this class
-  private static final String VERSION = "version";
   
 	// TODO: private Thread mainWindowThread; // thread for the main window
 	private Thread plotThread; // thread for plotting
@@ -82,20 +77,17 @@ public class GelLanesFit implements Command {
 
 		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
 			"."));
-		about(prefs);
-		final String title = "[v" + version + "] Gel Lanes Fit: " + imp
+		about();
+		final String title = "[" + version + "] Gel Lanes Fit - " + imp
 			.getTitle();
 
-	    final MainDialog md = new MainDialog(context, title, imp, prefs);
-			final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
-				.getTolPK());
-			final Plotter plotter = new Plotter(context, imp, md.getRois());
-			md.setPlotter(plotter);
-			md.setFitter(fitter);
-
-		
-		
-
+    final MainDialog md = new MainDialog(context, title, imp, prefs);
+		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
+			.getTolPK());
+		final Plotter plotter = new Plotter(context, imp, md.getRois());
+		md.setPlotter(plotter);
+		md.setFitter(fitter);
+			
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
 		if (iwin == null) return;
@@ -133,17 +125,29 @@ public class GelLanesFit implements Command {
 	/**
 	 * General info About the Software
 	 */
-	public void about(Preferences prefs) {
-		MavenXpp3Reader reader = new MavenXpp3Reader();
-    try {
-			Model model = reader.read(new FileReader("pom.xml"));
-	    version = model.getVersion();
-	    prefs.put(VERSION, version);
+	public void about() {
+		try {
+			Enumeration<URL> resources = getClass().getClassLoader().getResources("META-INF/MANIFEST.MF");
+			while (resources.hasMoreElements()) {
+		    try {
+		      Manifest manifest = new Manifest(resources.nextElement().openStream());
+		      // check that this is your manifest and do what you need or get the next one
+		      Attributes a = manifest.getMainAttributes();
+		      String name = a.getValue("Implementation-Title");
+		      if (name == null) continue;
+		      if (name.equals("Gel Lanes Fit")) {
+		      	log.info(name);
+		      	version = a.getValue("Implementation-Version");
+		      	log.info(name + " " + version);
+		      }
+		    } catch (IOException e) {
+		      // handle
+		    }
+			}
+		} 
+		catch (IOException e) {
+			
 		}
-		catch (IOException | XmlPullParserException exc) {
-			version = "[unknown]";
-		}
-		log.info("Gauss Fit - v" + version + "\n");
 	}
 
 	/**
@@ -154,7 +158,8 @@ public class GelLanesFit implements Command {
 	 */
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
-		final ImageJ ij = net.imagej.Main.launch(args);
+		ImageJ ij =  new ImageJ();
+		ij.launch(args);
 		final ImagePlus iPlus = new Opener().openImage(
 			"src//main//resources//sample//Planaria_G_exo_extrashot_060117.tif");
 		iPlus.show();

@@ -35,12 +35,14 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -74,7 +76,6 @@ import javax.swing.text.Document;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
-import org.apache.commons.math3.util.FastMath;
 import org.jfree.data.general.SeriesChangeEvent;
 import org.jfree.data.general.SeriesChangeListener;
 import org.scijava.Context;
@@ -767,7 +768,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
     String line = null;
     List<Integer> fragmentLength = new ArrayList<>();
     List<Integer> fragmentFrequency = new ArrayList<>();
-		try (BufferedReader buffer = new BufferedReader(new FileReader(filename))) {
+
+    URL url = MainDialog.class.getClassLoader().getResource(filename);
+    log.info("Loading " + url.getPath() + " ...");
+		try (BufferedReader buffer = new BufferedReader(new InputStreamReader(url.openStream()))) {
       while(true){
           line = buffer.readLine();
           if(line == null) break; 
@@ -800,11 +804,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		return out;
 	}
 	
-
 	private boolean readRois() {
 		rois = new ArrayList<>();
+		String path = "gel-lanes-fit/data/savedrois.bak";
+  	log.info("Loading " + path + " ...");
 		try (ObjectInputStream ois = 
-				new ObjectInputStream(new FileInputStream("savedrois.bak"))) {
+				new ObjectInputStream(new FileInputStream(path))) {
 			try
 			{
 				int i = 1;
@@ -820,19 +825,21 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			ois.close();
 		  return true;
 		} catch (IOException e) {
-			log.error("Could not read ROIs");
-			e.printStackTrace();
+			log.info("Could not find previously saved ROIs");
 			return false;
 		}
 	}
 	
 	private boolean saveRois() {
+		String path = "gel-lanes-fit/data/";
+		String file = "savedrois.bak";
+		new File(path).mkdirs();
+    log.info("Saving to " + path + file + " ...");
 		try (ObjectOutputStream oos = 
-				new ObjectOutputStream(new FileOutputStream("savedrois.bak"))) {
+				new ObjectOutputStream(new FileOutputStream(path+file))) {
 			for (Roi r : rois) {
 				oos.writeObject(r.getBounds());
 			}
-			
 			return true;
 		} catch (IOException e) {
 		  log.error("ROI file not Found. Creating a new one.");
@@ -1295,7 +1302,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 		
 		if (e.getSource().equals(cmbBoxDist)) {
-			String filename = "src//main//resources//data//" + cmbBoxDist.getSelectedItem() + ".txt";
+			String filename = "data/" + cmbBoxDist.getSelectedItem() + ".txt";
 			double [][] dist = readDistFile(filename);
 			fitter.setFragmentDistribution(dist);
 		}
