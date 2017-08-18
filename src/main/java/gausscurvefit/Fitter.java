@@ -19,6 +19,7 @@
 package gausscurvefit;
 
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -30,7 +31,6 @@ import net.imagej.table.DefaultGenericTable;
 import net.imagej.table.DefaultTableDisplay;
 import net.imagej.table.GenericColumn;
 
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.function.Gaussian;
 import org.apache.commons.math3.analysis.integration.TrapezoidIntegrator;
@@ -46,9 +46,10 @@ import org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.util.FastMath;
-import org.jfree.util.Log;
+
 import org.scijava.Context;
 import org.scijava.app.StatusService;
+import org.scijava.display.Display;
 import org.scijava.display.DisplayService;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
@@ -170,19 +171,29 @@ class Fitter {
 			rt.add(tableCol[cc]);
 
 		// Update results table
-		DefaultTableDisplay tableDisplay = (DefaultTableDisplay) displayServ
-			.getDisplay("Results Display");
-		if (tableDisplay != null) {
-			tableDisplay.close();
+		Display<?> resultsTable = null;
+		for (Display<?> d : displayServ.getDisplays()) {
+			log.info(d.getName());
+			if (d.getName().equals("Results Display")) {
+				d.clear();
+				d.display(rt);
+				resultsTable = d;
+			}
 		}
-		else {
-			tableDisplay = (DefaultTableDisplay) displayServ.createDisplay(
-				"Results Display", rt);
-			displayServ.setActiveDisplay(tableDisplay);
+		
+		if (resultsTable == null) {
+			resultsTable = displayServ.createDisplay("Results Display", rt);
 		}
-
-		final String saveFile = "Fit of " + title + ".xls";
-		try (BufferedWriter out = new BufferedWriter(new FileWriter(saveFile))) {
+		
+		displayServ.setActiveDisplay(resultsTable);
+		
+		
+		// Save Results Table
+		String path = "gel-lanes-fit/data/";
+		String file = "Fit of " + title + ".xls";
+		new File(path).mkdirs();
+    log.info("Saving to " + path + file + " ...");
+		try (BufferedWriter out = new BufferedWriter(new FileWriter(path + file))) {
 			String outText = "";
 			for (int cc = 0; cc < headers.length; cc++)
 				outText += headers[cc] + "\t";
@@ -321,10 +332,12 @@ class Fitter {
 	}
 
 	public List<DataSeries> doFit() {
+		int progress = 1;
 		final ArrayList<DataSeries> out = new ArrayList<>();
 		for (final DataSeries d : inputData) {
 			out.addAll(doFit(d.getLane()));
 		}
+		statusServ.showProgress(++progress, inputData.size());
 		return out;
 	}
 
@@ -333,8 +346,9 @@ class Fitter {
 		final List<DataSeries> out = new ArrayList<>();
 		for (final int i : lanes) {
 			out.addAll(doFit(i));
+			statusServ.showProgress(++progress, inputData.size());
 		}
-		statusServ.showProgress(++progress, inputData.size());
+		
 		return out;
 	}
 
