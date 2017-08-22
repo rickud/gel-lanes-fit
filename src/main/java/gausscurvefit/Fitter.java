@@ -28,7 +28,6 @@ import java.util.Iterator;
 import java.util.List;
 
 import net.imagej.table.DefaultGenericTable;
-import net.imagej.table.DefaultTableDisplay;
 import net.imagej.table.GenericColumn;
 
 import org.apache.commons.math3.analysis.UnivariateFunction;

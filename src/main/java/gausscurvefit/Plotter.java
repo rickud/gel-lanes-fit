@@ -84,7 +84,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 	final double SH = IJ.getScreenSize().getHeight();
 	
 	static final int noRefPlot = -1; // no reference plot
-	private int referencePlot = noRefPlot;
+	private int referencePlot;
 
 	// Colors are listed here for consistent, easy modification
 	static final Color vMarkerRegColor = new Color(127, 127, 127);
@@ -109,6 +109,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 	static final Color plotSelColor = new Color(240, 240, 240);
 	static final Color plotUnselColor = Color.WHITE;
 	static final Color plotAddSelColor = new Color(192, 255, 185);
+	static final Color plotRefColor = new Color(206, 217, 255);
 	
 	private final ImagePlus imp;
 	private List<ChartPanel> chartPanels;
@@ -137,6 +138,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 		
 		chartsTabbedPane = new JTabbedPane();
 		selected = selectedNone;
+		referencePlot = noRefPlot;
 		
 		for (final Roi r : rois) {
 			updateProfile(r);
@@ -386,11 +388,13 @@ class Plotter extends JFrame implements ChartMouseListener {
 				final JFreeChart c = p.getChart();
 				final XYPlot pl = c.getXYPlot(); 
 				
-				if (plotNumber == selected) {
+				if (plotNumber == referencePlot) {
+					pl.setBackgroundPaint(plotRefColor);
+					c.setBackgroundPaint(plotRefColor);
+				}	else if (plotNumber == selected) {
 					pl.setBackgroundPaint(plotBGColor);
 					c.setBackgroundPaint(plotBGColor);
-				}
-				else {
+				}	else {
 					pl.setBackgroundPaint(plotUnselColor);
 					c.setBackgroundPaint(plotUnselColor);
 				}

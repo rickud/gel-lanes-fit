@@ -1148,6 +1148,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			fitted = fitter.doFit(refLn);
 			fitter.updateResultsTable();
 			plotter.addDataSeries(fitted);
+			plotter.setReferencePlot(refLn, fitter.getFittedPeaks(refLn));
 			for (final int i : getAllLaneNumbers())
 				plotter.updatePlot(i);
 			final List<Peak> peaks = fitter.getFittedPeaks(refLn);
