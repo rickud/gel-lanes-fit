@@ -79,10 +79,10 @@ import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 
 class Plotter extends JFrame implements ChartMouseListener {
-	
+
 	final double SW = IJ.getScreenSize().getWidth();
 	final double SH = IJ.getScreenSize().getHeight();
-	
+
 	static final int noRefPlot = -1; // no reference plot
 	private int referencePlot;
 
@@ -91,8 +91,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 	static final Color vMarkerEditPeakColor = new Color(0, 185, 19);
 	static final Stroke vMarkerStroke = new BasicStroke();
 	static final Color bMarkerColor = new Color(255, 128, 128);
-	static final Stroke bMarkerStroke = new BasicStroke(1.25f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[] {15.0f, 5.0f, 5.0f, 5.0f}, 0.0f);
-	
+	static final Stroke bMarkerStroke = new BasicStroke(1.25f,
+		BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[] { 15.0f,
+			5.0f, 5.0f, 5.0f }, 0.0f);
+
 	// Colors for DataSeries in plots
 	static final Color profileColor = Color.BLACK;
 	static final Color gaussColor = Color.RED;
@@ -110,12 +112,12 @@ class Plotter extends JFrame implements ChartMouseListener {
 	static final Color plotUnselColor = Color.WHITE;
 	static final Color plotAddSelColor = new Color(192, 255, 185);
 	static final Color plotRefColor = new Color(206, 217, 255);
-	
+
 	private final ImagePlus imp;
 	private List<ChartPanel> chartPanels;
 	private List<DataSeries> plotsData;
 	private List<VerticalMarker> verticalMarkers;
-	
+
 	private List<JPanel> chartTabs;
 	private final JTabbedPane chartsTabbedPane;
 
@@ -124,22 +126,23 @@ class Plotter extends JFrame implements ChartMouseListener {
 	private int selected; // Which plot is highlighted
 	private int plotMode = regMode;
 
-	public Plotter(final Context context, final ImagePlus imp, final List<Roi> rois)
+	public Plotter(final Context context, final ImagePlus imp,
+		final List<Roi> rois)
 	{
 		context.inject(this);
 		setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
-		setBounds((int) (SW*0.3), 0, (int) (SW*0.7), (int) (SH*0.9));
+		setBounds((int) (SW * 0.3), 0, (int) (SW * 0.7), (int) (SH * 0.9));
 		this.setTitle("Profiles of " + imp.getShortTitle());
 		this.imp = imp;
 		chartPanels = new ArrayList<>();
 		chartTabs = new ArrayList<>();
 		plotsData = new ArrayList<>();
 		verticalMarkers = new ArrayList<>();
-		
+
 		chartsTabbedPane = new JTabbedPane();
 		selected = selectedNone;
 		referencePlot = noRefPlot;
-		
+
 		for (final Roi r : rois) {
 			updateProfile(r);
 		}
@@ -170,18 +173,19 @@ class Plotter extends JFrame implements ChartMouseListener {
 			y), profile, Plotter.profileColor);
 	}
 
-	public void addDataSeries(DataSeries data) {
+	public void addDataSeries(final DataSeries data) {
 		plotsData.add(data);
 	}
-	
+
 	public void addDataSeries(final List<DataSeries> data) {
 		plotsData.addAll(data);
 	}
 
 	public void removeVerticalMarkers() {
 		verticalMarkers = new ArrayList<>();
-		for (ChartPanel c : chartPanels)
-			updatePlot(Integer.parseInt(c.getChart().getTitle().getText().substring(5)));
+		for (final ChartPanel c : chartPanels)
+			updatePlot(Integer.parseInt(c.getChart().getTitle().getText().substring(
+				5)));
 	}
 
 	void setVLine(final int ln, final double x) {
@@ -192,7 +196,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 		for (final ChartPanel p : chartPanels) {
 			if (p.getChart().getTitle().getText().equals("Lane " + ln)) {
 				boolean found = false;
-				for (VerticalMarker m : verticalMarkers) {
+				for (final VerticalMarker m : verticalMarkers) {
 					if (m.getLane() == ln && m.getType() == VerticalMarker.VMARK) {
 						found = true;
 						m.setName(String.format("%1$.1f", x));
@@ -200,8 +204,9 @@ class Plotter extends JFrame implements ChartMouseListener {
 						m.setPaint(vMarkerColor);
 					}
 				}
-				if (!found) {					
-					verticalMarkers.add(new VerticalMarker(String.format("%1$.1f", x), ln, VerticalMarker.VMARK, x, vMarkerColor, vMarkerStroke));
+				if (!found) {
+					verticalMarkers.add(new VerticalMarker(String.format("%1$.1f", x), ln,
+						VerticalMarker.VMARK, x, vMarkerColor, vMarkerStroke));
 				}
 				updatePlot(ln);
 			}
@@ -214,11 +219,14 @@ class Plotter extends JFrame implements ChartMouseListener {
 			final VerticalMarker m = markIter.next();
 			if (m.getLane() == ln && m.getType() == VerticalMarker.VMARK) {
 				markIter.remove();
-				for (ChartPanel c : chartPanels) {
-					if (Integer.parseInt(c.getChart().getTitle().getText().substring(5)) == ln) {
-						Iterator<?> aIter = c.getChart().getXYPlot().getAnnotations().iterator();
+				for (final ChartPanel c : chartPanels) {
+					if (Integer.parseInt(c.getChart().getTitle().getText().substring(
+						5)) == ln)
+					{
+						final Iterator<?> aIter = c.getChart().getXYPlot().getAnnotations()
+							.iterator();
 						while (aIter.hasNext()) {
-							XYTextAnnotation a = (XYTextAnnotation) aIter.next();
+							final XYTextAnnotation a = (XYTextAnnotation) aIter.next();
 							if (a.getText().equals(String.format("%1$.1f", m.getValue())))
 								aIter.remove();
 						}
@@ -226,7 +234,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 				}
 			}
 		}
-		
 
 		selected = selectedNone;
 		updatePlot(ln);
@@ -239,7 +246,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 		}
 		return profiles;
 	}
-	
+
 	public ArrayList<DataSeries> getPlotsCustomPeaks() {
 		final ArrayList<DataSeries> custom = new ArrayList<>();
 		for (final DataSeries d : plotsData) {
@@ -247,22 +254,22 @@ class Plotter extends JFrame implements ChartMouseListener {
 		}
 		return custom;
 	}
-	
+
 	public List<DataSeries> getPlotsData() {
 		return plotsData;
 	}
-	
+
 	public List<VerticalMarker> getPlotsVerticalMarkers() {
 		return verticalMarkers;
 	}
 
-	double[] getPlotLimits(int ln) {
-		double[] limits = new double[4];
-		for (ChartPanel p : chartPanels) {
+	double[] getPlotLimits(final int ln) {
+		final double[] limits = new double[4];
+		for (final ChartPanel p : chartPanels) {
 			if (p.getChart().getTitle().getText().equals("Lane " + ln)) {
-				XYPlot pl = p.getChart().getXYPlot();
-				Range xrange = pl.getDataRange(pl.getDomainAxis());
-				Range yrange = pl.getDataRange(pl.getRangeAxis());
+				final XYPlot pl = p.getChart().getXYPlot();
+				final Range xrange = pl.getDataRange(pl.getDomainAxis());
+				final Range yrange = pl.getDataRange(pl.getRangeAxis());
 				limits[0] = xrange.getLowerBound();
 				limits[1] = xrange.getUpperBound();
 				limits[2] = yrange.getLowerBound();
@@ -271,7 +278,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 		}
 		return limits;
 	}
-	
+
 	int getPlotMode() {
 		return this.plotMode;
 	}
@@ -283,9 +290,9 @@ class Plotter extends JFrame implements ChartMouseListener {
 	public void setSelected(final int selected) {
 		this.selected = selected;
 		if (selected != selectedNone) {
-			int tab = (selected - 1) / (rows * cols);
-			if (chartsTabbedPane.getSelectedIndex() != tab)
-				chartsTabbedPane.setSelectedIndex(tab);
+			final int tab = (selected - 1) / (rows * cols);
+			if (chartsTabbedPane.getSelectedIndex() != tab) chartsTabbedPane
+				.setSelectedIndex(tab);
 		}
 	}
 
@@ -293,27 +300,28 @@ class Plotter extends JFrame implements ChartMouseListener {
 		this.plotMode = plotMode;
 	}
 
-	public void setReferencePlot(final int ref, List<Peak> peaks) {
-		referencePlot  = ref;
+	public void setReferencePlot(final int ref, final List<Peak> peaks) {
+		referencePlot = ref;
 		if (ref != noRefPlot) {
-			for (DataSeries d : plotsData) {
-				int ln = d.getLane();
+			for (final DataSeries d : plotsData) {
+				final int ln = d.getLane();
 				if (ln != ref) {
-					ArrayList<VerticalMarker> bands = new ArrayList<>();
-					for (Peak p : peaks) {
-						double x = p.getMean();
-						VerticalMarker m = new VerticalMarker(p.getName(), ln, VerticalMarker.BMARK, x, Plotter.bMarkerColor, Plotter.bMarkerStroke);
+					final ArrayList<VerticalMarker> bands = new ArrayList<>();
+					for (final Peak p : peaks) {
+						final double x = p.getMean();
+						final VerticalMarker m = new VerticalMarker(p.getName(), ln,
+							VerticalMarker.BMARK, x, Plotter.bMarkerColor,
+							Plotter.bMarkerStroke);
 						bands.add(m);
 					}
 					verticalMarkers.addAll(bands);
 				}
 			}
-		} else {
+		}
+		else {
 			removeVerticalMarkers();
 		}
 	}
-  
-	
 
 	void updateProfile(final Roi roi) {
 		final DataSeries profile = getLaneProfile(roi);
@@ -337,10 +345,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 			final JFreeChart newChart = ChartFactory.createXYLineChart(roi.getName(),
 				xLabel, yLabel, dataset, PlotOrientation.VERTICAL, true, true, false);
 			final XYPlot newPlot = newChart.getXYPlot();
-			NumberFormat format = NumberFormat.getNumberInstance();
+			final NumberFormat format = NumberFormat.getNumberInstance();
 			format.setMaximumFractionDigits(1);
-			XYToolTipGenerator generator =
-			    new StandardXYToolTipGenerator("({1} {2})", format, format);
+			final XYToolTipGenerator generator = new StandardXYToolTipGenerator(
+				"({1} {2})", format, format);
 			newPlot.getRenderer().setBaseToolTipGenerator(generator);
 			newChart.getTitle().setMargin(new RectangleInsets(15, 5, 15, 5));
 			newChart.getTitle().setPaint(Color.BLACK);
@@ -369,9 +377,9 @@ class Plotter extends JFrame implements ChartMouseListener {
 	}
 
 	public void updatePlot(final int ln) {
-		Color plotBGColor  = plotSelColor;
+		Color plotBGColor = plotSelColor;
 		Color vMarkerColor = vMarkerRegColor;
-		
+
 		if (plotMode == Plotter.editPeaksMode) {
 			plotBGColor = plotAddSelColor;
 			vMarkerColor = vMarkerEditPeakColor;
@@ -384,87 +392,93 @@ class Plotter extends JFrame implements ChartMouseListener {
 			final int plotNumber = Integer.parseInt(p.getChart().getTitle().getText()
 				.substring(5));
 			if (plotNumber == ln) {
-				int gcount = 0;				
+				int gcount = 0;
 				final JFreeChart c = p.getChart();
-				final XYPlot pl = c.getXYPlot(); 
-				
+				final XYPlot pl = c.getXYPlot();
+
 				if (plotNumber == referencePlot) {
 					pl.setBackgroundPaint(plotRefColor);
 					c.setBackgroundPaint(plotRefColor);
-				}	else if (plotNumber == selected) {
+				}
+				else if (plotNumber == selected) {
 					pl.setBackgroundPaint(plotBGColor);
 					c.setBackgroundPaint(plotBGColor);
-				}	else {
+				}
+				else {
 					pl.setBackgroundPaint(plotUnselColor);
 					c.setBackgroundPaint(plotUnselColor);
 				}
 
 				// Clear Markers and Annotations
-				if (c.getXYPlot().getDomainMarkers(Layer.BACKGROUND) != null)
-					c.getXYPlot().clearDomainMarkers();
-				if (c.getXYPlot().getAnnotations() != null) 
-					c.getXYPlot().clearAnnotations();
-				
+				if (c.getXYPlot().getDomainMarkers(Layer.BACKGROUND) != null) c
+					.getXYPlot().clearDomainMarkers();
+				if (c.getXYPlot().getAnnotations() != null) c.getXYPlot()
+					.clearAnnotations();
+
 				// Plot vertical markers
-				for (VerticalMarker m : verticalMarkers) {
+				for (final VerticalMarker m : verticalMarkers) {
 					if (m.getLane() == ln) {
-						double height = c.getXYPlot().getRangeAxis().getUpperBound();
-						double offset = 0;
-						XYTextAnnotation label = new XYTextAnnotation(m.getName(), m.getValue() - offset, height);
+						final double height = c.getXYPlot().getRangeAxis().getUpperBound();
+						final double offset = 0;
+						final XYTextAnnotation label = new XYTextAnnotation(m.getName(), m
+							.getValue() - offset, height);
 						if (m.getType() == VerticalMarker.VMARK) {
 							label.setPaint(vMarkerColor);
-						} else if (m.getType() == VerticalMarker.BMARK) {
+						}
+						else if (m.getType() == VerticalMarker.BMARK) {
 							label.setPaint(bMarkerColor);
 						}
 						label.setFont(new Font("Sans Serif", Font.PLAIN, 12));
 						label.setRotationAnchor(TextAnchor.BOTTOM_RIGHT);
 						label.setTextAnchor(TextAnchor.TOP_RIGHT);
 						label.setRotationAngle(-Math.PI / 2);
-						
+
 						c.getXYPlot().addAnnotation(label);
 						c.getXYPlot().addDomainMarker(m, Layer.BACKGROUND);
 					}
 				}
-				
+
 				// Plot the data series
-				LegendItems legendItems = new LegendItems();
+				final LegendItems legendItems = new LegendItems();
 				for (final DataSeries d : plotsData) {
 					if (d.getLane() == ln) {
 						if (d.getItemCount() > 0) {
-							int k = d.getType();
+							final int k = d.getType();
 							String key = "";
 							if (k == DataSeries.GAUSS_BG) {
 								key = String.format("%d", k + gcount);
 								gcount++;
-							} else {
+							}
+							else {
 								key = String.format("%d", k);
 							}
 							d.setKey(key);
 							dataset.addSeries(d);
 							pl.setSeriesRenderingOrder(SeriesRenderingOrder.FORWARD);
 							final int seriesIdx = dataset.getSeriesIndex(key);
-							final XYLineAndShapeRenderer renderer = (XYLineAndShapeRenderer) pl.getRenderer();
+							final XYLineAndShapeRenderer renderer =
+								(XYLineAndShapeRenderer) pl.getRenderer();
 							renderer.setSeriesShapesVisible(seriesIdx, false);
 							renderer.setSeriesLinesVisible(seriesIdx, true);
-							
+
 							if (k == DataSeries.PROFILE) {
 								renderer.setSeriesPaint(seriesIdx, profileColor);
 								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								LegendItem li = new LegendItem("Lane " + ln + " Profile");
+								final LegendItem li = new LegendItem("Lane " + ln + " Profile");
 								li.setFillPaint(d.getColor());
 								legendItems.add(li);
 							}
 							if (k == DataSeries.BACKGROUND) {
 								renderer.setSeriesPaint(seriesIdx, bgColor);
 								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								LegendItem li = new LegendItem("Background Polynomial");
+								final LegendItem li = new LegendItem("Background Polynomial");
 								li.setFillPaint(d.getColor());
 								legendItems.add(li);
 							}
 							if (k == DataSeries.GAUSS_BG) {
 								renderer.setSeriesPaint(seriesIdx, gaussColor);
 								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								LegendItem li = new LegendItem("Gaussian Peaks");
+								final LegendItem li = new LegendItem("Gaussian Peaks");
 								if (!legendItems.contains(li)) {
 									li.setFillPaint(d.getColor());
 									legendItems.add(li);
@@ -473,7 +487,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 							if (k == DataSeries.FITTED) {
 								renderer.setSeriesPaint(seriesIdx, fittedColor);
 								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								LegendItem li = new LegendItem("Fitted Curve");
+								final LegendItem li = new LegendItem("Fitted Curve");
 								li.setFillPaint(d.getColor());
 								legendItems.add(li);
 							}
@@ -483,7 +497,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 								renderer.setSeriesShape(seriesIdx, dot);
 								renderer.setSeriesShapesVisible(seriesIdx, true);
 								renderer.setSeriesLinesVisible(seriesIdx, false);
-								LegendItem li = new LegendItem("Custom Peaks");
+								final LegendItem li = new LegendItem("Custom Peaks");
 								li.setFillPaint(d.getColor());
 								legendItems.add(li);
 							}
@@ -497,7 +511,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 		}
 	}
 
-
 	void closePlot() {
 		this.dispatchEvent(new WindowEvent(this, WindowEvent.WINDOW_CLOSING));
 	}
@@ -506,71 +519,76 @@ class Plotter extends JFrame implements ChartMouseListener {
 		final Iterator<DataSeries> dataIter = plotsData.iterator();
 		while (dataIter.hasNext()) {
 			final DataSeries d = dataIter.next();
-			if (d.getType() != DataSeries.PROFILE && d.getType() != DataSeries.CUSTOMPEAKS) 
-				dataIter.remove();
+			if (d.getType() != DataSeries.PROFILE && d
+				.getType() != DataSeries.CUSTOMPEAKS) dataIter.remove();
 		}
 	}
 
 	public void reloadTabs() {
 		chartsTabbedPane.removeAll();
 		chartTabs = new ArrayList<>();
-		Iterator<ChartPanel> chartIter = chartPanels.iterator();
+		final Iterator<ChartPanel> chartIter = chartPanels.iterator();
 		int i = 0;
 		while (chartIter.hasNext()) {
 			JPanel p = new JPanel();
 			if (!chartTabs.isEmpty() && i < (rows * cols)) {
 				p = chartTabs.get(chartTabs.size() - 1);
-			}	else {
+			}
+			else {
 				p.setBorder(new EmptyBorder(5, 5, 5, 5));
 				p.setLayout(new GridLayout(rows, cols));
 				chartTabs.add(p);
-				int tab = chartTabs.size() - 1;
-				chartsTabbedPane.addTab("Lanes " + (tab*(rows*cols) + 1) +" - " + (tab*(rows*cols) + 4), p);
+				final int tab = chartTabs.size() - 1;
+				chartsTabbedPane.addTab("Lanes " + (tab * (rows * cols) + 1) + " - " +
+					(tab * (rows * cols) + 4), p);
 				i = 0;
 			}
 			p.add(chartIter.next());
 			i++;
 		}
-		if (selected == selectedNone)
-			chartsTabbedPane.setSelectedIndex(0);
-		else 
-			chartsTabbedPane.setSelectedIndex(selected/(rows*cols)-1);
+		if (selected == selectedNone) chartsTabbedPane.setSelectedIndex(0);
+		else chartsTabbedPane.setSelectedIndex(selected / (rows * cols) - 1);
 	}
-	
+
 	public void resetData() {
 		plotsData = new ArrayList<>();
 		chartPanels = new ArrayList<>();
 	}
 
-	
 	@Override
-	public void chartMouseClicked(ChartMouseEvent e) {
+	public void chartMouseClicked(final ChartMouseEvent e) {
 		if (plotMode != Plotter.regMode) {
-			JFreeChart c = e.getChart();
-			for (ChartPanel p : chartPanels) {
+			final JFreeChart c = e.getChart();
+			for (final ChartPanel p : chartPanels) {
 				if (p.getChart().equals(c)) {
-					int ln = Integer.parseInt(p.getChart().getTitle().getText().substring(5));
-					XYPlot plot = (XYPlot) p.getChart().getPlot(); // your plot
-					Point2D pt = p.translateScreenToJava2D(e.getTrigger().getPoint());
-					Rectangle2D plotArea = p.getScreenDataArea();
-					double xi = plot.getDomainAxis().java2DToValue(pt.getX(), plotArea, plot.getDomainAxisEdge());
+					final int ln = Integer.parseInt(p.getChart().getTitle().getText()
+						.substring(5));
+					final XYPlot plot = (XYPlot) p.getChart().getPlot(); // your plot
+					final Point2D pt = p.translateScreenToJava2D(e.getTrigger()
+						.getPoint());
+					final Rectangle2D plotArea = p.getScreenDataArea();
+					final double xi = plot.getDomainAxis().java2DToValue(pt.getX(),
+						plotArea, plot.getDomainAxisEdge());
 					if (plotArea.contains(pt)) {
-						for (DataSeries d : getProfiles()) {
+						for (final DataSeries d : getProfiles()) {
 							if (d.getLane() == ln) {
-								double[] x = d.getX().toArray();
-								double[] y = d.getY().toArray();
-								final PolynomialSplineFunction f = new LinearInterpolator().interpolate(x, y);
-								double yi = f.value(xi);
-								
-								for (DataSeries cp : getPlotsCustomPeaks()) { 
+								final double[] x = d.getX().toArray();
+								final double[] y = d.getY().toArray();
+								final PolynomialSplineFunction f = new LinearInterpolator()
+									.interpolate(x, y);
+								final double yi = f.value(xi);
+
+								for (final DataSeries cp : getPlotsCustomPeaks()) {
 									if (cp.getLane() == ln) {
 										boolean found = false;
 										for (int i = 0; i < cp.getItemCount(); i++) {
-											if (FastMath.abs((double) cp.getX(i) - xi) <= Fitter.peakDistanceTol) {
+											if (FastMath.abs((double) cp.getX(i) -
+												xi) <= Fitter.peakDistanceTol)
+											{
 												found = true;
 												cp.remove(i); // REMOVE point
 											}
-										} 
+										}
 										if (!found) {
 											cp.addOrUpdate(xi, yi); // ADD Point
 										}
@@ -582,36 +600,41 @@ class Plotter extends JFrame implements ChartMouseListener {
 					}
 				}
 			}
-		} else {
+		}
+		else {
 			e.getChart().getXYPlot().setDomainCrosshairVisible(false);
 			e.getChart().getXYPlot().setRangeCrosshairVisible(false);
 		}
 	}
 
 	@Override
-	public void chartMouseMoved(ChartMouseEvent e) {
+	public void chartMouseMoved(final ChartMouseEvent e) {
 		if (plotMode != Plotter.regMode) {
-			JFreeChart c = e.getChart();
-			for (ChartPanel p : chartPanels) {
-				XYPlot plot = (XYPlot) p.getChart().getPlot(); 
+			final JFreeChart c = e.getChart();
+			for (final ChartPanel p : chartPanels) {
+				final XYPlot plot = (XYPlot) p.getChart().getPlot();
 				if (p.getChart().equals(c)) {
-					Point2D pt = p.translateScreenToJava2D(e.getTrigger().getPoint());
-					Rectangle2D plotArea = p.getScreenDataArea();
-					
-					double x = plot.getDomainAxis().java2DToValue(pt.getX(), plotArea, plot.getDomainAxisEdge());
-					double y = plot.getRangeAxis().java2DToValue(pt.getY(), plotArea, plot.getRangeAxisEdge());
+					final Point2D pt = p.translateScreenToJava2D(e.getTrigger()
+						.getPoint());
+					final Rectangle2D plotArea = p.getScreenDataArea();
+
+					final double x = plot.getDomainAxis().java2DToValue(pt.getX(),
+						plotArea, plot.getDomainAxisEdge());
+					final double y = plot.getRangeAxis().java2DToValue(pt.getY(),
+						plotArea, plot.getRangeAxisEdge());
 
 					Paint crossHairColor = plot.getDomainGridlinePaint();
-					if (plotMode == Plotter.editPeaksMode)
-						crossHairColor = vMarkerEditPeakColor;
-				
+					if (plotMode == Plotter.editPeaksMode) crossHairColor =
+						vMarkerEditPeakColor;
+
 					plot.setDomainCrosshairPaint(crossHairColor);
 					plot.setRangeCrosshairPaint(crossHairColor);
 					plot.setDomainCrosshairValue(x);
 					plot.setRangeCrosshairValue(y);
-					plot.setDomainCrosshairVisible(true);					
+					plot.setDomainCrosshairVisible(true);
 					plot.setRangeCrosshairVisible(true);
-				} else {
+				}
+				else {
 					plot.setDomainCrosshairVisible(false);
 					plot.setRangeCrosshairVisible(false);
 				}
@@ -619,33 +642,31 @@ class Plotter extends JFrame implements ChartMouseListener {
 		}
 	}
 
-
 	class LegendItems extends LegendItemCollection {
-		public LegendItems() {					
+
+		public LegendItems() {
 			super();
 		}
-		public boolean contains(LegendItem li) {
+
+		public boolean contains(final LegendItem li) {
 			for (int i = 0; i < this.getItemCount(); i++) {
-				if (this.get(i).getLabel().equals(li.getLabel()))
-					return true;
+				if (this.get(i).getLabel().equals(li.getLabel())) return true;
 			}
 			return false;
 		}
 	}
 
-	
 }
 
-
 class VerticalMarker extends ValueMarker {
+
 	// Possible types
-	final static int VMARK = 0;	// Vertical Position
-	final static int BMARK = 1;	// Molecular Weight bands
-	
-	
-	private final int lane; 		// Reference GEL LANE
+	final static int VMARK = 0; // Vertical Position
+	final static int BMARK = 1; // Molecular Weight bands
+
+	private final int lane; // Reference GEL LANE
 	private final int type;
-	private String name;				// Name for reference
+	private String name; // Name for reference
 
 	public VerticalMarker(final String name, final int lane, final int type,
 		final double x, final Color color, final Stroke stroke)
@@ -655,25 +676,26 @@ class VerticalMarker extends ValueMarker {
 		this.lane = lane;
 		this.type = type;
 	}
-	
-	void setName(String name) {
+
+	void setName(final String name) {
 		this.name = name;
 	}
 
 	int getLane() {
 		return lane;
 	}
-	
+
 	String getName() {
 		return name;
 	}
-	
+
 	int getType() {
 		return type;
 	}
 }
 
 class DataSeries extends XYSeries implements Comparable<DataSeries> {
+
 	private final String name; // Name for Legend
 	private final int lane; // Reference
 	private final int type; // Type of function
@@ -694,14 +716,15 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 		this.lane = lane;
 		this.type = type;
 		this.color = color;
-		if (x.getDimension() == y.getDimension()) { 
+		if (x.getDimension() == y.getDimension()) {
 			if (x.getDimension() != 0) {
 				for (int r = 0; r < x.getDimension(); r++) {
 					add(x.getEntry(r), y.getEntry(r));
 				}
 			}
-		} else
-			throw new DimensionMismatchException(x.getDimension(), y.getDimension()); 
+		}
+		else throw new DimensionMismatchException(x.getDimension(), y
+			.getDimension());
 	}
 
 	public DataSeries(final String name, final int lane, final int type,
@@ -713,14 +736,14 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 		this.lane = lane;
 		this.type = type;
 		this.color = color;
-		
+
 		if (x.getDimension() != 0) {
-			RealVector y = new ArrayRealVector();	
+			RealVector y = new ArrayRealVector();
 			for (int i = 0; i < function.length; i++) {
 				y = (i == 0) ? new ArrayRealVector(x.map(function[i])) : y.add(x.map(
-						function[i]));
+					function[i]));
 			}
-			
+
 			for (int r = 0; r < x.getDimension(); r++) {
 				add(x.getEntry(r), y.getEntry(r));
 			}
@@ -735,7 +758,7 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 		this.lane = lane;
 		this.type = type;
 		this.color = color;
-		RealVector y = new ArrayRealVector(x.map(function));
+		final RealVector y = new ArrayRealVector(x.map(function));
 		for (int r = 0; r < x.getDimension(); r++) {
 			add(x.getEntry(r), y.getEntry(r));
 		}
@@ -788,10 +811,10 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 			for (int i = 0; i < x.getDimension(); i++) {
 				add(x.getEntry(i), y.getEntry(i));
 			}
-		} else
-			throw new DimensionMismatchException(x.getDimension(), y.getDimension()); 
+		}
+		else throw new DimensionMismatchException(x.getDimension(), y
+			.getDimension());
 	}
-
 
 	@Override
 	public int compareTo(final DataSeries d) {

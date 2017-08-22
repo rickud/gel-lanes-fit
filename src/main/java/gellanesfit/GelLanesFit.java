@@ -55,7 +55,7 @@ public class GelLanesFit implements Command {
 	private StatusService statusServ;
 	@Parameter
 	private static Context context;
-  
+
 	// TODO: private Thread mainWindowThread; // thread for the main window
 	private Thread plotThread; // thread for plotting
 
@@ -69,31 +69,31 @@ public class GelLanesFit implements Command {
 	 * Initialization method
 	 */
 	public void init() {
-		Preferences prefs = Preferences.userRoot().node(this.getClass().getName());
+		final Preferences prefs = Preferences.userRoot().node(this.getClass()
+			.getName());
 		final double SW = IJ.getScreenSize().getWidth();
 		final double SH = IJ.getScreenSize().getHeight();
-		
+
 		imp = IJ.getImage();
 
 		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
 			"."));
 		about();
-		final String title = "[" + version + "] Gel Lanes Fit - " + imp
-			.getTitle();
+		final String title = "[" + version + "] Gel Lanes Fit - " + imp.getTitle();
 
-    final MainDialog md = new MainDialog(context, title, imp, prefs);
+		final MainDialog md = new MainDialog(context, title, imp, prefs);
 		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
 			.getTolPK());
 		final Plotter plotter = new Plotter(context, imp, md.getRois());
 		md.setPlotter(plotter);
 		md.setFitter(fitter);
-			
+
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
 		if (iwin == null) return;
-		
-		iwin.setLocation(0, (int) SH/2);
-		iwin.setSize((int) SW/2, (int) SH/2);
+
+		iwin.setLocation(0, (int) SH / 2);
+		iwin.setSize((int) SW / 2, (int) SH / 2);
 		iwin.getCanvas().requestFocus();
 
 		// thread for plotting in the background
@@ -127,38 +127,42 @@ public class GelLanesFit implements Command {
 	 */
 	public void about() {
 		try {
-			Enumeration<URL> resources = getClass().getClassLoader().getResources("META-INF/MANIFEST.MF");
+			final Enumeration<URL> resources = getClass().getClassLoader()
+				.getResources("META-INF/MANIFEST.MF");
 			while (resources.hasMoreElements()) {
-		    try {
-		      Manifest manifest = new Manifest(resources.nextElement().openStream());
-		      // check that this is your manifest and do what you need or get the next one
-		      Attributes a = manifest.getMainAttributes();
-		      String name = a.getValue("Implementation-Title");
-		      if (name == null) continue;
-		      if (name.equals("Gel Lanes Fit")) {
-		      	log.info(name);
-		      	version = a.getValue("Implementation-Version");
-		      	log.info(name + " " + version);
-		      }
-		    } catch (IOException e) {
-		      // handle
-		    }
+				try {
+					final Manifest manifest = new Manifest(resources.nextElement()
+						.openStream());
+					// check that this is your manifest and do what you need or get the
+					// next one
+					final Attributes a = manifest.getMainAttributes();
+					final String name = a.getValue("Implementation-Title");
+					if (name == null) continue;
+					if (name.equals("Gel Lanes Fit")) {
+						log.info(name);
+						version = a.getValue("Implementation-Version");
+						log.info(name + " " + version);
+					}
+				}
+				catch (final IOException e) {
+					// handle
+				}
 			}
-		} 
-		catch (IOException e) {
-			
+		}
+		catch (final IOException e) {
+
 		}
 	}
 
 	/**
 	 * Main method to execute the plugin in Eclipse
-	 * 
+	 *
 	 * @param args
 	 * @throws Exception
 	 */
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
-		ImageJ ij =  new ImageJ();
+		final ImageJ ij = new ImageJ();
 		ij.launch(args);
 		final ImagePlus iPlus = new Opener().openImage(
 			"src//main//resources//sample//Planaria_G_exo_extrashot_060117.tif");
