@@ -16,7 +16,7 @@
  *    https://github.com/rickud/gauss-curve-fit
  */
 
-package gausscurvefit;
+package gellanesfit;
 
 import java.awt.BorderLayout;
 import java.awt.Checkbox;

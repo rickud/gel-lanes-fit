@@ -16,7 +16,7 @@
  *    https://github.com/rickud/gauss-curve-fit
  */
 
-package gausscurvefit;
+package gellanesfit;
 
 import java.io.BufferedWriter;
 import java.io.File;
@@ -53,7 +53,7 @@ import org.scijava.display.DisplayService;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 
-import gausscurvefit.GaussianArrayCurveFitter.ParameterGuesser;
+import gellanesfit.GaussianArrayCurveFitter.ParameterGuesser;
 
 class Fitter {
 

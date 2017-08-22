@@ -16,7 +16,7 @@
 
 	<name>Gel Lanes Fit</name>
 	<description>This plugin fits Gaussians peaks at local maxima of a 1D gel electrophoreses linear lane profile.</description>
-	<url>https://github.com/rickud/gauss-curve-fit/</url>
+	<url>https://github.com/rickud/gel-lanes-fit/</url>
 	<inceptionYear>2017</inceptionYear>
 	<organization>
 		<name>UT Dallas</name>
@@ -101,14 +101,14 @@
 		</mailingList>
 	</mailingLists>
 	<scm>
-		<connection>scm:git:git://github.com/rickud/gauss-curve-fit</connection>
-		<developerConnection>scm:git:git@github.com:rickud/gauss-curve-fit</developerConnection>
+		<connection>scm:git:git://github.com/rickud/gel-lanes-fit</connection>
+		<developerConnection>scm:git:git@github.com:rickud/gel-lanes-fit</developerConnection>
 		<tag>HEAD</tag>
-		<url>https://github.com/rickud/gauss-curve-fit/</url>
+		<url>https://github.com/rickud/gel-lanes-fit/</url>
 	</scm>
 	<issueManagement>
 		<system>GitHub</system>
-		<url>http://github.com/rickud/gauss-curve-fit/issues</url>
+		<url>http://github.com/rickud/gel-lanes-fit/issues</url>
 	</issueManagement>
 	<ciManagement>
 		<system>None</system>
@@ -120,8 +120,8 @@
 			<url>http://maven.imagej.net/content/groups/public</url>
 		</repository>
 		<repository>
-			<id>gauss-curve-fit</id>
-			<url>https://github.com/rickud/gauss-curve-fit</url>
+			<id>gel-lanes-fit</id>
+			<url>https://github.com/rickud/gel-lanes-fit</url>
 		</repository>
 	</repositories>
 	

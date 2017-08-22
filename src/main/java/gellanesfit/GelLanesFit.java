@@ -16,7 +16,7 @@
  *    https://github.com/rickud/gauss-curve-fit
  */
 
-package gausscurvefit;
+package gellanesfit;
 
 import java.io.IOException;
 import java.net.URL;
