@@ -23,6 +23,8 @@ import java.awt.Checkbox;
 import java.awt.Color;
 import java.awt.FlowLayout;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -66,6 +68,7 @@ import javax.swing.JSlider;
 import javax.swing.JTextField;
 import javax.swing.JToggleButton;
 import javax.swing.SwingConstants;
+import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
@@ -164,7 +167,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private JRadioButton buttonManual;
 	private ButtonGroup AMButtons;
 
-	private JPanel textPanel;
+	private JPanel lanesPanel;
 	private JLabel labelNLanes;
 	private JTextField textNLanes;
 
@@ -256,16 +259,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		        new Font("Sans", Font.PLAIN, 11)));
 
 		sliderPanel = new JPanel();
-		textPanel = new JPanel();
-		textPanel.setLayout(new FlowLayout(FlowLayout.LEADING));
+		lanesPanel = new JPanel();
+		lanesPanel.setLayout(new BoxLayout(lanesPanel, BoxLayout.X_AXIS));
 		textNLanes = new JTextField(3);
 		textNLanes.setText("" + nLanes);
 		textNLanes.setVisible(true);
 		textNLanes.getDocument().addDocumentListener(this);
-		textPanel.add(textNLanes);
+		lanesPanel.add(textNLanes);
 		labelNLanes = new JLabel("Number of Lanes");
-		textPanel.add(labelNLanes);
-		sliderPanel.add(textPanel);
+		lanesPanel.add(labelNLanes);
+		sliderPanel.add(lanesPanel);
 
 		sliderPanel.setLayout(new BoxLayout(sliderPanel, BoxLayout.Y_AXIS));
 		sliderW = makeTitledSlider("Width ( " + lw + " px )", Color.black, 1, iw / nLanes, lw);
@@ -359,16 +362,46 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		buttonResetCustomPeaks.setEnabled(false);
 
 		// TODO: Improve layout of settings panel
-		settingsPanel.setLayout(new BoxLayout(settingsPanel, BoxLayout.Y_AXIS));
-		settingsPanel.add(degPanel);
-		settingsPanel.add(tolPanel);
-		settingsPanel.add(BSButtonsPanel);
-		settingsPanel.add(chkBoxBands);
-		settingsPanel.add(cmbBoxLadderLane);
-		settingsPanel.add(cmbBoxLadderType);
-		settingsPanel.add(cmbBoxDist);
-		settingsPanel.add(buttonEditPeaks);
-		settingsPanel.add(buttonResetCustomPeaks);
+		settingsPanel.setLayout(new GridBagLayout());
+		settingsPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
+		GridBagConstraints c = new GridBagConstraints();
+		c.weightx = 0.5;
+		settingsPanel.add(degPanel, c);
+		
+		c.gridx = 0; c.gridy = 1;
+		settingsPanel.add(tolPanel, c);
+		
+		c.gridx = 1; c.gridy = 0; 
+		c.gridheight = 3;
+		c.fill = GridBagConstraints.HORIZONTAL;
+		c.ipady = 5;
+		c.weightx = 0.0;
+		settingsPanel.add(BSButtonsPanel, c);
+		
+		c.gridx = 0; c.gridy = 2;
+		c.gridwidth = 1; c.gridheight = 1; 
+		c.fill = GridBagConstraints.HORIZONTAL;
+		settingsPanel.add(chkBoxBands, c); 
+		
+		c.gridx = 0; c.gridy = 3; 
+		c.gridwidth = 2; c.gridheight = 1;
+		settingsPanel.add(cmbBoxLadderLane, c);
+		
+		c.gridx = 0; c.gridy = 4; 
+		c.gridwidth = 2; c.gridheight = 1;
+		settingsPanel.add(cmbBoxLadderType, c);
+		
+		c.gridx = 0; c.gridy = 5; 
+		c.gridwidth = 2; c.gridheight = 1;
+		settingsPanel.add(cmbBoxDist, c);
+		
+		c.gridx = 0; c.gridy = 6; 
+		c.gridwidth = 1; c.gridheight = 1;
+		settingsPanel.add(buttonEditPeaks, c);
+		
+		c.gridx = 1; c.gridy = 6; 
+		c.gridwidth = 1; c.gridheight = 1;
+		settingsPanel.add(buttonResetCustomPeaks, c);
 
 		dialogPanel = new JPanel();
 		dialogPanel.setBackground(Color.darkGray);
@@ -513,10 +546,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	private JSlider makeTitledSlider(final String string, final Color color, final int minVal,
 	        final int maxVal, int val) {
-		if (val < minVal)
-			val = minVal;
-		if (val > maxVal)
-			val = maxVal;
+		if (val < minVal) val = minVal;
+		if (val > maxVal) val = maxVal;
 		final JSlider slider = new JSlider(SwingConstants.HORIZONTAL, minVal, maxVal, val);
 		final TitledBorder tb = new TitledBorder(BorderFactory.createEtchedBorder(),
 		        // empty,
