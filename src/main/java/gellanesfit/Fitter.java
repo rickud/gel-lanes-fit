@@ -28,6 +28,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import net.imagej.table.DefaultGenericTable;
+import net.imagej.table.DefaultTableDisplay;
 import net.imagej.table.GenericColumn;
 
 import org.apache.commons.math3.analysis.UnivariateFunction;
@@ -121,7 +122,6 @@ class Fitter {
 		        "Amp. G.", "FWHM G." };
 		final GenericColumn[] tableCol = new GenericColumn[headers.length];
 		final DefaultGenericTable rt = new DefaultGenericTable();
-
 		for (int cc = 0; cc < headers.length; cc++)
 			tableCol[cc] = new GenericColumn(headers[cc]);
 
@@ -165,22 +165,25 @@ class Fitter {
 			rt.add(tableCol[cc]);
 
 		// Update results table
-		Display<?> resultsTable = null;
+		DefaultTableDisplay	resultsTable = null;
 		for (final Display<?> d : displayServ.getDisplays()) {
 			log.info(d.getName());
 			if (d.getName().equals("Results Display")) {
-				d.clear();
+				for (int i = 0; i < d.size(); i++) {
+					d.remove(i);
+				}
 				d.display(rt);
-				resultsTable = d;
+				d.update();
 			}
+			resultsTable = (DefaultTableDisplay) d;
 		}
 
-		if (resultsTable == null) {
-			resultsTable = displayServ.createDisplay("Results Display", rt);
+		if (resultsTable == null ){
+			resultsTable = 
+					(DefaultTableDisplay) displayServ.createDisplay("Results Display", rt);
 		}
-
 		displayServ.setActiveDisplay(resultsTable);
-
+		
 		// Save Results Table
 		final String path = "gel-lanes-fit/data/";
 		final String file = "Fit of " + title + ".xls";
@@ -344,7 +347,6 @@ class Fitter {
 			out.addAll(doFit(i));
 			statusServ.showProgress(++progress, inputData.size());
 		}
-
 		return out;
 	}
 
