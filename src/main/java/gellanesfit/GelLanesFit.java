@@ -165,7 +165,7 @@ public class GelLanesFit implements Command {
 		final ImageJ ij = new ImageJ();
 		ij.launch(args);
 		final ImagePlus iPlus = new Opener().openImage(
-			"src//main//resources//sample//Planaria_G_exo_extrashot_060117.tif");
+			"src//main//resources//sample//Destained[1s].tif");
 		iPlus.show();
 		ij.command().run(GelLanesFit.class, true);
 	}
