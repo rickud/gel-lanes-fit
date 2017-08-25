@@ -120,8 +120,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private static final String LVOFF = "lvoff";
 	private static final String AUTO = "auto";
 
-	final double SW = IJ.getScreenSize().getWidth();
-	final double SH = IJ.getScreenSize().getHeight();
+	private final double SW = IJ.getScreenSize().getWidth();
+	private final double SH = IJ.getScreenSize().getHeight();
 
 	private static final Color guess = Color.BLUE;
 	private static final Color custom = Color.GREEN;
@@ -756,7 +756,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		buttonEditPeaks.setEnabled(false);
 		buttonResetCustomPeaks.setEnabled(false);
 		plotter.resetData();
-		plotter.setMode(Plotter.regMode);
+		plotter.setPlotMode(Plotter.regMode);
 		for (final Roi r : rois) {
 			final int ln = Integer.parseInt(r.getName().substring(5));
 			final Rectangle rect = r.getBounds();
@@ -834,6 +834,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			log.info("Could not find previously saved ROIs");
 			return false;
 		}
+	}
+
+	private void resetCustomPeaks(final int lane) {
+		fitter.resetCustomPeaks(lane);
+		for (final DataSeries d : plotter.getPlotsCustomPeaks()) {
+			d.removeChangeListener(this);
+			d.clear();
+			d.addChangeListener(this);
+		}
+		plotter.updatePlot(lane);
 	}
 
 	private boolean saveRois() {
@@ -980,16 +990,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	public String getRoiPreviouslySelected() {
 		return roiPreviouslySelected;
-	}
-
-	void resetCustomPeaks(final int lane) {
-		fitter.resetCustomPeaks(lane);
-		for (final DataSeries d : plotter.getPlotsCustomPeaks()) {
-			d.removeChangeListener(this);
-			d.clear();
-			d.addChangeListener(this);
-		}
-		plotter.updatePlot(lane);
 	}
 
 	public void setFitter(final Fitter fitter) {
@@ -1142,7 +1142,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 			// Remove everything in the plots, but the profile
 			plotter.setSelected(Plotter.selectedNone);
-			plotter.setMode(Plotter.regMode);
+			plotter.setPlotMode(Plotter.regMode);
 			plotter.removeFit();
 			plotter.removeVerticalMarkers();
 
@@ -1231,9 +1231,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 		if (e.getSource().equals(buttonEditPeaks)) {
 			if (buttonEditPeaks.isSelected())
-				plotter.setMode(Plotter.editPeaksMode);
+				plotter.setPlotMode(Plotter.editPeaksMode);
 			else
-				plotter.setMode(Plotter.regMode);
+				plotter.setPlotMode(Plotter.regMode);
 		}
 
 		if (e.getSource().equals(buttonResetCustomPeaks)) {

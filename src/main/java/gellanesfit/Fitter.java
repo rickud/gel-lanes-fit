@@ -66,7 +66,7 @@ class Fitter {
 
 	static final int regMode = 0;
 	static final int fragmentMode = 1;
-	static final int noLadderLane = -1;
+	private static final int noLadderLane = -1;
 
 	public static final double peakDistanceTol = 2;
 	public static final double sd2FWHM = 2 * FastMath.sqrt(2 * FastMath.log(2));
@@ -337,16 +337,6 @@ class Fitter {
 			out.addAll(doFit(d.getLane()));
 		}
 		statusServ.showProgress(++progress, inputData.size());
-		return out;
-	}
-
-	public List<DataSeries> doFit(final int[] lanes) {
-		int progress = 1;
-		final List<DataSeries> out = new ArrayList<>();
-		for (final int i : lanes) {
-			out.addAll(doFit(i));
-			statusServ.showProgress(++progress, inputData.size());
-		}
 		return out;
 	}
 

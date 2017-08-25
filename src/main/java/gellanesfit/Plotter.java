@@ -64,7 +64,6 @@ import org.jfree.chart.plot.SeriesRenderingOrder;
 import org.jfree.chart.plot.ValueMarker;
 import org.jfree.chart.plot.XYPlot;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
-import org.jfree.data.Range;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
 import org.jfree.ui.Layer;
@@ -80,38 +79,38 @@ import ij.gui.Roi;
 
 class Plotter extends JFrame implements ChartMouseListener {
 
-	final double SW = IJ.getScreenSize().getWidth();
-	final double SH = IJ.getScreenSize().getHeight();
+	private final double SW = IJ.getScreenSize().getWidth();
+	private final double SH = IJ.getScreenSize().getHeight();
 
 	static final int noRefPlot = -1; // no reference plot
 	private int referencePlot;
 
 	// Colors are listed here for consistent, easy modification
-	static final Color vMarkerRegColor = new Color(127, 127, 127);
+	private static final Color vMarkerRegColor = new Color(127, 127, 127);
 	static final Color vMarkerEditPeakColor = new Color(0, 185, 19);
-	static final Stroke vMarkerStroke = new BasicStroke();
-	static final Color bMarkerColor = new Color(255, 128, 128);
-	static final Stroke bMarkerStroke = new BasicStroke(1.25f,
+	private static final Stroke vMarkerStroke = new BasicStroke();
+	private static final Color bMarkerColor = new Color(255, 128, 128);
+	private static final Stroke bMarkerStroke = new BasicStroke(1.25f,
 		BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 10.0f, new float[] { 15.0f,
 			5.0f, 5.0f, 5.0f }, 0.0f);
 
 	// Colors for DataSeries in plots
-	static final Color profileColor = Color.BLACK;
+	private static final Color profileColor = Color.BLACK;
 	static final Color gaussColor = Color.RED;
 	static final Color bgColor = Color.BLUE;
 	static final Color fittedColor = new Color(255, 153, 0);
-	static final Stroke dataStroke = new BasicStroke(2.0f);
+	private static final Stroke dataStroke = new BasicStroke(2.0f);
 
 	// Background Color of selected plot
 	static final int selectedNone = -1;
 	static final int regMode = 0;
 	static final int editPeaksMode = 1;
-	static final int refMode = 2;
 
-	static final Color plotSelColor = new Color(240, 240, 240);
-	static final Color plotUnselColor = Color.WHITE;
-	static final Color plotAddSelColor = new Color(192, 255, 185);
-	static final Color plotRefColor = new Color(206, 217, 255);
+
+	private static final Color plotSelColor = new Color(240, 240, 240);
+	private static final Color plotUnselColor = Color.WHITE;
+	private static final Color plotAddSelColor = new Color(192, 255, 185);
+	private static final Color plotRefColor = new Color(206, 217, 255);
 
 	private final ImagePlus imp;
 	private List<ChartPanel> chartPanels;
@@ -263,27 +262,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 		return verticalMarkers;
 	}
 
-	double[] getPlotLimits(final int ln) {
-		final double[] limits = new double[4];
-		for (final ChartPanel p : chartPanels) {
-			if (p.getChart().getTitle().getText().equals("Lane " + ln)) {
-				final XYPlot pl = p.getChart().getXYPlot();
-				final Range xrange = pl.getDataRange(pl.getDomainAxis());
-				final Range yrange = pl.getDataRange(pl.getRangeAxis());
-				limits[0] = xrange.getLowerBound();
-				limits[1] = xrange.getUpperBound();
-				limits[2] = yrange.getLowerBound();
-				limits[3] = yrange.getUpperBound();
-			}
-		}
-		return limits;
-	}
-
-	int getPlotMode() {
-		return this.plotMode;
-	}
-
-	void setPlotMode(final int plotMode) {
+	void setPlotMode(int plotMode) {
 		this.plotMode = plotMode;
 	}
 
@@ -294,10 +273,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 			if (chartsTabbedPane.getSelectedIndex() != tab) chartsTabbedPane
 				.setSelectedIndex(tab);
 		}
-	}
-
-	public void setMode(final int plotMode) {
-		this.plotMode = plotMode;
 	}
 
 	public void setReferencePlot(final int ref, final List<Peak> peaks) {
@@ -642,13 +617,13 @@ class Plotter extends JFrame implements ChartMouseListener {
 		}
 	}
 
-	class LegendItems extends LegendItemCollection {
+	private class LegendItems extends LegendItemCollection {
 
 		public LegendItems() {
 			super();
 		}
 
-		public boolean contains(final LegendItem li) {
+		private boolean contains(final LegendItem li) {
 			for (int i = 0; i < this.getItemCount(); i++) {
 				if (this.get(i).getLabel().equals(li.getLabel())) return true;
 			}

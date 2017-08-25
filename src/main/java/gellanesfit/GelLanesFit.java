@@ -42,6 +42,7 @@ import ij.io.Opener;
 
 @Plugin(type = Command.class, headless = true,
 	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
+@SuppressWarnings("ucd")
 public class GelLanesFit implements Command {
 
 	/**
