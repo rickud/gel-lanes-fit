@@ -534,10 +534,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		final String title = "LADDER RANGE";
 		final String message = "Select the first and last ladder bands to consider";
 		final GenericDialog gd = new GenericDialog(title);
-
+		String ladderFirst = ladder[ladderRange[0]];
+		String ladderLast = ladder[ladderRange[1]];
+		if (ladderRange[1] == 0) ladderLast = ladder[ladder.length - 1];
 		gd.addMessage(message);
-		gd.addChoice("First Band", ladder, ladder[0]);
-		gd.addChoice("Last Band", ladder, ladder[ladder.length - 1]);
+		gd.addChoice("First Band", ladder, ladderFirst);
+		gd.addChoice("Last Band", ladder, ladderLast);
 		gd.showDialog();
 		if (gd.wasOKed()) {
 			final String[] range = { gd.getNextChoice(), gd.getNextChoice() };
