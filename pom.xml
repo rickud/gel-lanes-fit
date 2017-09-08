@@ -107,7 +107,7 @@
 		<url>https://github.com/rickud/gel-lanes-fit/</url>
 	</scm>
 	<issueManagement>
-		<system>GitHub</system>
+		<system>GitHub Issues</system>
 		<url>http://github.com/rickud/gel-lanes-fit/issues</url>
 	</issueManagement>
 	<ciManagement>
