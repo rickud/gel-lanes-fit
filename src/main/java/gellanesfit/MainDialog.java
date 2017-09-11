@@ -307,8 +307,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		buttonBands = new JRadioButton("Bands");
 		buttonBands.setActionCommand("Bands");
 		buttonBands.addActionListener(this);
-		buttonSmear = new JRadioButton("Smear");
-		buttonSmear.setActionCommand("Smear");
+		buttonSmear = new JRadioButton("Continuum");
+		buttonSmear.setActionCommand("Continuum");
 		buttonSmear.addActionListener(this);
 		BSButtons = new ButtonGroup();
 		BSButtonsPanel.setLayout(new BoxLayout(BSButtonsPanel, BoxLayout.Y_AXIS));
