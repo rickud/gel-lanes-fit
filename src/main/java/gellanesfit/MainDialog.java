@@ -1324,6 +1324,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		}
 
 		if (e.getSource().equals(cmbBoxDist)) {
+			if (cmbBoxDist.getSelectedIndex() == 0) return;
 			final String filename = "data/" + cmbBoxDist.getSelectedItem() + ".txt";
 			final double[][] dist = readDistFile(filename);
 			fitter.setFragmentDistribution(dist);
