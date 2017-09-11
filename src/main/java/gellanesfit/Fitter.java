@@ -33,7 +33,7 @@ import net.imagej.table.GenericColumn;
 
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.function.Gaussian;
-import org.apache.commons.math3.analysis.integration.TrapezoidIntegrator;
+import org.apache.commons.math3.analysis.integration.gauss.GaussIntegrator;
 import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
 import org.apache.commons.math3.analysis.polynomials.PolynomialFunction;
 import org.apache.commons.math3.analysis.polynomials.PolynomialSplineFunction;
@@ -43,7 +43,9 @@ import org.apache.commons.math3.fitting.WeightedObservedPoints;
 import org.apache.commons.math3.fitting.leastsquares.LeastSquaresOptimizer;
 import org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem;
 import org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer;
+import org.apache.commons.math3.linear.Array2DRowRealMatrix;
 import org.apache.commons.math3.linear.ArrayRealVector;
+import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.util.FastMath;
 import org.scijava.Context;
@@ -76,7 +78,7 @@ class Fitter {
 	private int fitMode = regMode;
 	private int ladderLane = noLadderLane;
 	private double[] ladder; // MW, Dalton
-	private double[][] dist; // MW, Dalton; relative frequency
+	private double[][] fragmentDistribution; // MW, Dalton; relative frequency
 	private final String title; // for the datafile, main image's title
 	private List<DataSeries> inputData;
 
@@ -107,7 +109,6 @@ class Fitter {
 
 	private RealVector peaksToArray(final List<Peak> peaks) {
 		RealVector guessArray = new ArrayRealVector();
-		guessArray = guessArray.append(degBG).append(new ArrayRealVector(degBG + 1));
 		for (final Peak p : peaks) {
 			guessArray = guessArray.append(p.getNorm());
 			guessArray = guessArray.append(p.getMean());
@@ -118,8 +119,12 @@ class Fitter {
 
 	public void updateResultsTable() {
 		// Results Table Columns
-		final String[] headers = { "", "Band", "Distance", "Amplitude", "FWHM", "Area", "Dist. G.",
-		        "Amp. G.", "FWHM G." };
+		String[] headersB = { "", "Band", "Distance", "Dist. G.", "Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area"};
+		String[] headersF = { "", "Band", "Distance", "Dist. G.", "Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area", "Frequency", "BP", "MW" };
+		String[] headers = null;
+		if (fitMode == regMode) headers = headersB;
+		else headers = headersF;
+		
 		final GenericColumn[] tableCol = new GenericColumn[headers.length];
 		final DefaultGenericTable rt = new DefaultGenericTable();
 		for (int cc = 0; cc < headers.length; cc++)
@@ -137,7 +142,7 @@ class Fitter {
 				final double n = fitted.get(p).getNorm();
 				final double m = fitted.get(p).getMean();
 				final double s = fitted.get(p).getSigma();
-				final double a = doIntegrate(new ArrayRealVector(d.getX()), n, m, s);
+				final double a = doIntegrate(d.getX(), n, m, s);
 
 				final double n0 = guess.get(p).getNorm();
 				final double m0 = guess.get(p).getMean();
@@ -151,12 +156,24 @@ class Fitter {
 				}
 				tableCol[1].add(band);
 				tableCol[2].add(String.format("%1$.1f", m));
-				tableCol[3].add(String.format("%1$.1f", n));
-				tableCol[4].add(String.format("%1$.2f", s * sd2FWHM));
-				tableCol[5].add(String.format("%1$.1f", a));
-				tableCol[6].add(String.format("%1$.1f", m0));
-				tableCol[7].add(String.format("%1$.1f", n0));
-				tableCol[8].add(String.format("%1$.2f", s0 * sd2FWHM));
+				tableCol[3].add(String.format("%1$.1f", m0));
+				tableCol[4].add(String.format("%1$.1f", n));
+				tableCol[5].add(String.format("%1$.1f", n0));
+				tableCol[6].add(String.format("%1$.2f", s * sd2FWHM));
+				tableCol[7].add(String.format("%1$.2f", s0 * sd2FWHM));
+				tableCol[8].add(String.format("%1$.1f", a));
+
+				if (fitMode == fragmentMode) {
+					if (lane == ladderLane) { 
+						tableCol[9].add(" - ");
+						tableCol[10].add(" - ");
+						tableCol[11].add(" - ");
+					} else {
+						tableCol[9].add(String.format("%1$.3f", fragmentDistribution[band-1][0]));
+						tableCol[10].add(String.format("%1$.1f", fragmentDistribution[band-1][1]));
+						tableCol[11].add(String.format("%1$.3f", fragmentDistribution[band-1][2]));
+					}	
+				}
 				band++;
 			}
 		}
@@ -165,24 +182,20 @@ class Fitter {
 			rt.add(tableCol[cc]);
 
 		// Update results table
-		DefaultTableDisplay	resultsTable = null;
+		DefaultTableDisplay rtDisplay = null;
 		for (final Display<?> d : displayServ.getDisplays()) {
-			log.info(d.getName());
-			if (d.getName().equals("Results Display")) {
-				for (int i = 0; i < d.size(); i++) {
-					d.remove(i);
-				}
-				d.display(rt);
-				d.update();
+			//log.info(d.getClass().toString());
+			if (d instanceof DefaultTableDisplay) {
+				rtDisplay = (DefaultTableDisplay) d;
+				rtDisplay.clear();
+				rtDisplay.add(rt);
+				rtDisplay.update();
 			}
-			resultsTable = (DefaultTableDisplay) d;
 		}
-
-		if (resultsTable == null ){
-			resultsTable = 
-					(DefaultTableDisplay) displayServ.createDisplay("Results Display", rt);
+		if (rtDisplay == null) {
+			rtDisplay = (DefaultTableDisplay) displayServ.createDisplay("Results Display", rt);
 		}
-		displayServ.setActiveDisplay(resultsTable);
+		displayServ.setActiveDisplay(rtDisplay);
 		
 		// Save Results Table
 		final String path = "gel-lanes-fit/data/";
@@ -210,7 +223,7 @@ class Fitter {
 	private double[] interpolateDisplacement(final double[] y) {
 		final WeightedObservedPoints obs = new WeightedObservedPoints();
 		final double[] logs = new double[y.length];
-		final double distlogs[] = new double[dist.length];
+		final double distLogs[] = new double[fragmentDistribution.length];
 		for (int l = 0; l < y.length; l++) {
 			logs[l] = Math.log10(ladder[l]);
 			obs.add(Math.log10(ladder[l]), y[l]);
@@ -218,11 +231,11 @@ class Fitter {
 		// First-degree polynomial fitter (line).
 		final PolynomialCurveFitter fitter = PolynomialCurveFitter.create(1);
 		final double[] coeff = fitter.fit(obs.toList());
-		final double[] yi = new double[dist.length];
+		final double[] yi = new double[fragmentDistribution.length];
 		final UnivariateFunction f = new PolynomialFunction(coeff);
-		for (int i = 0; i < dist.length; i++) {
-			distlogs[i] = Math.log10(dist[i][0]);
-			yi[i] = f.value(Math.log10(dist[i][0]));
+		for (int i = 0; i < fragmentDistribution.length; i++) {
+			distLogs[i] = Math.log10(fragmentDistribution[i][2]);
+			yi[i] = f.value(Math.log10(fragmentDistribution[i][2]));
 		}
 		return yi;
 	}
@@ -256,16 +269,22 @@ class Fitter {
 		}
 
 		List<Peak> peaks = new ArrayList<>();
+		RealVector guess = new ArrayRealVector();
 		if (fitMode == regMode || (fitMode == fragmentMode && lane == ladderLane)) {
 			// Guess a set of peaks a set of peaks automatically
-			peaks = arrayToPeaks(lane, pg.guess());
+			guess = new ArrayRealVector(pg.guess());
+			peaks = arrayToPeaks(lane, guess.toArray());
 
 		} else if (fitMode == fragmentMode) {
-			if (ladder == null || dist == null) {
+			if (ladder == null || fragmentDistribution == null) {
 				log.info("Missing ladder/distribution");
 				return null;
 			}
-			// Use the stored distribution as a guess dist[:][0] = MW
+			// Use the stored distribution as a guess 
+			// fragmentDistribution[:][0] = Frequency
+			// fragmentDistribution[:][1] = Length
+			// fragmentDistribution[:][2] = MW
+			
 			final List<Peak> ladderPeaks = getFittedPeaks(ladderLane);
 			final double[] meanLadder = new double[ladderPeaks.size()];
 			final double[] sdLadder = new double[ladderPeaks.size()];
@@ -275,19 +294,23 @@ class Fitter {
 			}
 			final double[] means = interpolateDisplacement(meanLadder);
 			final double[] sds = interpolateSD(meanLadder, sdLadder, means);
-			final double[] norms = new double[means.length]; // value of the
-			                                                 // profile above
-			                                                 // background
+			final double[] norms = new double[means.length]; // range
+			RealVector scaledFrequency = new ArrayRealVector(new Array2DRowRealMatrix(fragmentDistribution).getColumn(0));
+			scaledFrequency = scaledFrequency.mapMultiplyToSelf(1 / scaledFrequency.getMaxValue());
+			RealVector mwArray = new ArrayRealVector(new Array2DRowRealMatrix(fragmentDistribution).getColumn(2));
 			for (final DataSeries d : inputData) {
 				if (d.getLane() == lane) {
-					final double[] profile = d.getY().mapSubtractToSelf(d.getMinY()).toArray();
-					final double[] y = d.getX().toArray();
-					final LinearInterpolator li = new LinearInterpolator();
-					final UnivariateFunction f = li.interpolate(y, profile);
+					RealVector profile = d.getY().mapSubtractToSelf(d.getMinY());
+//					final double[] y = d.getX().toArray();
+//					final LinearInterpolator li = new LinearInterpolator();
+//					final UnivariateFunction f = li.interpolate(y, profile);
 					for (int i = 0; i < means.length; i++) {
-						// exclude peaks outside the profile range
+						// exclude peaks outside the profile domain
 						if (means[i] > d.getMinX() && means[i] < d.getMaxX()) {
-							norms[i] = f.value(means[i]);
+							double mw = mwArray.getEntry(i);
+							double frequency = scaledFrequency.getEntry(i);
+							double scale = profile.getMaxValue()/(FastMath.log10(mwArray.getMaxValue())*scaledFrequency.getMaxValue());
+							norms[i] = scale * FastMath.log10(mw) * frequency;
 							peaks.add(new Peak(lane, norms[i], means[i], sds[i]));
 						}
 					}
@@ -302,12 +325,12 @@ class Fitter {
 			for (final Peak g : peaks) {
 				if (FastMath.abs(c.getMean() - g.getMean()) <= peakDistanceTol) {
 					found = true;
-					log.info("Peak guess:    " + g.getNorm() + ", " + g.getMean() + ", "
+					log.info("Peak guess:    " + g.getLane() + ", "+ g.getNorm() + ", " + g.getMean() + ", "
 					        + g.getSigma());
 					g.setMean(c.getMean());
 					g.setNorm(c.getNorm());
 					g.setSigma(c.getSigma());
-					log.info("replaced with: " + c.getNorm() + ", " + c.getMean() + ", "
+					log.info("\tReplaced with: " + c.getNorm() + ", " + c.getMean() + ", "
 					        + c.getSigma());
 					break;
 				}
@@ -318,15 +341,26 @@ class Fitter {
 			}
 		}
 		allGuessList.addAll(peaks);
-		return peaksToArray(peaks);
+		RealVector poly = new ArrayRealVector(); 
+		poly = poly.append(degBG).append(new ArrayRealVector(degBG + 1));
+		if (fitMode == regMode) {
+			poly.setEntry(1, guess.getEntry(1));
+		} else if (fitMode == fragmentMode) {
+			for (DataSeries d : inputData) {
+				if (d.getLane() == lane) 
+					poly.setEntry(1, d.getMinY());
+			}
+		}
+		return poly.append(peaksToArray(peaks));
 	}
 
 	private double doIntegrate(final RealVector xvals, final double n, final double m,
 	        final double s) {
 		double area;
-		final TrapezoidIntegrator ti = new TrapezoidIntegrator();
+		RealVector weights = new ArrayRealVector(xvals.getDimension()).mapAddToSelf(1.0);
+		final GaussIntegrator ti = new GaussIntegrator(xvals.toArray(), weights.toArray());
 		final Gaussian gauss = new Gaussian(n, m, s);
-		area = ti.integrate(Integer.MAX_VALUE, gauss, xvals.getMinValue(), xvals.getMaxValue());
+		area = ti.integrate(gauss);
 		return area;
 	}
 
@@ -352,6 +386,10 @@ class Fitter {
 
 	private List<DataSeries> doFit(final DataSeries in) {
 		final int lane = in.getLane();
+		
+		int oldFitMode = fitMode;
+		if (lane == ladderLane) fitMode = Fitter.regMode;
+		
 		final RealVector xvals = in.getX();
 		final RealVector yvals = in.getY();
 
@@ -369,7 +407,7 @@ class Fitter {
 		        tolpk, degBG);
 
 		final double[] firstGuess = doGuess(lane, pg).toArray();
-		final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(tolpk, degBG)
+		final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(tolpk, degBG, fitMode)
 		        .withStartPoint(firstGuess).getProblem(obs.toList());
 
 		final LeastSquaresOptimizer.Optimum optimum = new LevenbergMarquardtOptimizer()
@@ -415,6 +453,7 @@ class Fitter {
 		// Print RMS to console
 		final String outStr = String.format("Lane " + lane + ", RMS: %1$.2f; ", optimum.getRMS());
 		log.info(outStr);
+		fitMode = oldFitMode;
 		return output;
 	}
 
@@ -525,8 +564,8 @@ class Fitter {
 		this.ladderLane = ladderLane;
 	}
 
-	public void setFragmentDistribution(final double[][] dist) {
-		this.dist = dist;
+	public void setFragmentDistribution(final double[][] fragmentDistribution) {
+		this.fragmentDistribution = fragmentDistribution;
 	}
 
 	/**

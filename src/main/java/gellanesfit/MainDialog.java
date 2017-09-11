@@ -801,15 +801,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		final double[][] out = new double[fragmentLength.size()][3];
 		int count = 0;
 		for (int i = 0; i < fragmentLength.size(); i++) {
-			out[i][0] = fragmentLength.get(i) * 607.4 + 157.9; //MW
-			out[i][1] = fragmentFrequency.get(i);
-			out[i][2] = fragmentLength.get(i);
+			out[i][0] = fragmentFrequency.get(i);
+			out[i][1] = fragmentLength.get(i);
+			out[i][2] = fragmentLength.get(i) * 607.4 + 157.9; //MW
 			count = count + fragmentFrequency.get(i);
 		}
 		for (int i = 0; i < fragmentLength.size(); i++) {
-			out[i][1] = out[i][1] / count;
+			out[i][0] = out[i][0] / count;
 		}
-		// 2 columns MW, Relative Frequency
+		// 3 columns: Relative Frequency, Length, MW
 		return out;
 	}
 
