@@ -1,4 +1,4 @@
-Fragment Length	| Frequency	| Weight
+Fragment Length	| # of Fragments	| Weight
 1086	1	659794.3
 991	1	602091.3
 840	1	510373.9
