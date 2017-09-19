@@ -64,6 +64,7 @@ import org.jfree.chart.plot.SeriesRenderingOrder;
 import org.jfree.chart.plot.ValueMarker;
 import org.jfree.chart.plot.XYPlot;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
+import org.jfree.data.general.SeriesChangeListener;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
 import org.jfree.ui.Layer;
@@ -143,7 +144,9 @@ class Plotter extends JFrame implements ChartMouseListener {
 		referencePlot = noRefPlot;
 
 		for (final Roi r : rois) {
+			int ln = Integer.parseInt(r.getName().substring(5));
 			updateProfile(r);
+			updatePlot(ln);
 		}
 		reloadTabs();
 
@@ -246,12 +249,12 @@ class Plotter extends JFrame implements ChartMouseListener {
 		return profiles;
 	}
 
-	public ArrayList<DataSeries> getPlotsCustomPeaks() {
-		final ArrayList<DataSeries> custom = new ArrayList<>();
+	public DataSeries getPlotsCustomPeaks(int lane) {
 		for (final DataSeries d : plotsData) {
-			if (d.getType() == DataSeries.CUSTOMPEAKS) custom.add(d);
+			if (d.getLane() == lane && d.getType() == DataSeries.CUSTOMPEAKS) 
+				return d;
 		}
-		return custom;
+		return null;
 	}
 
 	public List<DataSeries> getPlotsData() {
@@ -301,6 +304,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 	void updateProfile(final Roi roi) {
 		final DataSeries profile = getLaneProfile(roi);
 		// Assume plotsData, chartsMainPanel was reset
+		selected = selectedNone;
 		plotsData.add(profile);
 		final String xLabel = "Distance (px)";
 		final String yLabel = "Grayscale Value";
@@ -325,9 +329,9 @@ class Plotter extends JFrame implements ChartMouseListener {
 			final XYToolTipGenerator generator = new StandardXYToolTipGenerator(
 				"({1} {2})", format, format);
 			newPlot.getRenderer().setBaseToolTipGenerator(generator);
+
 			newChart.getTitle().setMargin(new RectangleInsets(15, 5, 15, 5));
 			newChart.getTitle().setPaint(Color.BLACK);
-
 			newPlot.setDomainGridlinePaint(Color.DARK_GRAY);
 			newPlot.setRangeGridlinePaint(Color.DARK_GRAY);
 			newPlot.setDomainCrosshairVisible(true);
@@ -337,7 +341,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 			chartPanel.addChartMouseListener(this);
 			chartPanels.add(chartPanel);
 		}
-		selected = selectedNone;
 
 		thePlot.getDomainAxis().setLowerMargin(0);
 		thePlot.getDomainAxis().setUpperMargin(0);
@@ -347,8 +350,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 		final double max = 1.05 * profile.getMaxY();
 		thePlot.getRangeAxis().setLowerBound(min);
 		thePlot.getRangeAxis().setUpperBound(max);
-
-		updatePlot(Integer.parseInt(roi.getName().substring(5)));
 	}
 
 	public void updatePlot(final int ln) {
@@ -553,21 +554,18 @@ class Plotter extends JFrame implements ChartMouseListener {
 									.interpolate(x, y);
 								final double yi = f.value(xi);
 
-								for (final DataSeries cp : getPlotsCustomPeaks()) {
-									if (cp.getLane() == ln) {
-										boolean found = false;
-										for (int i = 0; i < cp.getItemCount(); i++) {
-											if (FastMath.abs((double) cp.getX(i) -
-												xi) <= Fitter.peakDistanceTol)
-											{
-												found = true;
-												cp.remove(i); // REMOVE point
-											}
-										}
-										if (!found) {
-											cp.addOrUpdate(xi, yi); // ADD Point
-										}
+								final DataSeries cp = getPlotsCustomPeaks(ln);
+								boolean found = false;
+								for (int i = 0; i < cp.getItemCount(); i++) {
+									if (FastMath.abs((double) cp.getX(i) -
+										xi) <= Fitter.peakDistanceTol)
+									{
+										found = true;
+										cp.remove(i); // REMOVE point
 									}
+								}
+								if (!found) {
+									cp.addOrUpdate(xi, yi); // ADD Point
 								}
 								updatePlot(ln);
 							}

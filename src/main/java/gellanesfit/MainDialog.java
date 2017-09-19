@@ -212,7 +212,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		rois = new ArrayList<>();
 		this.imp = imp;
 		setupMainDialog();
-		frame.setLocation(0, (int) SH / 8);
+		frame.setLocation((int) SW / 16, (int) SH / 8);
 	}
 
 	private void setupMainDialog() {
@@ -407,7 +407,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		settingsPanel.add(buttonResetCustomPeaks, c2);
 		c2.gridx = 1; c2.gridy = 7; 
 		c2.gridwidth = GridBagConstraints.REMAINDER; c2.gridheight = 1;
-		c2.weighty = 1.0;;
+		c2.weighty = 1.0;
 		settingsPanel.add(new JLabel(), c2);
 
 		dialogPanel = new JPanel();
@@ -856,12 +856,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	private void resetCustomPeaks(final int lane) {
 		fitter.resetCustomPeaks(lane);
-		for (final DataSeries d : plotter.getPlotsCustomPeaks()) {
+		DataSeries d = plotter.getPlotsCustomPeaks(lane);
+		if (d == null) {
+			final RealVector empty = new ArrayRealVector();
+			d = new DataSeries("Custom Points", lane, DataSeries.CUSTOMPEAKS, empty, empty, Plotter.vMarkerEditPeakColor);
+			plotter.addDataSeries(d);
+		} else {
 			d.removeChangeListener(this);
 			d.clear();
-			d.addChangeListener(this);
 		}
-		plotter.updatePlot(lane);
+		d.addChangeListener(this);
 	}
 
 	private boolean saveRois() {
@@ -1114,7 +1118,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		}
 	}
 
-	// TextField Document Listeners (change, remove, insert)
+	// TextField Document Listeners (changed, remove, insert)
 	@Override
 	public void changedUpdate(final DocumentEvent e) {
 		changeTextFieldVariable(e);
