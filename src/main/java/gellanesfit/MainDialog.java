@@ -162,10 +162,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private int degBG; // Order of Background Polynomial
 	private double tolPK; // Peak detection tolerance as % of range
 
-	private JPanel AMButtonsPanel;
+	private JPanel buttonPanelAutoManual;
 	private JRadioButton buttonAuto;
 	private JRadioButton buttonManual;
-	private ButtonGroup AMButtons;
+	private ButtonGroup buttonGroupAutoManual;
 
 	private JPanel lanesPanel;
 	private JLabel labelNLanes;
@@ -183,17 +183,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private JButton buttonClose;
 
 	private JPanel settingsPanel;
-	private JPanel degPanel;
-	private JPanel tolPanel;
+	private JPanel parameterPanel;
 	private JLabel labelDegBG;
 	private JLabel labelTolPK;
 	private JTextField textDegBG;
 	private JTextField textTolPK;
 
-	private JPanel BSButtonsPanel;
+	private JPanel buttonPanelFitType;
 	private JRadioButton buttonBands;
-	private JRadioButton buttonSmear;
-	private ButtonGroup BSButtons;
+	private JRadioButton buttonContinuum;
+	private ButtonGroup buttonGroupFitType;
 
 	private JCheckBox chkBoxBands;
 	private JComboBox<String> cmbBoxLadderLane;
@@ -237,34 +236,44 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		imp.getWindow().addMouseMotionListener(this);
 		imp.getWindow().addWindowListener(this);
 
-		AMButtonsPanel = new JPanel();
+		buttonPanelAutoManual = new JPanel();
 		buttonAuto = new JRadioButton("Automatic Rectangle Selection");
 		buttonAuto.setActionCommand("Auto");
 		buttonAuto.addActionListener(this);
 		buttonManual = new JRadioButton("Manual Rectangle Selection");
 		buttonManual.setActionCommand("Manual");
 		buttonManual.addActionListener(this);
-		AMButtons = new ButtonGroup();
-		AMButtonsPanel.setLayout(new BoxLayout(AMButtonsPanel, BoxLayout.Y_AXIS));
-		AMButtons.add(buttonAuto);
-		AMButtons.add(buttonManual);
+		buttonGroupAutoManual = new ButtonGroup();
+		buttonPanelAutoManual.setLayout(new BoxLayout(buttonPanelAutoManual, BoxLayout.Y_AXIS));
+		buttonGroupAutoManual.add(buttonAuto);
+		buttonGroupAutoManual.add(buttonManual);
 
-		AMButtonsPanel.add(buttonAuto);
-		AMButtonsPanel.add(buttonManual);
-		AMButtonsPanel.setBorder(new TitledBorder(BorderFactory.createEtchedBorder(),
+		buttonPanelAutoManual.add(buttonAuto);
+		buttonPanelAutoManual.add(buttonManual);
+		buttonPanelAutoManual.setBorder(new TitledBorder(BorderFactory.createEtchedBorder(),
 		        "Lane Selection", TitledBorder.LEADING, TitledBorder.BELOW_TOP,
 		        new Font("Sans", Font.PLAIN, 11)));
 
 		sliderPanel = new JPanel();
 		lanesPanel = new JPanel();
-		lanesPanel.setLayout(new BoxLayout(lanesPanel, BoxLayout.X_AXIS));
+		lanesPanel.setLayout(new GridBagLayout());
+		GridBagConstraints c0 = new GridBagConstraints();
+		lanesPanel.setBorder(new EmptyBorder(3, 5, 3, 3));
 		textNLanes = new JTextField(3);
 		textNLanes.setText("" + nLanes);
-		textNLanes.setVisible(true);
+		textNLanes.setBorder(BorderFactory.createCompoundBorder(
+			textNLanes.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		textNLanes.getDocument().addDocumentListener(this);
-		lanesPanel.add(textNLanes);
 		labelNLanes = new JLabel("Number of Lanes");
-		lanesPanel.add(labelNLanes);
+
+		c0.gridx = 0; c0.gridy = 0; c0.weightx = 0.2;
+		c0.fill = GridBagConstraints.HORIZONTAL;
+		lanesPanel.add(labelNLanes, c0);
+
+		c0.gridx = 1; c0.gridy = 0; c0.weightx = 0.0;
+		c0.fill = GridBagConstraints.NONE;
+		c0.ipady = 2; c0.ipadx = 2;		
+		lanesPanel.add(textNLanes, c0);
 		sliderPanel.add(lanesPanel);
 
 		sliderPanel.setLayout(new BoxLayout(sliderPanel, BoxLayout.Y_AXIS));
@@ -290,34 +299,37 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		buttonClose.addActionListener(this);
 		buttonPanel.add(buttonClose);
 
-		settingsPanel = new JPanel();
-		degPanel = new JPanel();
-		tolPanel = new JPanel();
-		labelDegBG = new JLabel("Deg BG");
-		labelTolPK = new JLabel("Tol PK");
+		// Settings Panel
+		parameterPanel = new JPanel();
+		labelDegBG = new JLabel("Polynomial Degree");
+		labelTolPK = new JLabel("Peak Tolerance");
 		textDegBG = new JTextField(3);
 		textDegBG.setText("" + degBG);
+		textDegBG.setBorder(BorderFactory.createCompoundBorder(
+			textDegBG.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		textDegBG.getDocument().addDocumentListener(this);
 		textTolPK = new JTextField(3);
 		textTolPK.setText("" + tolPK);
+		textTolPK.setBorder(BorderFactory.createCompoundBorder(
+			textTolPK.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		textTolPK.getDocument().addDocumentListener(this);
 		chkBoxBands = new JCheckBox("Show Bands");
 
-		BSButtonsPanel = new JPanel();
+		buttonPanelFitType = new JPanel();
 		buttonBands = new JRadioButton("Bands");
 		buttonBands.setActionCommand("Bands");
 		buttonBands.addActionListener(this);
-		buttonSmear = new JRadioButton("Continuum");
-		buttonSmear.setActionCommand("Continuum");
-		buttonSmear.addActionListener(this);
-		BSButtons = new ButtonGroup();
-		BSButtonsPanel.setLayout(new BoxLayout(BSButtonsPanel, BoxLayout.Y_AXIS));
-		BSButtons.add(buttonBands);
-		BSButtons.add(buttonSmear);
+		buttonContinuum = new JRadioButton("Continuum");
+		buttonContinuum.setActionCommand("Continuum");
+		buttonContinuum.addActionListener(this);
+		buttonGroupFitType = new ButtonGroup();
+		buttonPanelFitType.setLayout(new BoxLayout(buttonPanelFitType, BoxLayout.Y_AXIS));
+		buttonGroupFitType.add(buttonBands);
+		buttonGroupFitType.add(buttonContinuum);
 
-		BSButtonsPanel.add(buttonBands);
-		BSButtonsPanel.add(buttonSmear);
-		BSButtonsPanel.setBorder(new TitledBorder(BorderFactory.createEtchedBorder(),
+		buttonPanelFitType.add(buttonBands);
+		buttonPanelFitType.add(buttonContinuum);
+		buttonPanelFitType.setBorder(new TitledBorder(BorderFactory.createEtchedBorder(),
 		        "DNA Migration", TitledBorder.LEADING, TitledBorder.BELOW_TOP,
 		        new Font("Sans", Font.PLAIN, 11)));
 
@@ -332,12 +344,22 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		buttonEditPeaks = new JToggleButton("Edit Custom Peaks");
 		buttonResetCustomPeaks = new JButton("Reset Custom Peaks");
 
-		degPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
-		degPanel.add(labelDegBG);
-		degPanel.add(textDegBG);
-		tolPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
-		tolPanel.add(labelTolPK);
-		tolPanel.add(textTolPK);
+		parameterPanel.setLayout(new GridBagLayout());
+		GridBagConstraints c1 = new GridBagConstraints();
+		parameterPanel.setBorder(new EmptyBorder(2, 2, 2, 2));
+		
+		c1.fill = GridBagConstraints.HORIZONTAL;
+		c1.ipadx = 4; c1.ipady = 2;
+		c1.gridx = 0; c1.gridy = 0; c1.weightx = 0.2;		
+		parameterPanel.add(labelDegBG, c1);
+		c1.gridx = 0; c1.gridy = 1; c1.weightx = 0.2;
+		parameterPanel.add(labelTolPK, c1);
+		
+		c1.fill = GridBagConstraints.NONE;
+		c1.gridx = 1; c1.gridy = 0; c1.weightx = 0.0;
+		parameterPanel.add(textDegBG, c1);
+		c1.gridx = 1; c1.gridy = 1; c1.weightx = 0.0;
+		parameterPanel.add(textTolPK, c1);
 
 		chkBoxBands.addActionListener(this);
 		cmbBoxLadderLane.addActionListener(this);
@@ -350,52 +372,48 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		buttonEditPeaks.addActionListener(this);
 		buttonResetCustomPeaks.addActionListener(this);
 
-		// TODO: Improve layout of settings panel
+		settingsPanel = new JPanel();
 		settingsPanel.setLayout(new GridBagLayout());
-		settingsPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
-		GridBagConstraints c = new GridBagConstraints();
-		c.weightx = 0.5;
-		settingsPanel.add(degPanel, c);
+		settingsPanel.setBorder(new EmptyBorder(5, 3, 5, 3));
+		GridBagConstraints c2 = new GridBagConstraints();
+		c2.weightx = 0.6; 
+		c2.ipadx = 4; c2.ipady = 2;
+		settingsPanel.add(parameterPanel, c2);
 		
-		c.gridx = 0; c.gridy = 1;
-		settingsPanel.add(tolPanel, c);
+		c2.gridx = 1; c2.gridy = 0; 
+		c2.gridheight = 3;
+		c2.fill = GridBagConstraints.HORIZONTAL;
+		c2.weightx = 0.0;
+		settingsPanel.add(buttonPanelFitType, c2);
 		
-		c.gridx = 1; c.gridy = 0; 
-		c.gridheight = 3;
-		c.fill = GridBagConstraints.HORIZONTAL;
-		c.ipady = 5;
-		c.weightx = 0.0;
-		settingsPanel.add(BSButtonsPanel, c);
+		c2.gridx = 0; c2.gridy = 2;
+		c2.gridwidth = 1; c2.gridheight = 1; 
+		c2.fill = GridBagConstraints.HORIZONTAL;
+		settingsPanel.add(chkBoxBands, c2); 
 		
-		c.gridx = 0; c.gridy = 2;
-		c.gridwidth = 1; c.gridheight = 1; 
-		c.fill = GridBagConstraints.HORIZONTAL;
-		settingsPanel.add(chkBoxBands, c); 
+		c2.gridx = 0; c2.gridy = 3; c2.gridwidth = 2; c2.gridheight = 1;
+		settingsPanel.add(cmbBoxLadderLane, c2);
 		
-		c.gridx = 0; c.gridy = 3; 
-		c.gridwidth = 2; c.gridheight = 1;
-		settingsPanel.add(cmbBoxLadderLane, c);
+		c2.gridx = 0; c2.gridy = 4;
+		settingsPanel.add(cmbBoxLadderType, c2);
 		
-		c.gridx = 0; c.gridy = 4; 
-		c.gridwidth = 2; c.gridheight = 1;
-		settingsPanel.add(cmbBoxLadderType, c);
+		c2.gridx = 0; c2.gridy = 5; 
+		settingsPanel.add(cmbBoxDist, c2);
 		
-		c.gridx = 0; c.gridy = 5; 
-		c.gridwidth = 2; c.gridheight = 1;
-		settingsPanel.add(cmbBoxDist, c);
+		c2.gridx = 0; c2.gridy = 6; c2.gridwidth = 1; c2.gridheight = 1;
+		settingsPanel.add(buttonEditPeaks, c2);
 		
-		c.gridx = 0; c.gridy = 6; 
-		c.gridwidth = 1; c.gridheight = 1;
-		settingsPanel.add(buttonEditPeaks, c);
-		
-		c.gridx = 1; c.gridy = 6; 
-		c.gridwidth = 1; c.gridheight = 1;
-		settingsPanel.add(buttonResetCustomPeaks, c);
+		c2.gridx = 1; c2.gridy = 6; 
+		settingsPanel.add(buttonResetCustomPeaks, c2);
+		c2.gridx = 1; c2.gridy = 7; 
+		c2.gridwidth = GridBagConstraints.REMAINDER; c2.gridheight = 1;
+		c2.weighty = 1.0;;
+		settingsPanel.add(new JLabel(), c2);
 
 		dialogPanel = new JPanel();
 		dialogPanel.setBackground(Color.darkGray);
 		dialogPanel.setLayout(new BorderLayout());
-		dialogPanel.add(AMButtonsPanel, BorderLayout.NORTH);
+		dialogPanel.add(buttonPanelAutoManual, BorderLayout.NORTH);
 		dialogPanel.add(sliderPanel, BorderLayout.CENTER);
 		dialogPanel.add(settingsPanel, BorderLayout.EAST);
 		dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
@@ -1132,7 +1150,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 			if (buttonBands.isSelected())
 				fitter.setFitMode(Fitter.regMode);
-			else if (buttonSmear.isSelected()) {
+			else if (buttonContinuum.isSelected()) {
 				fitter.setFitMode(Fitter.fragmentMode);
 				if (cmbBoxDist.getSelectedItem().equals("Select Fragment Distribution")) {
 					askUser("Fragment distribution not selected");
