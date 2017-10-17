@@ -45,7 +45,6 @@ import org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem;
 import org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer;
 import org.apache.commons.math3.linear.Array2DRowRealMatrix;
 import org.apache.commons.math3.linear.ArrayRealVector;
-import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.util.FastMath;
 import org.scijava.Context;
@@ -56,6 +55,8 @@ import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 
 import gellanesfit.GaussianArrayCurveFitter.ParameterGuesser;
+import ij.measure.ResultsTable;
+
 
 class Fitter {
 
@@ -119,17 +120,13 @@ class Fitter {
 
 	public void updateResultsTable() {
 		// Results Table Columns
-		String[] headersB = { "", "Band", "Distance", "Dist. G.", "Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area"};
-		String[] headersF = { "", "Band", "Distance", "Dist. G.", "Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area", "Frequency", "BP", "MW" };
+		String[] headersB = { "Lane", "Band", "Distance", "Dist. G.", "Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area"};
+		String[] headersF = { "Lane", "Band", "Distance", "Dist. G.", "Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area", "Frequency", "BP", "MW" };
 		String[] headers = null;
 		if (fitMode == regMode) headers = headersB;
 		else headers = headersF;
+		final ResultsTable rt = new ResultsTable();
 		
-		final GenericColumn[] tableCol = new GenericColumn[headers.length];
-		final DefaultGenericTable rt = new DefaultGenericTable();
-		for (int cc = 0; cc < headers.length; cc++)
-			tableCol[cc] = new GenericColumn(headers[cc]);
-
 		for (final DataSeries d : inputData) {
 			final int lane = d.getLane();
 			final List<Peak> guess = getGuessPeaks(lane);
@@ -148,54 +145,37 @@ class Fitter {
 				final double m0 = guess.get(p).getMean();
 				final double s0 = guess.get(p).getSigma();
 
-				// Prepare columns for Results Table
+				// Add values to Results Table
+				rt.incrementCounter();
 				if (band == 1) {
-					tableCol[0].add("Lane " + lane);
+					rt.addValue(headers[0], "" + lane);
 				} else {
-					tableCol[0].add("");
+					rt.addValue(headers[0], "");
 				}
-				tableCol[1].add(band);
-				tableCol[2].add(String.format("%1$.1f", m));
-				tableCol[3].add(String.format("%1$.1f", m0));
-				tableCol[4].add(String.format("%1$.1f", n));
-				tableCol[5].add(String.format("%1$.1f", n0));
-				tableCol[6].add(String.format("%1$.2f", s * sd2FWHM));
-				tableCol[7].add(String.format("%1$.2f", s0 * sd2FWHM));
-				tableCol[8].add(String.format("%1$.1f", a));
+				rt.addValue(headers[1], band);
+				rt.addValue(headers[2], String.format("%1$.1f", m));
+				rt.addValue(headers[3], String.format("%1$.1f", m0));
+				rt.addValue(headers[4], String.format("%1$.1f", n));
+				rt.addValue(headers[5], String.format("%1$.1f", n0));
+				rt.addValue(headers[6], String.format("%1$.2f", s * sd2FWHM));
+				rt.addValue(headers[7], String.format("%1$.2f", s0 * sd2FWHM));
+				rt.addValue(headers[8], String.format("%1$.1f", a));
 
 				if (fitMode == fragmentMode) {
 					if (lane == ladderLane) { 
-						tableCol[9].add(" - ");
-						tableCol[10].add(" - ");
-						tableCol[11].add(" - ");
+						rt.addValue(headers[9], " - ");
+						rt.addValue(headers[10], " - ");
+						rt.addValue(headers[11], " - ");
 					} else {
-						tableCol[9].add(String.format("%1$.3f", fragmentDistribution[band-1][0]));
-						tableCol[10].add(String.format("%1$.1f", fragmentDistribution[band-1][1]));
-						tableCol[11].add(String.format("%1$.3f", fragmentDistribution[band-1][2]));
+						rt.addValue(headers[9],  String.format("%1$.3f", fragmentDistribution[band-1][0]));
+						rt.addValue(headers[10], String.format("%1$.1f", fragmentDistribution[band-1][1]));
+						rt.addValue(headers[11], String.format("%1$.3f", fragmentDistribution[band-1][2]));
 					}	
 				}
 				band++;
 			}
-		}
-
-		for (int cc = 0; cc < headers.length; cc++)
-			rt.add(tableCol[cc]);
-
-		// Update results table
-		DefaultTableDisplay rtDisplay = null;
-		for (final Display<?> d : displayServ.getDisplays()) {
-			//log.info(d.getClass().toString());
-			if (d instanceof DefaultTableDisplay) {
-				rtDisplay = (DefaultTableDisplay) d;
-				rtDisplay.clear();
-				rtDisplay.add(rt);
-				rtDisplay.update();
-			}
-		}
-		if (rtDisplay == null) {
-			rtDisplay = (DefaultTableDisplay) displayServ.createDisplay("Results Display", rt);
-		}
-		displayServ.setActiveDisplay(rtDisplay);
+		}	
+		rt.show("Results Display");
 		
 		// Save Results Table
 		final String path = "gel-lanes-fit/data/";
@@ -207,9 +187,9 @@ class Fitter {
 			for (int cc = 0; cc < headers.length; cc++)
 				outText += headers[cc] + "\t";
 			outText += "\n";
-			for (int rr = 0; rr < tableCol[0].size(); rr++) {
+			for (int rr = 0; rr < rt.getCounter(); rr++) {
 				for (int cc = 0; cc < headers.length; cc++) {
-					outText += tableCol[cc].get(rr) + "\t";
+					outText += rt.getStringValue(cc, rr) + "\t";
 				}
 				outText = outText.substring(0, outText.length() - 1) + "\n";
 			}

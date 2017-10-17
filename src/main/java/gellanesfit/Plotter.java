@@ -628,7 +628,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 			return false;
 		}
 	}
-
 }
 
 class VerticalMarker extends ValueMarker {

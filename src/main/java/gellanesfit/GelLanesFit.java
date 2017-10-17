@@ -104,6 +104,7 @@ public class GelLanesFit implements Command {
 		plotThread.start();
 	}
 
+	
 	@Override
 	public void run() {
 		if (setup) {
