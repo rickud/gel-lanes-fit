@@ -54,6 +54,7 @@ import java.util.List;
 import java.util.Vector;
 import java.util.prefs.Preferences;
 
+import javax.swing.AbstractButton;
 import javax.swing.BorderFactory;
 import javax.swing.BoxLayout;
 import javax.swing.ButtonGroup;
@@ -65,8 +66,9 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JSlider;
-import javax.swing.JTextField;
+import javax.swing.JSpinner;
 import javax.swing.JToggleButton;
+import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
@@ -98,7 +100,7 @@ import ij.gui.Roi;
 import ij.gui.TextRoi;
 
 class MainDialog extends JFrame implements ActionListener, ChangeListener, SeriesChangeListener,
-        DocumentListener, MouseMotionListener, MouseListener, MouseWheelListener, WindowListener {
+        MouseMotionListener, MouseListener, MouseWheelListener, WindowListener {
 
 	@Parameter
 	private LogService log;
@@ -110,8 +112,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private StatusService statusServ;
 
 	// Preference keys for this class
-	private static final String TOLPK = "tolPK";
 	private static final String DEGBG = "degBG";
+	private static final String POLYCONCAVITY = "polyConcavity";
+	private static final String TOLPK = "tolPK";
+	private static final String NORMDRIFT = "normDrift";
+	private static final String SDDRIFT = "sdDrift";
+
 	private static final String NLANES = "nLanes";
 	private static final String LW = "lw";
 	private static final String LH = "lh";
@@ -129,6 +135,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private static final Color selected = Color.YELLOW;
 	private static final Color unselected = Color.RED;
 	private static final Color reference = Color.BLUE;
+	
+	public static final int noLadderLane = -1;
+	public static final int noLaneSelected = -1;
 
 	private boolean auto; // AUTO ROI mode; all lanes same size
 	private boolean selectionUpdate = false; // active updating is off
@@ -136,10 +145,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	private String roiSelected = "none";
 	private String roiPreviouslySelected = "none";
-	private String roiReference = "none";
+	private String roiReferenceName = "none";
+	private int roiReferenceNumber = noLadderLane;
 	private final String[] ladderStr = { "Select Ladder Type", "Hi-Lo", "100bp" };
 	private final String[] distStr = { "Select Fragment Distribution", "AciI-Lambda", "Uniform" };
-
+	
 	// Ladders
 	private static String[] hilo = { "10 kbp", "8 kbp", "6 kbp", "4 kbp", "3 kbp", "2 kbp",
 	        "1.55 kbp", "1.4 kbp", "1 kbp", "750 bp", "500 bp", "400 bp", "300 bp", "200 bp",
@@ -160,8 +170,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	private int nLanes;
 	private int degBG; // Order of Background Polynomial
+	private double polyConcavity;
 	private double tolPK; // Peak detection tolerance as % of range
-
+	private double normDrift;
+	private double sdDrift;
+	
 	private JPanel buttonPanelAutoManual;
 	private JRadioButton buttonAuto;
 	private JRadioButton buttonManual;
@@ -169,7 +182,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	private JPanel lanesPanel;
 	private JLabel labelNLanes;
-	private JTextField textNLanes;
+	private JSpinner textNLanes;
 
 	private JPanel sliderPanel;
 	private JSlider sliderW;
@@ -183,11 +196,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private JButton buttonClose;
 
 	private JPanel settingsPanel;
-	private JPanel parameterPanel;
 	private JLabel labelDegBG;
+	private JLabel labelPolyConcavity;
 	private JLabel labelTolPK;
-	private JTextField textDegBG;
-	private JTextField textTolPK;
+	private JLabel labelNormDrift;
+	private JLabel labelSDDrift;
+
+	private JSpinner textDegBG;
+	private JSpinner textPolyConcavity;
+	private JSpinner textTolPK;
+	private JSpinner textNormDrift;
+	private JSpinner textSDDrift;
 
 	private JPanel buttonPanelFitType;
 	private JRadioButton buttonBands;
@@ -216,11 +235,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	}
 
 	private void setupMainDialog() {
+		int textWidth = 4;
+		
 		// Default lane size/offset
 		auto = prefs.getBoolean(AUTO, true);
 		degBG = prefs.getInt(DEGBG, 2);
+		polyConcavity = prefs.getDouble(POLYCONCAVITY, 10.0);
 		tolPK = prefs.getDouble(TOLPK, 0.1);
+		normDrift = prefs.getDouble(NORMDRIFT, 0.1);
+		sdDrift = prefs.getDouble(SDDRIFT, 0.1);
 		nLanes = prefs.getInt(NLANES, 4);
+		
 		iw = imp.getWidth();
 		ih = imp.getHeight();
 		lw = prefs.getInt(LW, (int) Math.round(0.8 * iw / nLanes));
@@ -228,14 +253,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		lsp = prefs.getInt(LSP, Math.round((iw - lw * nLanes) / (nLanes + 1)));
 		lhoff = prefs.getInt(LHOFF, lsp / 2);
 		lvoff = prefs.getInt(LVOFF, (ih - lh) / 2);
+		
 
-		imp.getCanvas().addMouseMotionListener(this);
-		imp.getCanvas().addMouseListener(this);
-		imp.getCanvas().addMouseWheelListener(this);
-		imp.getWindow().addMouseListener(this);
-		imp.getWindow().addMouseMotionListener(this);
-		imp.getWindow().addWindowListener(this);
-
+		
 		buttonPanelAutoManual = new JPanel();
 		buttonAuto = new JRadioButton("Automatic Rectangle Selection");
 		buttonAuto.setActionCommand("Auto");
@@ -247,35 +267,34 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		buttonPanelAutoManual.setLayout(new BoxLayout(buttonPanelAutoManual, BoxLayout.Y_AXIS));
 		buttonGroupAutoManual.add(buttonAuto);
 		buttonGroupAutoManual.add(buttonManual);
-
+		
 		buttonPanelAutoManual.add(buttonAuto);
 		buttonPanelAutoManual.add(buttonManual);
 		buttonPanelAutoManual.setBorder(new TitledBorder(BorderFactory.createEtchedBorder(),
 		        "Lane Selection", TitledBorder.LEADING, TitledBorder.BELOW_TOP,
 		        new Font("Sans", Font.PLAIN, 11)));
-
+		
 		sliderPanel = new JPanel();
 		lanesPanel = new JPanel();
 		lanesPanel.setLayout(new GridBagLayout());
 		GridBagConstraints c0 = new GridBagConstraints();
 		lanesPanel.setBorder(new EmptyBorder(3, 5, 3, 3));
-		textNLanes = new JTextField(3);
-		textNLanes.setText("" + nLanes);
+		labelNLanes = new JLabel("Number of Lanes");
+		textNLanes = new JSpinner(new SpinnerNumberModel(nLanes, 1, 100, 1));
 		textNLanes.setBorder(BorderFactory.createCompoundBorder(
 			textNLanes.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
-		textNLanes.getDocument().addDocumentListener(this);
-		labelNLanes = new JLabel("Number of Lanes");
-
+		((JSpinner.DefaultEditor) textNLanes.getEditor()).getTextField().setColumns(textWidth);
+		
 		c0.gridx = 0; c0.gridy = 0; c0.weightx = 0.2;
 		c0.fill = GridBagConstraints.HORIZONTAL;
 		lanesPanel.add(labelNLanes, c0);
-
+		
 		c0.gridx = 1; c0.gridy = 0; c0.weightx = 0.0;
 		c0.fill = GridBagConstraints.NONE;
 		c0.ipady = 2; c0.ipadx = 2;		
 		lanesPanel.add(textNLanes, c0);
 		sliderPanel.add(lanesPanel);
-
+		
 		sliderPanel.setLayout(new BoxLayout(sliderPanel, BoxLayout.Y_AXIS));
 		sliderW = makeTitledSlider("Width ( " + lw + " px )", Color.black, 1, iw / nLanes, lw);
 		sliderPanel.add(sliderW);
@@ -289,50 +308,72 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		sliderVOff = makeTitledSlider("Vertical Offset ( " + lvoff + " px )", Color.black, 0,
 		        (int) Math.round(ih * 0.9), lvoff);
 		sliderPanel.add(sliderVOff);
-
+		
 		buttonPanel = new JPanel();
 		buttonPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
 		buttonFit = new JButton("Fit");
-		buttonFit.addActionListener(this);
+		
 		buttonPanel.add(buttonFit);
 		buttonClose = new JButton("Close");
-		buttonClose.addActionListener(this);
 		buttonPanel.add(buttonClose);
-
+		
+		
 		// Settings Panel
-		parameterPanel = new JPanel();
+		settingsPanel = new JPanel();
+		settingsPanel.setLayout(new GridBagLayout());
+		settingsPanel.setBorder(new EmptyBorder(2, 2, 2, 2));
+		GridBagConstraints c1 = new GridBagConstraints();
+		
 		labelDegBG = new JLabel("Polynomial Degree");
+		labelPolyConcavity = new JLabel("Max Polynomial Concavity");
 		labelTolPK = new JLabel("Peak Tolerance");
-		textDegBG = new JTextField(3);
-		textDegBG.setText("" + degBG);
+		labelNormDrift = new JLabel("Norm Drift");
+		labelSDDrift = new JLabel("SD Drift");
+		
+		textDegBG = new JSpinner(new SpinnerNumberModel(degBG, -1, 15, 1));
 		textDegBG.setBorder(BorderFactory.createCompoundBorder(
 			textDegBG.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
-		textDegBG.getDocument().addDocumentListener(this);
-		textTolPK = new JTextField(3);
-		textTolPK.setText("" + tolPK);
+		((JSpinner.DefaultEditor) textDegBG.getEditor()).getTextField().setColumns(textWidth);
+		
+		textPolyConcavity = new JSpinner(new SpinnerNumberModel(polyConcavity, 0.1, 20.0, 0.1));
+		textPolyConcavity.setBorder(BorderFactory.createCompoundBorder(
+			textPolyConcavity.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
+		((JSpinner.DefaultEditor) textPolyConcavity.getEditor()).getTextField().setColumns(textWidth);
+		
+		textTolPK = new JSpinner(new SpinnerNumberModel(tolPK, 0.01, 1.00, 0.005));
 		textTolPK.setBorder(BorderFactory.createCompoundBorder(
 			textTolPK.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
-		textTolPK.getDocument().addDocumentListener(this);
+		((JSpinner.DefaultEditor) textTolPK.getEditor()).getTextField().setColumns(textWidth);
+		
+		textNormDrift = new JSpinner(new SpinnerNumberModel(normDrift, 0.0, 20.0, 0.01));
+		textNormDrift.setBorder(BorderFactory.createCompoundBorder(
+			textNormDrift.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
+		((JSpinner.DefaultEditor) textNormDrift.getEditor()).getTextField().setColumns(textWidth);
+		
+		textSDDrift = new JSpinner(new SpinnerNumberModel(sdDrift, 0.0, 20.0, 0.01));
+		textSDDrift.setBorder(BorderFactory.createCompoundBorder(
+			textSDDrift.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
+		((JSpinner.DefaultEditor) textSDDrift.getEditor()).getTextField().setColumns(textWidth);
+		
 		chkBoxBands = new JCheckBox("Show Bands");
-
+		
 		buttonPanelFitType = new JPanel();
-		buttonBands = new JRadioButton("Bands");
-		buttonBands.setActionCommand("Bands");
-		buttonBands.addActionListener(this);
+		buttonPanelFitType.setLayout(new BoxLayout(buttonPanelFitType, BoxLayout.Y_AXIS));
+		buttonBands = new JRadioButton("Banded");
+		buttonBands.setActionCommand("Banded");
 		buttonContinuum = new JRadioButton("Continuum");
 		buttonContinuum.setActionCommand("Continuum");
-		buttonContinuum.addActionListener(this);
+		
 		buttonGroupFitType = new ButtonGroup();
-		buttonPanelFitType.setLayout(new BoxLayout(buttonPanelFitType, BoxLayout.Y_AXIS));
 		buttonGroupFitType.add(buttonBands);
 		buttonGroupFitType.add(buttonContinuum);
-
+		
 		buttonPanelFitType.add(buttonBands);
 		buttonPanelFitType.add(buttonContinuum);
 		buttonPanelFitType.setBorder(new TitledBorder(BorderFactory.createEtchedBorder(),
-		        "DNA Migration", TitledBorder.LEADING, TitledBorder.BELOW_TOP,
+		        "Lane Contents Pattern", TitledBorder.LEADING, TitledBorder.BELOW_TOP,
 		        new Font("Sans", Font.PLAIN, 11)));
-
+		
 		final String[] lanes = new String[1 + nLanes];
 		lanes[0] = "Select Ladder Lane";
 		for (int i = 1; i < 1 + nLanes; i++)
@@ -340,76 +381,67 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		cmbBoxLadderLane = new JComboBox<>(lanes);
 		cmbBoxDist = new JComboBox<>(distStr);
 		cmbBoxLadderType = new JComboBox<>(ladderStr);
-
+		
 		buttonEditPeaks = new JToggleButton("Edit Custom Peaks");
 		buttonResetCustomPeaks = new JButton("Reset Custom Peaks");
-
-		parameterPanel.setLayout(new GridBagLayout());
-		GridBagConstraints c1 = new GridBagConstraints();
-		parameterPanel.setBorder(new EmptyBorder(2, 2, 2, 2));
 		
 		c1.fill = GridBagConstraints.HORIZONTAL;
-		c1.ipadx = 4; c1.ipady = 2;
-		c1.gridx = 0; c1.gridy = 0; c1.weightx = 0.2;		
-		parameterPanel.add(labelDegBG, c1);
-		c1.gridx = 0; c1.gridy = 1; c1.weightx = 0.2;
-		parameterPanel.add(labelTolPK, c1);
+		c1.ipadx = 2; c1.ipady = 2;
+		c1.gridx = 0; c1.gridy = 0; c1.weightx = 0.1;		
+		settingsPanel.add(labelDegBG, c1);
+		c1.gridx = 0; c1.gridy = 1; c1.weightx = 0.1;
+		settingsPanel.add(labelPolyConcavity, c1);
+		c1.gridx = 0; c1.gridy = 2; c1.weightx = 0.1;
+		settingsPanel.add(labelTolPK, c1);
+		c1.gridx = 0; c1.gridy = 3; c1.weightx = 0.1;
+		settingsPanel.add(labelNormDrift, c1);
+		c1.gridx = 0; c1.gridy = 4; c1.weightx = 0.1;
+		settingsPanel.add(labelSDDrift, c1);
 		
 		c1.fill = GridBagConstraints.NONE;
 		c1.gridx = 1; c1.gridy = 0; c1.weightx = 0.0;
-		parameterPanel.add(textDegBG, c1);
+		settingsPanel.add(textDegBG, c1);
 		c1.gridx = 1; c1.gridy = 1; c1.weightx = 0.0;
-		parameterPanel.add(textTolPK, c1);
-
-		chkBoxBands.addActionListener(this);
-		cmbBoxLadderLane.addActionListener(this);
-
-		cmbBoxLadderType.setSelectedIndex(0);
-		cmbBoxLadderType.addActionListener(this);
-		cmbBoxDist.setSelectedIndex(0);
-		cmbBoxDist.addActionListener(this);
-
-		buttonEditPeaks.addActionListener(this);
-		buttonResetCustomPeaks.addActionListener(this);
-
-		settingsPanel = new JPanel();
-		settingsPanel.setLayout(new GridBagLayout());
-		settingsPanel.setBorder(new EmptyBorder(5, 3, 5, 3));
-		GridBagConstraints c2 = new GridBagConstraints();
-		c2.weightx = 0.6; 
-		c2.ipadx = 4; c2.ipady = 2;
-		settingsPanel.add(parameterPanel, c2);
+		settingsPanel.add(textPolyConcavity, c1);
+		c1.gridx = 1; c1.gridy = 2; c1.weightx = 0.0;
+		settingsPanel.add(textTolPK, c1);
+		c1.gridx = 1; c1.gridy = 3; c1.weightx = 0.0;
+		settingsPanel.add(textNormDrift, c1);
+		c1.gridx = 1; c1.gridy = 4; c1.weightx = 0.0;
+		settingsPanel.add(textSDDrift, c1);
+			
+		c1.gridx = 2; c1.gridy = 0; 
+		c1.gridheight = 4;
+		c1.fill = GridBagConstraints.VERTICAL;
+		c1.weightx = 0.0;
+		settingsPanel.add(buttonPanelFitType, c1);
 		
-		c2.gridx = 1; c2.gridy = 0; 
-		c2.gridheight = 3;
-		c2.fill = GridBagConstraints.HORIZONTAL;
-		c2.weightx = 0.0;
-		settingsPanel.add(buttonPanelFitType, c2);
+		c1.gridx = 0; c1.gridy = 5;
+		c1.gridwidth = 1; c1.gridheight = 1; 
+		c1.fill = GridBagConstraints.HORIZONTAL;
+		settingsPanel.add(chkBoxBands, c1); 
 		
-		c2.gridx = 0; c2.gridy = 2;
-		c2.gridwidth = 1; c2.gridheight = 1; 
-		c2.fill = GridBagConstraints.HORIZONTAL;
-		settingsPanel.add(chkBoxBands, c2); 
+		c1.gridx = 0; c1.gridy = 6; c1.gridwidth = 3; c1.gridheight = 1;
+		settingsPanel.add(cmbBoxLadderLane, c1);
 		
-		c2.gridx = 0; c2.gridy = 3; c2.gridwidth = 2; c2.gridheight = 1;
-		settingsPanel.add(cmbBoxLadderLane, c2);
+		c1.gridx = 0; c1.gridy = 7;
+		settingsPanel.add(cmbBoxLadderType, c1);
 		
-		c2.gridx = 0; c2.gridy = 4;
-		settingsPanel.add(cmbBoxLadderType, c2);
+		c1.gridx = 0; c1.gridy = 8; 
+		settingsPanel.add(cmbBoxDist, c1);
 		
-		c2.gridx = 0; c2.gridy = 5; 
-		settingsPanel.add(cmbBoxDist, c2);
+		c1.gridx = 0; c1.gridy = 9; 
+		c1.gridwidth = 1;
+		settingsPanel.add(buttonEditPeaks, c1);
 		
-		c2.gridx = 0; c2.gridy = 6; c2.gridwidth = 1; c2.gridheight = 1;
-		settingsPanel.add(buttonEditPeaks, c2);
+		c1.gridx = 0; c1.gridy = 10; 
+		settingsPanel.add(buttonResetCustomPeaks, c1);
 		
-		c2.gridx = 1; c2.gridy = 6; 
-		settingsPanel.add(buttonResetCustomPeaks, c2);
-		c2.gridx = 1; c2.gridy = 7; 
-		c2.gridwidth = GridBagConstraints.REMAINDER; c2.gridheight = 1;
-		c2.weighty = 1.0;
-		settingsPanel.add(new JLabel(), c2);
-
+		c1.gridx = 0; c1.gridy = 11;
+		c1.gridwidth = GridBagConstraints.REMAINDER; 
+		c1.gridheight = 1; c1.weighty = 1.0;
+		settingsPanel.add(new JLabel(), c1);
+		
 		dialogPanel = new JPanel();
 		dialogPanel.setBackground(Color.darkGray);
 		dialogPanel.setLayout(new BorderLayout());
@@ -417,16 +449,47 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		dialogPanel.add(sliderPanel, BorderLayout.CENTER);
 		dialogPanel.add(settingsPanel, BorderLayout.EAST);
 		dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
-
+		
 		// Initial status of all dialog components
 		buttonBands.setSelected(true);
 		chkBoxBands.setSelected(false);
 		chkBoxBands.setEnabled(false);
 		cmbBoxLadderLane.setSelectedIndex(0);
+		cmbBoxLadderType.setSelectedIndex(0);
 		cmbBoxLadderType.setEnabled(false);
+		cmbBoxDist.setSelectedIndex(0);		
 		cmbBoxDist.setEnabled(false);
+		
 		buttonEditPeaks.setEnabled(false);
 		buttonResetCustomPeaks.setEnabled(false);
+		
+		// Add this class to all components as listener here for easy reference
+		imp.getCanvas().addMouseMotionListener(this);
+		imp.getCanvas().addMouseListener(this);
+		imp.getCanvas().addMouseWheelListener(this);
+		imp.getWindow().addMouseListener(this);
+		imp.getWindow().addMouseMotionListener(this);
+		imp.getWindow().addWindowListener(this);
+		
+		textNLanes.addChangeListener(this);
+		textDegBG.addChangeListener(this);
+		textPolyConcavity.addChangeListener(this);
+		textTolPK.addChangeListener(this);
+		textSDDrift.addChangeListener(this);
+		textNormDrift.addChangeListener(this);
+
+		chkBoxBands.addActionListener(this);
+		buttonBands.addActionListener(this);
+		buttonContinuum.addActionListener(this);
+
+		cmbBoxDist.addActionListener(this);
+		cmbBoxLadderLane.addActionListener(this);
+		cmbBoxLadderType.addActionListener(this);
+		
+		buttonEditPeaks.addActionListener(this);
+		buttonResetCustomPeaks.addActionListener(this);
+		buttonFit.addActionListener(this);
+		buttonClose.addActionListener(this);
 		
 		if (auto) {
 			buttonAuto.doClick();
@@ -449,18 +512,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		frame.pack();
 		frame.setVisible(true);
 		frame.addWindowListener(new WindowAdapter() {
-
 			@Override
 			public void windowClosing(final WindowEvent e) {
 				cleanupAndClose();
 			}
 		});
-
+		
 		while (rois.size() == 0) {
 			log.info("Loading...");
 			IJ.wait(250); // delay to make sure ROIs have updated
 		}
-
+		
 		reDrawROIs(imp, "none");
 		imp.killRoi();
 	}
@@ -675,8 +737,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 				if (buttonManual.isSelected() && !roiName.equals("none")) {
 					imgPlus.setRoi(roi);
 				}
-			} else if (roi.getName().equals(roiReference)) {
-				if (!roiReference.equals("none") && !roiReference.equals(roiName)) {
+			} else if (roi.getName().equals(roiReferenceName)) {
+				if (!roiReferenceName.equals("none") && !roiReferenceName.equals(roiName)) {
 					roi.setStrokeWidth(3);
 					roi.setStrokeColor(MainDialog.reference);
 					labelRoi.setFillColor(MainDialog.reference);
@@ -740,32 +802,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		}
 	}
 
-	private void changeTextFieldVariable(final DocumentEvent e) {
-		final Document textBox = e.getDocument();
-		if (textBox.equals(textNLanes.getDocument())) {
-			if (fitDone && !askUser(warningFit)) {
-				textNLanes.setText(Integer.toString(nLanes));
-				return;
-			}
-			nLanes = getNLanes();
-			if (nLanes == -1)
-				return;
-			prefs.putInt(NLANES, nLanes);
-			resetAutoROIs();
-			reDrawROIs(imp, "none");
-			updateLaneComboBox();
-			redoProfilePlots();
-			fitter.resetAllFitter();
-			fitter.setInputData(plotter.getProfiles());
-		} else if (textBox.equals(textDegBG.getDocument())) {
-			fitter.setDegBG(getDegBG());
-			prefs.putInt(DEGBG, getDegBG());
-		} else if (textBox.equals(textTolPK.getDocument())) {
-			fitter.setTolPK(getTolPK());
-			prefs.putDouble(TOLPK, getTolPK());
-		}
-	}
-
 	private void redoProfilePlots() {
 		fitDone = false;
 		chkBoxBands.setSelected(false);
@@ -774,9 +810,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		buttonResetCustomPeaks.setEnabled(false);
 		plotter.resetData();
 		plotter.setPlotMode(Plotter.regMode);
+		//rois.parallelStream().forEach((r) -> {		
 		for (final Roi r : rois) {
 			final int ln = Integer.parseInt(r.getName().substring(5));
 			final Rectangle rect = r.getBounds();
+			// Do not ROIs that are outside the image
 			if (rect.getMinX() < 0.95 * iw && rect.getMinY() < 0.95 * ih) {
 				plotter.updateProfile(r);
 				final RealVector empty = new ArrayRealVector();
@@ -785,8 +823,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 				d.addChangeListener(this);
 				plotter.addDataSeries(d);
 			}
-			plotter.reloadTabs();
+		//});
 		}
+		plotter.reloadTabs();
 	}
 
 	private double[][] readDistFile(final String filename) {
@@ -890,12 +929,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		boolean found = false;
 		int ref = 0;
 		cmbBoxLadderLane.removeActionListener(this);
-		if (!roiReference.equals("none")) {
-			ref = Integer.parseInt(roiReference.substring(5));
+		if (!roiReferenceName.equals("none")) {
+			ref = Integer.parseInt(roiReferenceName.substring(5));
 		}
 		final String str = cmbBoxLadderLane.getItemAt(0);
 		cmbBoxLadderLane.removeAllItems();
-
 		cmbBoxLadderLane.addItem(str);
 		for (final Roi r : rois) {
 			final String name = r.getName();
@@ -933,44 +971,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		log.info("\nGel Lanes Fit terminated.");
 	}
 
-	/**
-	 * @return @param nLanes, the number of ROIs currently present in the gel
-	 *         image
-	 */
-	public int getNLanes() {
-		try {
-			return Integer.parseInt(textNLanes.getText().trim());
-		} catch (final NumberFormatException e1) {
-			return -1;
-		}
-	}
-
-	/**
-	 * @return the currently selected @param degBG, the degree of the polynomial
-	 *         representing the background signal
-	 */
-	public int getDegBG() {
-		try {
-			degBG = Integer.parseInt(textDegBG.getText().trim());
-			return degBG;
-		} catch (final NumberFormatException e1) {
-			return -1;
-		}
-	}
-
-	/**
-	 * @return the currently selected @param tolPK, the tolerance on the peak
-	 *         selection
-	 */
-	public double getTolPK() {
-		try {
-			tolPK = Double.parseDouble(textTolPK.getText().trim());
-			return tolPK;
-		} catch (final NumberFormatException e1) {
-			return 0.0;
-		}
-	}
-
+	
 	/**
 	 * @return ROI identified by title. Typically "Lane n", where int n > 0
 	 */
@@ -1016,9 +1017,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	public void setFitter(final Fitter fitter) {
 		this.fitter = fitter;
+		fitter.setDegBG(degBG);
+		fitter.setPolyConcavity(polyConcavity);
+		fitter.setTolPK(tolPK);
+		fitter.setNormDrift(normDrift);
+		fitter.setSDDrift(sdDrift);
 	}
 
 	public void setPlotter(final Plotter plotter) {
+		plotter.initialize(rois);
 		// TODO: Think of a better place for this:
 		// Add empty Custom Peak DataSeries with listeners
 		for (final int i : getAllLaneNumbers()) {
@@ -1033,36 +1040,84 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	@Override
 	public synchronized void stateChanged(final ChangeEvent e) {
-		if (fitDone && !askUser(warningFit))
-			return;
-		final JSlider slider = (JSlider) e.getSource();
+		final Object o = e.getSource();
+		final List<Object> fitDisruptors = new ArrayList<>(
+				Arrays.asList(sliderW, sliderH, sliderSp, 
+										sliderHOff, sliderVOff, textNLanes));
 		
-		if (slider == sliderW) {
-			lw = sliderW.getValue(); prefs.putInt(LW, lw);
-			final String str = "Width ( " + lw + " px )";
-			setSliderTitle(sliderW, str);
-		} else if (slider == sliderH) {
-			lh = sliderH.getValue(); prefs.putInt(LH, lh);
-			final String str = "Height ( " + lh + " px )";
-			setSliderTitle(sliderH, str);
-		} else if (slider == sliderSp) {
-			lsp = sliderSp.getValue(); prefs.putInt(LSP, lsp);
-			final String str = "Spacing ( " + lsp + " px )";
-			setSliderTitle(sliderSp, str);
-		} else if (slider == sliderHOff) {
-			lhoff = sliderHOff.getValue(); prefs.putInt(LHOFF, lhoff);
-			final String str = "Horizontal Offset ( " + lhoff + " px )";
-			setSliderTitle(sliderHOff, str);
-		} else if (slider == sliderVOff) {
-			lvoff = sliderVOff.getValue(); prefs.putInt(LVOFF, lvoff);
-			final String str = "Vertical Offset ( " + lvoff + " px )";
-			setSliderTitle(sliderVOff, str);
+		if (fitDisruptors.contains(o)) {
+			if (fitDone && !askUser(warningFit))
+				return;
 		}
-
+		// ROI SLIDERS
+		if (o == sliderW) {
+			lw = sliderW.getValue(); prefs.putInt(LW, lw);
+			String str = "Width ( " + lw + " px )";
+			setSliderTitle(sliderW, str);
+			sliderUpdate();
+		} else if (o == sliderH) {
+			lh = sliderH.getValue(); prefs.putInt(LH, lh);
+			String str = "Height ( " + lh + " px )";
+			setSliderTitle(sliderH, str);
+			sliderUpdate();
+		} else if (o == sliderSp) {
+			lsp = sliderSp.getValue(); prefs.putInt(LSP, lsp);
+			String str = "Spacing ( " + lsp + " px )";
+			setSliderTitle(sliderSp, str);
+			sliderUpdate();
+		} else if (o == sliderHOff) {
+			lhoff = sliderHOff.getValue(); prefs.putInt(LHOFF, lhoff);
+			String str = "Horizontal Offset ( " + lhoff + " px )";
+			setSliderTitle(sliderHOff, str);
+			sliderUpdate();
+		} else if (o == sliderVOff) {
+			lvoff = sliderVOff.getValue(); prefs.putInt(LVOFF, lvoff);
+			String str = "Vertical Offset ( " + lvoff + " px )";
+			setSliderTitle(sliderVOff, str);
+			sliderUpdate();
+		} 
+		// SPINNERS
+		if (o == textNLanes) {
+			if (fitDone && !askUser(warningFit)) {
+				textNLanes.setValue(nLanes);
+				return;
+			}
+			nLanes = (int) textNLanes.getModel().getValue();
+			prefs.putInt(NLANES, nLanes);
+			resetAutoROIs();
+			reDrawROIs(imp, "none");
+			updateLaneComboBox();
+			redoProfilePlots();
+			fitter.resetAllFitter();
+			fitter.setInputData(plotter.getProfiles());
+		} else if (o == textDegBG) {
+			degBG = (int) textDegBG.getModel().getValue();
+			fitter.setDegBG(degBG);
+			prefs.putInt(DEGBG, degBG);
+		} else if (o == textPolyConcavity) {
+			polyConcavity = (double) textPolyConcavity.getModel().getValue();
+			fitter.setPolyConcavity(polyConcavity);
+			prefs.putDouble(POLYCONCAVITY, polyConcavity);
+		} else if (o == textTolPK) {
+			tolPK = (double) textTolPK.getModel().getValue();
+			fitter.setTolPK(tolPK);
+			prefs.putDouble(TOLPK, tolPK);
+		} else if (o == textNormDrift) {
+			normDrift = (double) textNormDrift.getModel().getValue();
+			fitter.setNormDrift(normDrift);
+			prefs.putDouble(NORMDRIFT, normDrift);
+		} else if (o == textSDDrift) {
+			sdDrift = (double) textSDDrift.getModel().getValue();
+			fitter.setSDDrift(sdDrift);
+			prefs.putDouble(SDDRIFT, sdDrift);
+		}
+	}
+	
+	void sliderUpdate() {
 		resetAutoROIs();
 		reDrawROIs(imp, "none");
 		redoProfilePlots();
-		plotter.setReferencePlot(Plotter.noRefPlot, null);
+		plotter.setReferencePlot(MainDialog.noLadderLane);
 		fitter.resetAllFitter();
 		fitter.setInputData(plotter.getProfiles());
 	}
@@ -1118,22 +1173,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		}
 	}
 
-	// TextField Document Listeners (changed, remove, insert)
-	@Override
-	public void changedUpdate(final DocumentEvent e) {
-		changeTextFieldVariable(e);
-	}
-
-	@Override
-	public void removeUpdate(final DocumentEvent e) {
-		changeTextFieldVariable(e);
-	}
-
-	@Override
-	public void insertUpdate(final DocumentEvent e) {
-		changeTextFieldVariable(e);
-	}
-
 	@Override
 	public void actionPerformed(final ActionEvent e) {
 		// Buttons
@@ -1141,57 +1180,56 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		if (e.getSource().equals(buttonFit)) {
 			if (fitDone && !askUser(warningFit))
 				return;
-
-			if (roiReference.equals("none")) {
+			
+			if (roiReferenceName.equals("none")) {
 				askUser("Reference ladder not selected");
 				return;
 			}
-
+			
 			if (cmbBoxLadderType.getSelectedItem().equals("Select Ladder Type")) {
 				askUser("Ladder type not selected");
 				return;
 			}
-
+			
 			if (buttonBands.isSelected())
-				fitter.setFitMode(Fitter.regMode);
+				fitter.setFitMode(Fitter.bandMode);
 			else if (buttonContinuum.isSelected()) {
 				fitter.setFitMode(Fitter.fragmentMode);
 				if (cmbBoxDist.getSelectedItem().equals("Select Fragment Distribution")) {
 					askUser("Fragment distribution not selected");
 					buttonBands.setSelected(true);
-					fitter.setFitMode(Fitter.regMode);
+					fitter.setFitMode(Fitter.bandMode);
 					return;
 				}
 			}
 			
 			buttonEditPeaks.setSelected(false);
 			buttonResetCustomPeaks.setSelected(false);
-
+			
 			// Remove everything in the plots, but the profile
-			plotter.setSelected(Plotter.selectedNone);
+			plotter.setSelected(MainDialog.noLaneSelected);
 			plotter.setPlotMode(Plotter.regMode);
 			plotter.removeFit();
 			plotter.removeVerticalMarkers();
-
+			
 			// Reset fit
 			for (final int l : getAllLaneNumbers())
 				fitter.resetFit(l);
 			fitter.setInputData(plotter.getProfiles());
-
+			
 			chkBoxBands.setEnabled(true);
 			chkBoxBands.setSelected(true);
 			buttonEditPeaks.setEnabled(true);
 			buttonResetCustomPeaks.setEnabled(true);
-
+			
 			List<DataSeries> fitted = new ArrayList<>();
-			final int refLn = Integer.parseInt(roiReference.substring(5));
-			fitted = fitter.doFit(refLn);
+			fitted = fitter.doFit(roiReferenceNumber);
 			fitter.updateResultsTable();
 			plotter.addDataSeries(fitted);
-			plotter.setReferencePlot(refLn, fitter.getFittedPeaks(refLn));
+			plotter.addVerticalMarkers(fitter.getFittedPeaks(roiReferenceNumber));
 			for (final int i : getAllLaneNumbers())
 				plotter.updatePlot(i);
-			final List<Peak> peaks = fitter.getFittedPeaks(refLn);
+			final List<Peak> peaks = fitter.getFittedPeaks(roiReferenceNumber);
 			final int l1 = peaks.size();
 			final int l2 = ladderRange[1] - ladderRange[0] + 1;
 			if (l1 != l2) {
@@ -1204,24 +1242,24 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			for (final Peak p : peaks) { // Rename ladder peaks with band names
 				p.setName(hilo[ladderRange[0] + peaks.indexOf(p)]);
 			}
-			plotter.setReferencePlot(refLn, peaks);
-
-			fitter.setReferenceLane(refLn);
-			fitted = fitter.doFit();
+			plotter.addVerticalMarkers(peaks);
+			
+			fitted.addAll(fitter.doFit());
 			fitter.updateResultsTable();
 			fitDone = true;
 			plotter.removeFit();
 			plotter.addDataSeries(fitted);
-			for (final int i : getAllLaneNumbers())
-				plotter.updatePlot(i);
+			for (final int i : getAllLaneNumbers()) {
+				if (i != roiReferenceNumber) plotter.updatePlot(i);
+			}
 			reDrawROIs(imp, "none"); // adds the bands to the ROIs
 		}
-
+		
 		if (e.getSource().equals(buttonAuto)) {
 			if (!auto) { // NOT already AUTO
 				if (!saveRois()) {
-					if (!askUser(
-					        "When switching to AUTO mode, the current lane selections will be reset!")) {
+					String warn = "When switching to AUTO mode, the current lane selections will be reset!";
+					if (!askUser(warn)) {
 						buttonManual.setSelected(true);
 						return;
 					}
@@ -1234,11 +1272,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			reDrawROIs(imp, "none");
 			if (plotter == null || fitter == null) return;
 			redoProfilePlots();
-			plotter.setReferencePlot(Plotter.noRefPlot, null);
 			fitter.resetAllFitter();
 			fitter.setInputData(plotter.getProfiles());
 		}
-
+		
 		if (e.getSource().equals(buttonManual)) {
 			auto = false;
 			prefs.putBoolean(AUTO, auto);
@@ -1250,18 +1287,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			if (plotter == null || fitter == null) return;
 			reDrawROIs(imp, "none");
 			redoProfilePlots();
-			plotter.setReferencePlot(Plotter.noRefPlot, null);
 			fitter.resetAllFitter();
 			fitter.setInputData(plotter.getProfiles());
 		}
-
+		
 		if (e.getSource().equals(buttonEditPeaks)) {
 			if (buttonEditPeaks.isSelected())
 				plotter.setPlotMode(Plotter.editPeaksMode);
 			else
 				plotter.setPlotMode(Plotter.regMode);
 		}
-
+		
 		if (e.getSource().equals(buttonResetCustomPeaks)) {
 			final int[] lanes = askResetCustomPoints(new boolean[rois.size() + 1]);
 			for (final int i : lanes) {
@@ -1269,55 +1305,56 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			}
 			reDrawROIs(imp, "none");
 		}
-
+		
 		if (e.getSource().equals(buttonClose)) {
 			if (askUser("Would you like to quit Gel Lanes Fit?")) {
 				frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING));
 			}
 		}
-
+		
 		// CheckBoxes
 		// -------------------------------------------------------------
 		if (e.getSource().equals(chkBoxBands)) {
 			reDrawROIs(imp, "none");
 		}
-
+		
 		// ComboBoxes
 		// -------------------------------------------------------------
 		if (e.getSource().equals(cmbBoxLadderLane)) {
 			final String ladderLane = (String) cmbBoxLadderLane.getSelectedItem();
 			if (ladderLane.equals("Select Ladder Lane")) {
-				roiReference = "none";
+				roiReferenceName   = "none";
+				roiReferenceNumber = MainDialog.noLadderLane;
 				cmbBoxLadderType.setEnabled(false);
 				cmbBoxDist.setEnabled(false);
-				if (plotter != null)
-					plotter.removeVerticalMarkers();
 			} else {
-				roiReference = ladderLane;
+				roiReferenceName = ladderLane;
+				roiReferenceNumber = Integer.parseInt(ladderLane.substring(5));
 				cmbBoxLadderType.setEnabled(true);
 				cmbBoxDist.setEnabled(true);
-				fitter.setReferenceLane(Integer.parseInt(ladderLane.substring(5)));
 			}
+			fitter.setReferenceLane(roiReferenceNumber);
+			plotter.setReferencePlot(roiReferenceNumber);
 			reDrawROIs(imp, "none");
 		}
-
+		
 		if (e.getSource().equals(cmbBoxLadderType)) {
 			String[] ladderBandsStrings = null;
 			String ladderType = ladderStr[cmbBoxLadderType.getSelectedIndex()];
-
+			
 			if (ladderType.equals("Hi-Lo")) {
 				ladderBandsStrings = hilo;
 			} else if (ladderType.equals("100bp")) {
 				ladderBandsStrings = bp100;
 			}
-
+			
 			if (!ladderType.equals(ladderStr[0]) && ladderBandsStrings != null) {
 				// Ask user on limits of ladder
 				final String[] bands = askLadderRange(ladderBandsStrings);
 				if (bands != null) {
 					ladderRange[0] = Arrays.asList(ladderBandsStrings).indexOf(bands[0]);
 					ladderRange[1] = Arrays.asList(ladderBandsStrings).indexOf(bands[1]);
-
+					
 					RealVector ladder = new ArrayRealVector();
 					for (int i = ladderRange[0]; i <= ladderRange[1]; i++) {
 						int unit = 0;
@@ -1344,7 +1381,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			}
 			cmbBoxLadderType.setSelectedItem(ladderType);
 		}
-
+		
 		if (e.getSource().equals(cmbBoxDist)) {
 			if (cmbBoxDist.getSelectedIndex() == 0) return;
 			final String filename = "data/" + cmbBoxDist.getSelectedItem() + ".txt";
@@ -1386,7 +1423,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 						plotter.setSelected(ln);
 						plotter.setVLine(ln, y);
 					} else {
-						plotter.setSelected(Plotter.selectedNone);
+						plotter.setSelected(MainDialog.noLadderLane);
 					}
 
 					if (!roiPreviouslySelected.equals("none")) {
@@ -1413,7 +1450,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 					// Might be dragging existing roi
 					return;
 				}
-
+				
 				if (askUser("Delete " + roiSelected + "?")) {
 					if (fitDone && !askUser(warningFit))
 						return;

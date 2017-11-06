@@ -83,9 +83,8 @@ public class GelLanesFit implements Command {
 		final String title = "[" + version + "] Gel Lanes Fit - " + imp.getTitle();
 
 		final MainDialog md = new MainDialog(context, title, imp, prefs);
-		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
-			.getTolPK());
-		final Plotter plotter = new Plotter(context, imp, md.getRois());
+		final Fitter fitter = new Fitter(context, impName);
+		final Plotter plotter = new Plotter(context, imp);
 		md.setPlotter(plotter);
 		md.setFitter(fitter);
 
@@ -167,7 +166,7 @@ public class GelLanesFit implements Command {
 		final ImageJ ij = new ImageJ();
 		ij.launch(args);
 		final ImagePlus iPlus = new Opener().openImage(
-			"src//main//resources//sample//Destained[1s].tif");
+			"src//main//resources//sample//second_destain.tif");
 		iPlus.show();
 		ij.command().run(GelLanesFit.class, true);
 	}

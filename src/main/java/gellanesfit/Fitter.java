@@ -31,6 +31,7 @@ import net.imagej.table.DefaultGenericTable;
 import net.imagej.table.DefaultTableDisplay;
 import net.imagej.table.GenericColumn;
 
+import org.apache.commons.lang3.time.StopWatch;
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.function.Gaussian;
 import org.apache.commons.math3.analysis.integration.gauss.GaussIntegrator;
@@ -67,17 +68,19 @@ class Fitter {
 	@Parameter
 	private StatusService statusServ;
 
-	static final int regMode = 0;
+	static final int bandMode = 0;
 	static final int fragmentMode = 1;
-	private static final int noLadderLane = -1;
 
 	public static final double peakDistanceTol = 2;
 	public static final double sd2FWHM = 2 * FastMath.sqrt(2 * FastMath.log(2));
 
 	private int degBG;
 	private double tolPK;
-	private int fitMode = regMode;
-	private int ladderLane = noLadderLane;
+	private double sdDrift;
+	private double normDrift;
+	private double polyConcavity;
+	private int fitMode = bandMode;
+	private int ladderLane = MainDialog.noLadderLane;
 	private double[] ladder; // MW, Dalton
 	private double[][] fragmentDistribution; // MW, Dalton; relative frequency
 	private final String title; // for the datafile, main image's title
@@ -86,12 +89,9 @@ class Fitter {
 	private List<Peak> allGuessList;
 	private List<Peak> allFittedList;
 	private List<Peak> allCustomList;
-
-	public Fitter(final Context context, final String title, final int degBG, final double tolPK) {
+	public Fitter(final Context context, final String title) {
 		context.inject(this);
 		this.title = title;
-		this.degBG = degBG;
-		this.tolPK = tolPK;
 		this.inputData = new ArrayList<>();
 
 		this.allGuessList = new ArrayList<>();
@@ -123,7 +123,7 @@ class Fitter {
 		String[] headersB = { "Lane", "Band", "Distance", "Dist. G.", "Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area"};
 		String[] headersF = { "Lane", "Band", "Distance", "Dist. G.", "Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area", "Frequency", "BP", "MW" };
 		String[] headers = null;
-		if (fitMode == regMode) headers = headersB;
+		if (fitMode == bandMode) headers = headersB;
 		else headers = headersF;
 		final ResultsTable rt = new ResultsTable();
 		
@@ -168,7 +168,7 @@ class Fitter {
 						rt.addValue(headers[11], " - ");
 					} else {
 						rt.addValue(headers[9],  String.format("%1$.3f", fragmentDistribution[band-1][0]));
-						rt.addValue(headers[10], String.format("%1$.1f", fragmentDistribution[band-1][1]));
+						rt.addValue(headers[10], String.format("%1$.0f", fragmentDistribution[band-1][1]));
 						rt.addValue(headers[11], String.format("%1$.3f", fragmentDistribution[band-1][2]));
 					}	
 				}
@@ -209,8 +209,8 @@ class Fitter {
 			obs.add(Math.log10(ladder[l]), y[l]);
 		}
 		// First-degree polynomial fitter (line).
-		final PolynomialCurveFitter fitter = PolynomialCurveFitter.create(1);
-		final double[] coeff = fitter.fit(obs.toList());
+		final PolynomialCurveFitter linfit = PolynomialCurveFitter.create(1);
+		final double[] coeff = linfit.fit(obs.toList());
 		final double[] yi = new double[fragmentDistribution.length];
 		final UnivariateFunction f = new PolynomialFunction(coeff);
 		for (int i = 0; i < fragmentDistribution.length; i++) {
@@ -250,7 +250,7 @@ class Fitter {
 
 		List<Peak> peaks = new ArrayList<>();
 		RealVector guess = new ArrayRealVector();
-		if (fitMode == regMode || (fitMode == fragmentMode && lane == ladderLane)) {
+		if (fitMode == bandMode || (fitMode == fragmentMode && lane == ladderLane)) {
 			// Guess a set of peaks a set of peaks automatically
 			guess = new ArrayRealVector(pg.guess());
 			peaks = arrayToPeaks(lane, guess.toArray());
@@ -305,12 +305,12 @@ class Fitter {
 			for (final Peak g : peaks) {
 				if (FastMath.abs(c.getMean() - g.getMean()) <= peakDistanceTol) {
 					found = true;
-					log.info("Peak guess:    " + g.getLane() + ", "+ g.getNorm() + ", " + g.getMean() + ", "
+					log.info("[LANE " + g.getLane() + "] Peak guess: " + g.getNorm() + ", " + g.getMean() + ", "
 					        + g.getSigma());
 					g.setMean(c.getMean());
 					g.setNorm(c.getNorm());
 					g.setSigma(c.getSigma());
-					log.info("\tReplaced with: " + c.getNorm() + ", " + c.getMean() + ", "
+					log.info("\t\tReplaced with: " + c.getNorm() + ", " + c.getMean() + ", "
 					        + c.getSigma());
 					break;
 				}
@@ -323,7 +323,7 @@ class Fitter {
 		allGuessList.addAll(peaks);
 		RealVector poly = new ArrayRealVector(); 
 		poly = poly.append(degBG).append(new ArrayRealVector(degBG + 1));
-		if (fitMode == regMode) {
+		if (fitMode == bandMode) {
 			poly.setEntry(1, guess.getEntry(1));
 		} else if (fitMode == fragmentMode) {
 			for (DataSeries d : inputData) {
@@ -347,10 +347,22 @@ class Fitter {
 	public List<DataSeries> doFit() {
 		int progress = 1;
 		final ArrayList<DataSeries> out = new ArrayList<>();
-		for (final DataSeries d : inputData) {
-			out.addAll(doFit(d.getLane()));
+		final StopWatch sw = new StopWatch();
+		sw.start();
+		List<DataSeries> data = new ArrayList<>();
+		if (fitMode == bandMode) {
+			data = inputData;
+		}	else if (fitMode == fragmentMode) {
+			for (DataSeries d : inputData) {
+				if (d.getLane() != ladderLane) data.add(d);
+			}
 		}
-		statusServ.showProgress(++progress, inputData.size());
+		data.parallelStream().forEach((d) -> {
+			out.addAll(doFit(d.getLane()));
+		});
+		String t = String.format("Time elapsed: %1$.1f s", sw.getTime()/1000.0);
+		log.info(t);
+		statusServ.showProgress(++progress, data.size());
 		return out;
 	}
 
@@ -368,7 +380,7 @@ class Fitter {
 		final int lane = in.getLane();
 		
 		int oldFitMode = fitMode;
-		if (lane == ladderLane) fitMode = Fitter.regMode;
+		if (lane == ladderLane) fitMode = Fitter.bandMode;
 		
 		final RealVector xvals = in.getX();
 		final RealVector yvals = in.getY();
@@ -384,10 +396,10 @@ class Fitter {
 			obs.add(xvals.getEntry(o), yvals.getEntry(o));
 
 		final ParameterGuesser pg = new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(),
-		        tolpk, degBG);
+		        degBG, tolpk);
 
 		final double[] firstGuess = doGuess(lane, pg).toArray();
-		final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(tolpk, degBG, fitMode)
+		final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(fitMode, degBG, polyConcavity, tolpk, normDrift, sdDrift)
 		        .withStartPoint(firstGuess).getProblem(obs.toList());
 
 		final LeastSquaresOptimizer.Optimum optimum = new LevenbergMarquardtOptimizer()
@@ -498,15 +510,6 @@ class Fitter {
 		allCustomList = new ArrayList<>();
 	}
 
-	public List<Peak> getGuessPeaks(final int lane) {
-		final List<Peak> g = new ArrayList<>();
-		for (final Peak p : allGuessList) {
-			if (p.getLane() == lane)
-				g.add(p);
-		}
-		return g;
-	}
-
 	public List<Peak> getCustomPeaks(final int lane) {
 		final List<Peak> c = new ArrayList<>();
 		for (final Peak p : allCustomList) {
@@ -514,6 +517,15 @@ class Fitter {
 				c.add(p);
 		}
 		return c;
+	}
+
+	public List<Peak> getGuessPeaks(final int lane) {
+		final List<Peak> g = new ArrayList<>();
+		for (final Peak p : allGuessList) {
+			if (p.getLane() == lane)
+				g.add(p);
+		}
+		return g;
 	}
 
 	public List<Peak> getFittedPeaks(final int lane) {
@@ -525,9 +537,6 @@ class Fitter {
 		return f;
 	}
 
-	/**
-	 * @param degBG
-	 */
 	public void setDegBG(final int degBG) {
 		this.degBG = degBG;
 	}
@@ -548,11 +557,20 @@ class Fitter {
 		this.fragmentDistribution = fragmentDistribution;
 	}
 
-	/**
-	 * @param tolPK
-	 */
+	public void setPolyConcavity(final double polyConcavity) {
+		this.polyConcavity = polyConcavity;
+	}
+	
 	public void setTolPK(final double tolPK) {
 		this.tolPK = tolPK;
+	}
+
+	public void setNormDrift(double normDrift) {
+		this.normDrift = normDrift;
+	}
+
+	public void setSDDrift(double sdDrift) {
+		this.sdDrift = sdDrift;
 	}
 
 	public void setLadder(final RealVector ladder) {
@@ -560,6 +578,9 @@ class Fitter {
 	}
 }
 
+/** Class to generate Gaussian Peak objects
+ * Could be expanded to represent other types of peaks
+ **/
 class Peak implements Comparable<Peak> {
 
 	private String name = "";

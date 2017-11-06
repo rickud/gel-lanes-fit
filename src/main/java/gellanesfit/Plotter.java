@@ -57,6 +57,8 @@ import org.jfree.chart.JFreeChart;
 import org.jfree.chart.LegendItem;
 import org.jfree.chart.LegendItemCollection;
 import org.jfree.chart.annotations.XYTextAnnotation;
+import org.jfree.chart.event.AxisChangeEvent;
+import org.jfree.chart.event.AxisChangeListener;
 import org.jfree.chart.labels.StandardXYToolTipGenerator;
 import org.jfree.chart.labels.XYToolTipGenerator;
 import org.jfree.chart.plot.PlotOrientation;
@@ -78,13 +80,12 @@ import ij.ImagePlus;
 import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 
-class Plotter extends JFrame implements ChartMouseListener {
+class Plotter extends JFrame implements Runnable, ChartMouseListener {
 
 	private final double SW = IJ.getScreenSize().getWidth();
 	private final double SH = IJ.getScreenSize().getHeight();
 
-	static final int noRefPlot = -1; // no reference plot
-	private int referencePlot;
+	private int referencePlot = MainDialog.noLadderLane;
 
 	// Colors are listed here for consistent, easy modification
 	private static final Color vMarkerRegColor = new Color(127, 127, 127);
@@ -103,7 +104,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 	private static final Stroke dataStroke = new BasicStroke(2.0f);
 
 	// Background Color of selected plot
-	static final int selectedNone = -1;
 	static final int regMode = 0;
 	static final int editPeaksMode = 1;
 
@@ -116,6 +116,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 	private final ImagePlus imp;
 	private List<ChartPanel> chartPanels;
 	private List<DataSeries> plotsData;
+	private List<Integer> plotNumbers;
 	private List<VerticalMarker> verticalMarkers;
 
 	private List<JPanel> chartTabs;
@@ -123,11 +124,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 
 	private final int rows = 2; // Number of plot Rows in display
 	private final int cols = 2; // Number of plot Rows in display
-	private int selected; // Which plot is highlighted
+	private int selected = MainDialog.noLaneSelected; // Which plot is highlighted
 	private int plotMode = regMode;
 
-	public Plotter(final Context context, final ImagePlus imp,
-		final List<Roi> rois)
+	public Plotter(final Context context, final ImagePlus imp)
 	{
 		context.inject(this);
 		setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
@@ -137,21 +137,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 		chartPanels = new ArrayList<>();
 		chartTabs = new ArrayList<>();
 		plotsData = new ArrayList<>();
+		plotNumbers = new ArrayList<>();
 		verticalMarkers = new ArrayList<>();
 
 		chartsTabbedPane = new JTabbedPane();
-		selected = selectedNone;
-		referencePlot = noRefPlot;
-
-		for (final Roi r : rois) {
-			int ln = Integer.parseInt(r.getName().substring(5));
-			updateProfile(r);
-			updatePlot(ln);
-		}
-		reloadTabs();
-
-		this.getContentPane().add(chartsTabbedPane, BorderLayout.CENTER);
-		this.setVisible(true);
 	}
 
 	/**
@@ -183,11 +172,26 @@ class Plotter extends JFrame implements ChartMouseListener {
 		plotsData.addAll(data);
 	}
 
+	public void addVerticalMarkers(List<Peak> peaks) {
+		for (final DataSeries d : plotsData) {
+			final int ln = d.getLane();
+			final ArrayList<VerticalMarker> bands = new ArrayList<>();
+			for (final Peak p : peaks) {
+				final double x = p.getMean();
+				final VerticalMarker m = new VerticalMarker(p.getName(), ln,
+						VerticalMarker.BMARK, x, Plotter.bMarkerColor,
+						Plotter.bMarkerStroke);
+				bands.add(m);
+			}
+			verticalMarkers.addAll(bands);
+		}
+	}
+	
 	public void removeVerticalMarkers() {
 		verticalMarkers = new ArrayList<>();
-		for (final ChartPanel c : chartPanels)
-			updatePlot(Integer.parseInt(c.getChart().getTitle().getText().substring(
-				5)));
+		for (int i : plotNumbers)
+			updatePlot(i);
+
 	}
 
 	void setVLine(final int ln, final double x) {
@@ -237,7 +241,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 			}
 		}
 
-		selected = selectedNone;
+		selected = MainDialog.noLaneSelected;
 		updatePlot(ln);
 	}
 
@@ -271,40 +275,24 @@ class Plotter extends JFrame implements ChartMouseListener {
 
 	public void setSelected(final int selected) {
 		this.selected = selected;
-		if (selected != selectedNone) {
+		if (selected != MainDialog.noLaneSelected) {
 			final int tab = (selected - 1) / (rows * cols);
 			if (chartsTabbedPane.getSelectedIndex() != tab) chartsTabbedPane
 				.setSelectedIndex(tab);
 		}
 	}
 
-	public void setReferencePlot(final int ref, final List<Peak> peaks) {
+	public void setReferencePlot(final int ref) {
 		referencePlot = ref;
-		if (ref != noRefPlot) {
-			for (final DataSeries d : plotsData) {
-				final int ln = d.getLane();
-				if (ln != ref) {
-					final ArrayList<VerticalMarker> bands = new ArrayList<>();
-					for (final Peak p : peaks) {
-						final double x = p.getMean();
-						final VerticalMarker m = new VerticalMarker(p.getName(), ln,
-							VerticalMarker.BMARK, x, Plotter.bMarkerColor,
-							Plotter.bMarkerStroke);
-						bands.add(m);
-					}
-					verticalMarkers.addAll(bands);
-				}
-			}
-		}
-		else {
-			removeVerticalMarkers();
-		}
+		removeVerticalMarkers();
+		for (int i : plotNumbers)
+			updatePlot(i);
 	}
 
 	void updateProfile(final Roi roi) {
 		final DataSeries profile = getLaneProfile(roi);
 		// Assume plotsData, chartsMainPanel was reset
-		selected = selectedNone;
+		plotNumbers.add(profile.getLane());
 		plotsData.add(profile);
 		final String xLabel = "Distance (px)";
 		final String yLabel = "Grayscale Value";
@@ -347,7 +335,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 		thePlot.getRangeAxis().setLowerMargin(0);
 		thePlot.getRangeAxis().setUpperMargin(0);
 		final double min = 0.95 * profile.getMinY();
-		final double max = 1.05 * profile.getMaxY();
+		final double max = 1.2 * profile.getMaxY();
 		thePlot.getRangeAxis().setLowerBound(min);
 		thePlot.getRangeAxis().setUpperBound(max);
 	}
@@ -371,7 +359,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				int gcount = 0;
 				final JFreeChart c = p.getChart();
 				final XYPlot pl = c.getXYPlot();
-
+				
 				if (plotNumber == referencePlot) {
 					pl.setBackgroundPaint(plotRefColor);
 					c.setBackgroundPaint(plotRefColor);
@@ -384,7 +372,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 					pl.setBackgroundPaint(plotUnselColor);
 					c.setBackgroundPaint(plotUnselColor);
 				}
-
+				
 				// Clear Markers and Annotations
 				if (c.getXYPlot().getDomainMarkers(Layer.BACKGROUND) != null) c
 					.getXYPlot().clearDomainMarkers();
@@ -404,7 +392,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 						else if (m.getType() == VerticalMarker.BMARK) {
 							label.setPaint(bMarkerColor);
 						}
-						label.setFont(new Font("Sans Serif", Font.PLAIN, 12));
+						label.setFont(new Font("Sans Serif", Font.PLAIN, 14));
 						label.setRotationAnchor(TextAnchor.BOTTOM_RIGHT);
 						label.setTextAnchor(TextAnchor.TOP_RIGHT);
 						label.setRotationAngle(-Math.PI / 2);
@@ -522,13 +510,28 @@ class Plotter extends JFrame implements ChartMouseListener {
 			p.add(chartIter.next());
 			i++;
 		}
-		if (selected == selectedNone) chartsTabbedPane.setSelectedIndex(0);
+		if (selected == MainDialog.noLaneSelected) chartsTabbedPane.setSelectedIndex(0);
 		else chartsTabbedPane.setSelectedIndex(selected / (rows * cols) - 1);
 	}
 
+	public void initialize(ArrayList<Roi> rois) {
+		for (final Roi r : rois) {
+			int ln = Integer.parseInt(r.getName().substring(5));
+			updateProfile(r);
+			updatePlot(ln);
+		}
+		reloadTabs();
+
+		this.getContentPane().add(chartsTabbedPane, BorderLayout.CENTER);
+		this.setVisible(true);
+	}
+
 	public void resetData() {
-		plotsData = new ArrayList<>();
-		chartPanels = new ArrayList<>();
+		plotsData.clear();
+		plotNumbers.clear();
+		chartPanels.clear();
+		removeVerticalMarkers();
+		selected = MainDialog.noLaneSelected;
 	}
 
 	@Override
@@ -627,6 +630,12 @@ class Plotter extends JFrame implements ChartMouseListener {
 			}
 			return false;
 		}
+	}
+
+	@Override
+	public void run() {
+		// TODO Auto-generated method stub
+		
 	}
 }
 
