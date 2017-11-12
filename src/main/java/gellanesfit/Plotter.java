@@ -80,7 +80,7 @@ import ij.ImagePlus;
 import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 
-class Plotter extends JFrame implements Runnable, ChartMouseListener {
+class Plotter extends JFrame implements ChartMouseListener {
 
 	private final double SW = IJ.getScreenSize().getWidth();
 	private final double SH = IJ.getScreenSize().getHeight();
@@ -141,7 +141,11 @@ class Plotter extends JFrame implements Runnable, ChartMouseListener {
 		verticalMarkers = new ArrayList<>();
 
 		chartsTabbedPane = new JTabbedPane();
+		this.getContentPane().add(chartsTabbedPane, BorderLayout.CENTER);
+		this.setVisible(true);
 	}
+
+	
 
 	/**
 	 * Profile data from Roi, ready for fitting (null if not possible)
@@ -340,6 +344,11 @@ class Plotter extends JFrame implements Runnable, ChartMouseListener {
 		thePlot.getRangeAxis().setUpperBound(max);
 	}
 
+	public void updatePlot(Roi r) {
+		int n = Integer.parseInt(r.getName().substring((5)));
+		updatePlot(n);
+	}
+
 	public void updatePlot(final int ln) {
 		Color plotBGColor = plotSelColor;
 		Color vMarkerColor = vMarkerRegColor;
@@ -428,21 +437,21 @@ class Plotter extends JFrame implements Runnable, ChartMouseListener {
 							if (k == DataSeries.PROFILE) {
 								renderer.setSeriesPaint(seriesIdx, profileColor);
 								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Lane " + ln + " Profile");
+								final LegendItem li = new LegendItem("Profile");
 								li.setFillPaint(d.getColor());
 								legendItems.add(li);
 							}
 							if (k == DataSeries.BACKGROUND) {
 								renderer.setSeriesPaint(seriesIdx, bgColor);
 								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Background Polynomial");
+								final LegendItem li = new LegendItem("Background");
 								li.setFillPaint(d.getColor());
 								legendItems.add(li);
 							}
 							if (k == DataSeries.GAUSS_BG) {
 								renderer.setSeriesPaint(seriesIdx, gaussColor);
 								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Gaussian Peaks");
+								final LegendItem li = new LegendItem("Peaks");
 								if (!legendItems.contains(li)) {
 									li.setFillPaint(d.getColor());
 									legendItems.add(li);
@@ -451,7 +460,7 @@ class Plotter extends JFrame implements Runnable, ChartMouseListener {
 							if (k == DataSeries.FITTED) {
 								renderer.setSeriesPaint(seriesIdx, fittedColor);
 								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Fitted Curve");
+								final LegendItem li = new LegendItem("Fit");
 								li.setFillPaint(d.getColor());
 								legendItems.add(li);
 							}
@@ -512,18 +521,6 @@ class Plotter extends JFrame implements Runnable, ChartMouseListener {
 		}
 		if (selected == MainDialog.noLaneSelected) chartsTabbedPane.setSelectedIndex(0);
 		else chartsTabbedPane.setSelectedIndex(selected / (rows * cols) - 1);
-	}
-
-	public void initialize(ArrayList<Roi> rois) {
-		for (final Roi r : rois) {
-			int ln = Integer.parseInt(r.getName().substring(5));
-			updateProfile(r);
-			updatePlot(ln);
-		}
-		reloadTabs();
-
-		this.getContentPane().add(chartsTabbedPane, BorderLayout.CENTER);
-		this.setVisible(true);
 	}
 
 	public void resetData() {
@@ -632,11 +629,6 @@ class Plotter extends JFrame implements Runnable, ChartMouseListener {
 		}
 	}
 
-	@Override
-	public void run() {
-		// TODO Auto-generated method stub
-		
-	}
 }
 
 class VerticalMarker extends ValueMarker {
@@ -684,10 +676,10 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 
 	// Possible Types
 	final static int PROFILE = 0;
-	final static int BACKGROUND = 1;
 	final static int GAUSS_BG = 2;
-	final static int FITTED = 400;
-	final static int CUSTOMPEAKS = 401;
+	final static int BACKGROUND = 400;
+	final static int FITTED = 401;
+	final static int CUSTOMPEAKS = 402;
 
 	public DataSeries(final String name, final int lane, final int type,
 		final RealVector x, final RealVector y, final Color color)
