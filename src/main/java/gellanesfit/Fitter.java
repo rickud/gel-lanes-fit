@@ -78,7 +78,7 @@ class Fitter {
 	private double tolPK;
 	private double sdDrift;
 	private double normDrift;
-	private double polyConcavity;
+	private double polyDerivative;
 	private int fitMode = bandMode;
 	private int ladderLane = MainDialog.noLadderLane;
 	private double[] ladder; // MW, Dalton
@@ -202,10 +202,8 @@ class Fitter {
 
 	private double[] interpolateDisplacement(final double[] y) {
 		final WeightedObservedPoints obs = new WeightedObservedPoints();
-		final double[] logs = new double[y.length];
-		final double distLogs[] = new double[fragmentDistribution.length];
+		final double[] distLogs = new double[fragmentDistribution.length];
 		for (int l = 0; l < y.length; l++) {
-			logs[l] = Math.log10(ladder[l]);
 			obs.add(Math.log10(ladder[l]), y[l]);
 		}
 		// First-degree polynomial fitter (line).
@@ -344,25 +342,24 @@ class Fitter {
 		return area;
 	}
 
-	public List<DataSeries> doFit() {
+	public List<DataSeries> doFit(List<Integer> lanes) {
 		int progress = 1;
-		final ArrayList<DataSeries> out = new ArrayList<>();
-		final StopWatch sw = new StopWatch();
-		sw.start();
-		List<DataSeries> data = new ArrayList<>();
-		if (fitMode == bandMode) {
-			data = inputData;
-		}	else if (fitMode == fragmentMode) {
+		ArrayList<DataSeries> in = new ArrayList<>();
+		for (int i : lanes) {
 			for (DataSeries d : inputData) {
-				if (d.getLane() != ladderLane) data.add(d);
+				if (d.getLane() == i) in.add(d);
 			}
 		}
-		data.parallelStream().forEach((d) -> {
+		ArrayList<DataSeries> out = new ArrayList<>();
+		final StopWatch sw = new StopWatch();
+		sw.start();
+		in.parallelStream().forEach((d) -> {
 			out.addAll(doFit(d.getLane()));
+			
 		});
 		String t = String.format("Time elapsed: %1$.1f s", sw.getTime()/1000.0);
 		log.info(t);
-		statusServ.showProgress(++progress, data.size());
+		statusServ.showProgress(++progress, in.size());
 		return out;
 	}
 
@@ -378,9 +375,6 @@ class Fitter {
 
 	private List<DataSeries> doFit(final DataSeries in) {
 		final int lane = in.getLane();
-		
-		int oldFitMode = fitMode;
-		if (lane == ladderLane) fitMode = Fitter.bandMode;
 		
 		final RealVector xvals = in.getX();
 		final RealVector yvals = in.getY();
@@ -399,7 +393,7 @@ class Fitter {
 		        degBG, tolpk);
 
 		final double[] firstGuess = doGuess(lane, pg).toArray();
-		final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(fitMode, degBG, polyConcavity, tolpk, normDrift, sdDrift)
+		final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(fitMode, degBG, polyDerivative, tolpk, normDrift, sdDrift)
 		        .withStartPoint(firstGuess).getProblem(obs.toList());
 
 		final LeastSquaresOptimizer.Optimum optimum = new LevenbergMarquardtOptimizer()
@@ -445,7 +439,6 @@ class Fitter {
 		// Print RMS to console
 		final String outStr = String.format("Lane " + lane + ", RMS: %1$.2f; ", optimum.getRMS());
 		log.info(outStr);
-		fitMode = oldFitMode;
 		return output;
 	}
 
@@ -549,6 +542,10 @@ class Fitter {
 		this.fitMode = fitMode;
 	}
 
+	public void setLadder(final RealVector ladder) {
+		this.ladder = ladder.toArray();
+	}
+
 	public void setReferenceLane(final int ladderLane) {
 		this.ladderLane = ladderLane;
 	}
@@ -557,8 +554,8 @@ class Fitter {
 		this.fragmentDistribution = fragmentDistribution;
 	}
 
-	public void setPolyConcavity(final double polyConcavity) {
-		this.polyConcavity = polyConcavity;
+	public void setPolyDerivative(final double polyDerivative) {
+		this.polyDerivative = polyDerivative;
 	}
 	
 	public void setTolPK(final double tolPK) {
@@ -571,10 +568,6 @@ class Fitter {
 
 	public void setSDDrift(double sdDrift) {
 		this.sdDrift = sdDrift;
-	}
-
-	public void setLadder(final RealVector ladder) {
-		this.ladder = ladder.toArray();
 	}
 }
 
