@@ -77,16 +77,14 @@ public class GelLanesFit implements Command {
 
 		imp = IJ.getImage();
 
-		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
-			"."));
+		final String impName = imp.getTitle()
+				.substring(0, imp.getTitle().indexOf("."));
 		about();
 		final String title = "[" + version + "] Gel Lanes Fit - " + imp.getTitle();
 
-		final MainDialog md = new MainDialog(context, title, imp, prefs);
 		final Fitter fitter = new Fitter(context, impName);
 		final Plotter plotter = new Plotter(context, imp);
-		md.setPlotter(plotter);
-		md.setFitter(fitter);
+		final MainDialog md = new MainDialog(context, title, imp, prefs, plotter, fitter);
 
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
