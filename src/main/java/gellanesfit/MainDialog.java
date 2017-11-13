@@ -190,13 +190,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private JLabel labelPolyDerivative;
 	private JLabel labelTolPK;
 	private JLabel labelNormDrift;
-	private JLabel labelSDDrift;
+	private JLabel labelAreaDrift;
 
 	private JSpinner textDegBG;
 	private JSpinner textPolyDerivative;
 	private JSpinner textTolPK;
 	private JSpinner textNormDrift;
-	private JSpinner textSDDrift;
+	private JSpinner textAreaDrift;
 
 	private JPanel buttonPanelFitType;
 	private JRadioButton buttonBands;
@@ -326,7 +326,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		labelPolyDerivative = new JLabel("Max Polynomial Derivative");
 		labelTolPK = new JLabel("Peak Tolerance");
 		labelNormDrift = new JLabel("Norm Drift");
-		labelSDDrift = new JLabel("SD Drift");
+		labelAreaDrift = new JLabel("Area Drift");
 		
 		textDegBG = new JSpinner(new SpinnerNumberModel(degBG, -1, 15, 1));
 		textDegBG.setBorder(BorderFactory.createCompoundBorder(
@@ -348,10 +348,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			textNormDrift.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textNormDrift.getEditor()).getTextField().setColumns(textWidth);
 		
-		textSDDrift = new JSpinner(new SpinnerNumberModel(sdDrift, 0.0, 20.0, 0.01));
-		textSDDrift.setBorder(BorderFactory.createCompoundBorder(
-			textSDDrift.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
-		((JSpinner.DefaultEditor) textSDDrift.getEditor()).getTextField().setColumns(textWidth);
+		textAreaDrift = new JSpinner(new SpinnerNumberModel(sdDrift, 0.0, 20.0, 0.01));
+		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(
+			textAreaDrift.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
+		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField().setColumns(textWidth);
 		
 		chkBoxBands = new JCheckBox("Show Bands");
 		
@@ -395,7 +395,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		c1.gridx = 0; c1.gridy = 3; c1.weightx = 0.1;
 		settingsPanel.add(labelNormDrift, c1);
 		c1.gridx = 0; c1.gridy = 4; c1.weightx = 0.1;
-		settingsPanel.add(labelSDDrift, c1);
+		settingsPanel.add(labelAreaDrift, c1);
 		
 		c1.fill = GridBagConstraints.NONE;
 		c1.gridx = 1; c1.gridy = 0; c1.weightx = 0.0;
@@ -405,9 +405,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		c1.gridx = 1; c1.gridy = 2; c1.weightx = 0.0;
 		settingsPanel.add(textTolPK, c1);
 		c1.gridx = 1; c1.gridy = 3; c1.weightx = 0.0;
-		settingsPanel.add(textNormDrift, c1);
+		//settingsPanel.add(textNormDrift, c1);
 		c1.gridx = 1; c1.gridy = 4; c1.weightx = 0.0;
-		settingsPanel.add(textSDDrift, c1);
+		settingsPanel.add(textAreaDrift, c1);
 			
 		c1.gridx = 2; c1.gridy = 0; 
 		c1.gridheight = 4;
@@ -498,7 +498,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		textDegBG.addChangeListener(this);
 		textPolyDerivative.addChangeListener(this);
 		textTolPK.addChangeListener(this);
-		textSDDrift.addChangeListener(this);
+		textAreaDrift.addChangeListener(this);
 		textNormDrift.addChangeListener(this);
 
 		chkBoxBands.addActionListener(this);
@@ -985,9 +985,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	}
 	
 	private void updateLadderType() {
+		if (ladder == null) return;
 		cmbBoxLadderType.removeAllItems();
 		for (int i = 0; i < ladderStr.length; i++) {
-			if (ladder == null) return;
 			String s = "";
 			if (i == ladder.getType()) {
 				s = ladderStr[i] + " [" + ladder.getStrings()[ladder.getRange()[0]] + " - "
@@ -1000,8 +1000,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		
 		cmbBoxLadderType.setSelectedIndex(ladder.getType());
 		int[] r = ladder.getRange();
-		RealVector lw = ladder.getMolecularWeights().getSubVector(r[0], r[1] - r[0] + 1);
-		fitter.setLadder(lw);
+		RealVector ladderweights = ladder.getMolecularWeights().getSubVector(r[0], r[1] - r[0] + 1);
+		fitter.setLadder(ladderweights);
 		saveState();
 	}
 	
@@ -1131,8 +1131,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			normDrift = (double) textNormDrift.getModel().getValue();
 			fitter.setNormDrift(normDrift);
 			prefs.putDouble(NORMDRIFT, normDrift);
-		} else if (o == textSDDrift) {
-			sdDrift = (double) textSDDrift.getModel().getValue();
+		} else if (o == textAreaDrift) {
+			sdDrift = (double) textAreaDrift.getModel().getValue();
 			fitter.setSDDrift(sdDrift);
 			prefs.putDouble(SDDRIFT, sdDrift);
 		}
@@ -1385,8 +1385,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		}
 		
 		if (e.getSource().equals(cmbBoxLadderType)) {
-			if (cmbBoxLadderType.getSelectedIndex() != 0) {
-				int type =cmbBoxLadderType.getSelectedIndex();
+			int type = cmbBoxLadderType.getSelectedIndex();
+			if (type != 0) {
+				if (ladder == null) 
+					ladder = new Ladder(type);			
 				if (ladder.getType() != type)
 					ladder.setType(type);
 				ladder.setRange(askLadderRange());

@@ -539,7 +539,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				norm0 = norm0.add(mean0.map(f).mapSubtract(minY)).mapMultiply(0.5);
 			}
 			
-			minN = 2000.0;
+			minN = 250.0;
 			minSD = 0.5; 
 			if (fitMode == bandMode) 
 				maxSD = 4.0 * maxMeanDiff / sd2FWHM;
@@ -549,8 +549,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			else 
 				maxSD = 0.0;
 			
-			System.out.println("" + deg + "; " + polyDerivative + "; " 
-			           + normDrift + "; " + areaDrift + "; " + maxSD + "; " + maxMeanDiff);
+			System.out.println("" + deg + "; " + polyDerivative + "; " + areaDrift + "; " + maxSD + "; " + maxMeanDiff);
 
 		}
 
@@ -643,7 +642,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					mean.setEntry(i, mean0.getEntry(i) + sign * maxMeanDiff);
 				
 				// Limit Standard Deviation
-				if (sd.getEntry(i) > 1.5*sd0.getEntry(i)) sd.setEntry(i, 1.5*sd0.getEntry(i));
+				if (sd.getEntry(i) > 2.0*sd0.getEntry(i)) sd.setEntry(i, 2.0*sd0.getEntry(i));
 				
 				// Lower bound of 0 for each parameter
 				if (norm.getEntry(i) <= minN) norm.setEntry(i, minN);
