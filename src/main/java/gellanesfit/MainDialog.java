@@ -21,6 +21,7 @@ package gellanesfit;
 import java.awt.BorderLayout;
 import java.awt.Checkbox;
 import java.awt.Color;
+import java.awt.Dialog.ModalityType;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -37,9 +38,11 @@ import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.awt.event.WindowListener;
 import java.io.BufferedReader;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
@@ -50,6 +53,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.ConcurrentModificationException;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Vector;
@@ -75,6 +79,8 @@ import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
+import net.imagej.ImageJ;
+
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 import org.jfree.data.general.SeriesChangeEvent;
@@ -89,11 +95,15 @@ import org.scijava.plugin.Parameter;
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.GenericDialog;
+import ij.gui.HTMLDialog;
 import ij.gui.ImageCanvas;
 import ij.gui.Line;
+import ij.gui.MessageDialog;
+import ij.gui.NonBlockingGenericDialog;
 import ij.gui.Overlay;
 import ij.gui.Roi;
 import ij.gui.TextRoi;
+import ij.io.FileSaver;
 
 class MainDialog extends JFrame implements ActionListener, ChangeListener, SeriesChangeListener,
         MouseMotionListener, MouseListener, MouseWheelListener, WindowListener {
@@ -111,8 +121,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private static final String DEGBG = "degBG";
 	private static final String POLYDERIVATIVE = "polyDerivative";
 	private static final String TOLPK = "tolPK";
-	private static final String NORMDRIFT = "normDrift";
-	private static final String SDDRIFT = "sdDrift";
+	private static final String AREADRIFT = "areaDrift";
 
 	private static final String NLANES = "nLanes";
 	private static final String LADDERLANEINT = "ladderLaneInt";
@@ -122,6 +131,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private static final String LHOFF = "lhoff";
 	private static final String LVOFF = "lvoff";
 	private static final String AUTO = "auto";
+	private static final String OLDIMPTITLE = "oldImpTitle";
 
 	private final double SW = IJ.getScreenSize().getWidth();
 	private final double SH = IJ.getScreenSize().getHeight();
@@ -139,7 +149,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private boolean auto; // AUTO ROI mode; all lanes same size
 	private boolean selectionUpdate = false; // active updating is off
 	private boolean fitDone = false; // Keep track of whether fit data exists
-
+	
+	private String impTitle;
+	private String oldImpTitle; // Stored in Prefs
+	private String savePath;
 	private String roiSelected = "none";
 	private String roiPreviouslySelected = "none";
 	private String ladderLaneStr = "none";
@@ -162,8 +175,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private int degBG; // Order of Background Polynomial
 	private double polyDerivative;
 	private double tolPK; // Peak detection tolerance as % of range
-	private double normDrift;
-	private double sdDrift;
+	private double areaDrift;
 	
 	private JPanel buttonPanelAutoManual;
 	private JRadioButton buttonAuto;
@@ -189,13 +201,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private JLabel labelDegBG;
 	private JLabel labelPolyDerivative;
 	private JLabel labelTolPK;
-	private JLabel labelNormDrift;
 	private JLabel labelAreaDrift;
 
 	private JSpinner textDegBG;
 	private JSpinner textPolyDerivative;
 	private JSpinner textTolPK;
-	private JSpinner textNormDrift;
 	private JSpinner textAreaDrift;
 
 	private JPanel buttonPanelFitType;
@@ -219,10 +229,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		this.prefs = prefs;
 		this.fitter = fitter;
 		this.plotter = plotter;
+		this.imp = imp;
+		this.impTitle = imp.getTitle()
+				.substring(0, imp.getTitle().indexOf("."));
+		String sep = File.separator;
+		savePath = "gel-lanes-fit" + sep + "data"
+							+ sep + imp.getShortTitle() + sep;
 		frame = new JFrame(string);
 		rois = new ArrayList<>();
 		ladder = null;
-		this.imp = imp;
+		
 		setupMainDialog();
 		redoProfilePlots();
 		frame.setLocation((int) SW / 16, (int) SH / 8);
@@ -234,25 +250,47 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	private void setupMainDialog() {
 		int textWidth = 5;
-		
+		iw = imp.getWidth();
+		ih = imp.getHeight();
 		// Default lane size/offset
-		auto = prefs.getBoolean(AUTO, true);
+		oldImpTitle = prefs.get(OLDIMPTITLE, "None");
 		degBG = prefs.getInt(DEGBG, 2);
 		polyDerivative = prefs.getDouble(POLYDERIVATIVE, 10.0);
 		tolPK = prefs.getDouble(TOLPK, 0.1);
-		normDrift = prefs.getDouble(NORMDRIFT, 0.1);
-		sdDrift = prefs.getDouble(SDDRIFT, 0.1);
-		nLanes = prefs.getInt(NLANES, 4);
-		ladderLaneInt = prefs.getInt(LADDERLANEINT, noLadderLane);
-		iw = imp.getWidth();
-		ih = imp.getHeight();
-		lw = prefs.getInt(LW, (int) Math.round(0.8 * iw / nLanes));
-		lh = prefs.getInt(LH, (int) Math.round(ih * 0.8));
-		lsp = prefs.getInt(LSP, Math.round((iw - lw * nLanes) / (nLanes + 1)));
-		lhoff = prefs.getInt(LHOFF, lsp / 2);
-		lvoff = prefs.getInt(LVOFF, (ih - lh) / 2);
+		areaDrift = prefs.getDouble(AREADRIFT, 0.1);
 		
+		if (oldImpTitle.equals(impTitle)) {
+			auto = prefs.getBoolean(AUTO, true);			
+			nLanes = prefs.getInt(NLANES, 4);
+			ladderLaneInt = prefs.getInt(LADDERLANEINT, noLadderLane);
 
+			lw = prefs.getInt(LW, (int) Math.round(0.8 * iw / nLanes));
+			lh = prefs.getInt(LH, (int) Math.round(ih * 0.8));
+			lsp = prefs.getInt(LSP, Math.round((iw - lw * nLanes) / (nLanes + 1)));
+			lhoff = prefs.getInt(LHOFF, lsp / 2);
+			lvoff = prefs.getInt(LVOFF, (ih - lh) / 2);
+		} else {
+			auto = true;
+			nLanes = 4;
+			ladderLaneInt = noLadderLane;
+			
+			lw = (int) Math.round(0.8 * iw / nLanes);
+			lh = (int) Math.round(ih * 0.8);
+			lsp = Math.round((iw - lw * nLanes) / (nLanes + 1));
+			lhoff = lsp / 2;
+			lvoff = (ih - lh) / 2;
+			
+			// Create/Update prefs node keys
+			prefs.putBoolean(AUTO, auto);
+			prefs.putInt(NLANES, nLanes);
+			prefs.putInt(LADDERLANEINT, ladderLaneInt);
+			prefs.put(OLDIMPTITLE, impTitle);
+			prefs.putInt(LW, lw);
+			prefs.putInt(LH, lh);
+			prefs.putInt(LSP, lsp);
+			prefs.putInt(LHOFF, lhoff);
+			prefs.putInt(LVOFF, lvoff);
+		}
 		
 		buttonPanelAutoManual = new JPanel();
 		buttonAuto = new JRadioButton("Automatic Rectangle Selection");
@@ -294,17 +332,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		sliderPanel.add(lanesPanel);
 		
 		sliderPanel.setLayout(new BoxLayout(sliderPanel, BoxLayout.Y_AXIS));
-		sliderW = makeTitledSlider("Width ( " + lw + " px )", Color.black, 1, iw / nLanes, lw);
+		sliderW = makeTitledSlider("Width ( " + lw + " px )", Color.black, 10, iw, lw);
 		sliderPanel.add(sliderW);
-		sliderH = makeTitledSlider("Height ( " + lh + " px )", Color.black, ih / 10, ih, lh);
+		sliderH = makeTitledSlider("Height ( " + lh + " px )", Color.black, 10, ih, lh);
 		sliderPanel.add(sliderH);
-		sliderSp = makeTitledSlider("Space ( " + lsp + " px )", Color.black, 1, iw / nLanes, lsp);
+		sliderSp = makeTitledSlider("Space ( " + lsp + " px )", Color.black, 1, iw, lsp);
 		sliderPanel.add(sliderSp);
 		sliderHOff = makeTitledSlider("Horizontal Offset ( " + lhoff + " px )", Color.black, 0,
-		        (int) Math.round(iw * 0.9), lhoff);
+		        iw - 1, lhoff);
 		sliderPanel.add(sliderHOff);
 		sliderVOff = makeTitledSlider("Vertical Offset ( " + lvoff + " px )", Color.black, 0,
-		        (int) Math.round(ih * 0.9), lvoff);
+		        ih - 1, lvoff);
 		sliderPanel.add(sliderVOff);
 		
 		buttonPanel = new JPanel();
@@ -325,7 +363,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		labelDegBG = new JLabel("Polynomial Degree");
 		labelPolyDerivative = new JLabel("Max Polynomial Derivative");
 		labelTolPK = new JLabel("Peak Tolerance");
-		labelNormDrift = new JLabel("Norm Drift");
+
 		labelAreaDrift = new JLabel("Area Drift");
 		
 		textDegBG = new JSpinner(new SpinnerNumberModel(degBG, -1, 15, 1));
@@ -343,12 +381,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			textTolPK.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textTolPK.getEditor()).getTextField().setColumns(textWidth);
 		
-		textNormDrift = new JSpinner(new SpinnerNumberModel(normDrift, 0.0, 20.0, 0.01));
-		textNormDrift.setBorder(BorderFactory.createCompoundBorder(
-			textNormDrift.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
-		((JSpinner.DefaultEditor) textNormDrift.getEditor()).getTextField().setColumns(textWidth);
-		
-		textAreaDrift = new JSpinner(new SpinnerNumberModel(sdDrift, 0.0, 20.0, 0.01));
+		textAreaDrift = new JSpinner(new SpinnerNumberModel(areaDrift, 0.0, 20.0, 0.01));
 		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(
 			textAreaDrift.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField().setColumns(textWidth);
@@ -393,8 +426,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		c1.gridx = 0; c1.gridy = 2; c1.weightx = 0.1;
 		settingsPanel.add(labelTolPK, c1);
 		c1.gridx = 0; c1.gridy = 3; c1.weightx = 0.1;
-		settingsPanel.add(labelNormDrift, c1);
-		c1.gridx = 0; c1.gridy = 4; c1.weightx = 0.1;
 		settingsPanel.add(labelAreaDrift, c1);
 		
 		c1.fill = GridBagConstraints.NONE;
@@ -405,8 +436,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		c1.gridx = 1; c1.gridy = 2; c1.weightx = 0.0;
 		settingsPanel.add(textTolPK, c1);
 		c1.gridx = 1; c1.gridy = 3; c1.weightx = 0.0;
-		//settingsPanel.add(textNormDrift, c1);
-		c1.gridx = 1; c1.gridy = 4; c1.weightx = 0.0;
 		settingsPanel.add(textAreaDrift, c1);
 			
 		c1.gridx = 2; c1.gridy = 0; 
@@ -483,8 +512,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		fitter.setDegBG(degBG);
 		fitter.setPolyDerivative(polyDerivative);
 		fitter.setTolPK(tolPK);
-		fitter.setNormDrift(normDrift);
-		fitter.setSDDrift(sdDrift);
+		fitter.setAreaDrift(areaDrift);
+
 		
 		// Add this class to all components as listener here for easy reference
 		imp.getCanvas().addMouseMotionListener(this);
@@ -499,7 +528,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		textPolyDerivative.addChangeListener(this);
 		textTolPK.addChangeListener(this);
 		textAreaDrift.addChangeListener(this);
-		textNormDrift.addChangeListener(this);
 
 		chkBoxBands.addActionListener(this);
 		buttonBands.addActionListener(this);
@@ -824,22 +852,25 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		buttonResetCustomPeaks.setEnabled(false);
 		plotter.resetData();
 		plotter.setPlotMode(Plotter.regMode);
-		//rois.parallelStream().forEach((r) -> {		
-		for (final Roi r : rois) {
-			final int ln = Integer.parseInt(r.getName().substring(5));
-			final Rectangle rect = r.getBounds();
-			// Do not ROIs that are outside the image
-			if (rect.getMinX() < 0.95 * iw && rect.getMinY() < 0.95 * ih) {
-				plotter.updateProfile(r);
-				final RealVector empty = new ArrayRealVector();
-				final DataSeries d = new DataSeries("Custom Points", ln, DataSeries.CUSTOMPEAKS,
-				        empty, empty, Plotter.vMarkerEditPeakColor);
-				d.addChangeListener(this);
-				plotter.addDataSeries(d);
-				plotter.updatePlot(r);
-				plotter.addDataSeries(d);
+		//rois.parallelStream().forEach((r) -> {
+		try {
+			for (final Roi r : rois) {
+				final int ln = Integer.parseInt(r.getName().substring(5));
+				final Rectangle rect = r.getBounds();
+				// Do not ROIs that are outside the image
+				if (rect.getMinX() < 0.95 * iw && rect.getMinY() < 0.95 * ih) {
+					plotter.updateProfile(r);
+					final RealVector empty = new ArrayRealVector();
+					final DataSeries d = new DataSeries("Custom Points", ln, DataSeries.CUSTOMPEAKS,
+					        empty, empty, Plotter.vMarkerEditPeakColor);
+					d.addChangeListener(this);
+					plotter.addDataSeries(d);
+					plotter.updatePlot(r);
+				}
+			//});
 			}
-		//});
+		} catch (ConcurrentModificationException e) {
+			log.info(rois.size());
 		}
 		plotter.reloadTabs();
 	}
@@ -898,6 +929,18 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			d.clear();
 		}
 		d.addChangeListener(this);
+	}
+
+	private void displayLog(String savePath) {
+		String logOutput = fitter.getSummary();
+		new HTMLDialog("LOG", logOutput, false);
+		String file = impTitle + "_log.html";
+		try (BufferedWriter out = new BufferedWriter(new FileWriter(savePath + file))) {
+			out.write(logOutput);
+			out.close();
+		} catch (final IOException e) {
+			log.info("Exception", e);
+		}
 	}
 
 	private boolean loadState() {
@@ -1071,8 +1114,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 										sliderHOff, sliderVOff, textNLanes));
 		
 		if (fitDisruptors.contains(o)) {
-			if (fitDone && !askUser(warningFit))
+			if (fitDone && !askUser(warningFit)) {
+				textNLanes.setValue(nLanes);
 				return;
+			}
 		}
 		// ROI SLIDERS
 		if (o == sliderW) {
@@ -1103,18 +1148,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		} 
 		// SPINNERS
 		if (o == textNLanes) {
-			if (fitDone && !askUser(warningFit)) {
-				textNLanes.setValue(nLanes);
-				return;
-			}
 			nLanes = (int) textNLanes.getModel().getValue();
 			prefs.putInt(NLANES, nLanes);
-			resetAutoROIs();
-			reDrawROIs(imp, "none");
-			updateLadderLane();
-			redoProfilePlots();
-			fitter.resetAllFitter();
-			fitter.setInputData(plotter.getProfiles());
+			sliderUpdate();
 		} else if (o == textDegBG) {
 			degBG = (int) textDegBG.getModel().getValue();
 			fitter.setDegBG(degBG);
@@ -1127,23 +1163,20 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			tolPK = (double) textTolPK.getModel().getValue();
 			fitter.setTolPK(tolPK);
 			prefs.putDouble(TOLPK, tolPK);
-		} else if (o == textNormDrift) {
-			normDrift = (double) textNormDrift.getModel().getValue();
-			fitter.setNormDrift(normDrift);
-			prefs.putDouble(NORMDRIFT, normDrift);
 		} else if (o == textAreaDrift) {
-			sdDrift = (double) textAreaDrift.getModel().getValue();
-			fitter.setSDDrift(sdDrift);
-			prefs.putDouble(SDDRIFT, sdDrift);
+			areaDrift = (double) textAreaDrift.getModel().getValue();
+			fitter.setAreaDrift(areaDrift);
+			prefs.putDouble(AREADRIFT, areaDrift);
 		}
 	}
 	
 	void sliderUpdate() {
 		resetAutoROIs();
-		reDrawROIs(imp, "none");
 		redoProfilePlots();
+		reDrawROIs(imp, "none");
 		plotter.setReferencePlot(MainDialog.noLadderLane);
 		fitter.resetAllFitter();
+		if (plotter.getProfiles().size() < 1) return;
 		fitter.setInputData(plotter.getProfiles());
 	}
 
@@ -1232,14 +1265,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			chkBoxBands.setSelected(true);
 			buttonEditPeaks.setEnabled(true);
 			buttonResetCustomPeaks.setEnabled(true);
-			buttonEditPeaks.setSelected(false);
+			if (!buttonEditPeaks.isSelected())
+				buttonEditPeaks.doClick();
 			buttonResetCustomPeaks.setSelected(false);
 			
 			// Start new fit, Ladder first
 			List<DataSeries> fitted = new ArrayList<>();
 			fitter.setFitMode(Fitter.bandMode);
 			fitted = fitter.doFit(ladderLaneInt);
-			fitter.updateResultsTable();
+			fitter.updateResultsTable(savePath);
 			
 			// Update Reference plot with peaks and vertical markers
 			plotter.addDataSeries(fitted);
@@ -1256,7 +1290,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 				String message = "The number of peaks detected does not match the ladder range";
 				message = message + "\n Peaks detected: " + l1;
 				message = message + "\n Bands in range: " + l2;
-				askUser(message);
+				new MessageDialog(frame, "WARNING", message);
 				return;
 			}
 			
@@ -1270,9 +1304,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			if (buttonBands.isSelected())
 				fitter.setFitMode(Fitter.bandMode);
 			else if (buttonContinuum.isSelected()) {
-				fitter.setFitMode(Fitter.fragmentMode);
+				fitter.setFitMode(Fitter.continuumMode);
 				if (cmbBoxDist.getSelectedItem().equals("Select Fragment Distribution")) {
-					askUser("Fragment distribution not selected");
+					new MessageDialog(frame, "WARNING!",
+						"Fragment distribution not selected");
 					return;
 				}
 			}
@@ -1282,7 +1317,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 				if (i != ladderLaneInt) otherLanes.add(i);
 			}
 			fitted.addAll(fitter.doFit(otherLanes));
-			fitter.updateResultsTable();
+			fitter.updateResultsTable(savePath);
+			
 			fitDone = true;
 			plotter.removeFit();
 			plotter.addDataSeries(fitted);
@@ -1290,6 +1326,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 				plotter.updatePlot(i);
 			}
 			reDrawROIs(imp, "none"); // adds the bands to the ROIs
+			
+			plotter.savePlots(savePath);
+			displayLog(savePath);
+			new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
 		}
 		
 		if (e.getSource().equals(buttonAuto)) {
@@ -1333,7 +1373,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			cmbBoxDist.setEnabled(false);
 		}
 		else if (e.getSource().equals(buttonContinuum)) {
-			fitter.setFitMode(Fitter.fragmentMode);
+			fitter.setFitMode(Fitter.continuumMode);
 			cmbBoxDist.setEnabled(true);
 		}
 		
@@ -1586,16 +1626,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 }
 
 class Ladder implements Serializable {
-	private static final String[] hilo =  { "10 kbp",   "8 kbp",   "6 kbp",  "4 kbp",  "3 kbp", "2 kbp",
-                                    "1.55 kbp", "1.4 kbp", "1 kbp",  "750 bp", "500 bp", 
-                                    "400 bp",   "300 bp",  "200 bp", "100 bp", "50 bp" };
-	private static final String[] bp100 = { "1 kbp", "900 bp", "800 bp", "700 bp", "600 bp", "500 bp",
-    "400 bp", "300 bp", "200 bp", "100 bp" };
+	private static final String[] hilo =  { "10 kbp",  "8 kbp",   "6 kbp",  "4 kbp",  "3 kbp", "2 kbp",
+                                          "1.55 kbp", "1.4 kbp", "1 kbp",  "750 bp", "500 bp", 
+                                          "400 bp",   "300 bp",  "200 bp", "100 bp", "50 bp" };
+	private static final String[] bp100 = { "1.5 kbp", "1.2 kbp", "1 kbp", "900 bp", "800 bp", 
+                                          "700 bp", "600 bp", "500 bp", "400 bp", "300 bp",
+                                          "200 bp", "100 bp" };
 	private static final RealVector hilo_bp =  new ArrayRealVector(new double[] 
                                         { 10000, 8000, 6000, 4000, 3000, 2000, 1550, 1400, 1000, 
                                             750,  500,  400,  300,  200,  100,   50 });
 	private static final RealVector bp100_bp = new ArrayRealVector(new double[]
-                                        { 1000, 900, 800, 700, 600, 500, 400, 300, 200, 100});
+                                        {1517, 1200, 1000, 900, 800, 700, 600, 500, 400, 300, 200, 100});
 	private static final int HILO = 1;
 	private static final int BP100 = 2;
 	
