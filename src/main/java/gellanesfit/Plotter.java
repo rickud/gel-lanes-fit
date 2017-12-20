@@ -22,6 +22,8 @@ import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.GridBagConstraints;
+import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Paint;
 import java.awt.Shape;
@@ -30,6 +32,8 @@ import java.awt.event.WindowEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
+import java.io.File;
+import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -37,6 +41,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.WindowConstants;
@@ -53,6 +58,7 @@ import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartMouseEvent;
 import org.jfree.chart.ChartMouseListener;
 import org.jfree.chart.ChartPanel;
+import org.jfree.chart.ChartUtilities;
 import org.jfree.chart.JFreeChart;
 import org.jfree.chart.LegendItem;
 import org.jfree.chart.LegendItemCollection;
@@ -413,6 +419,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 
 				// Plot the data series
 				final LegendItems legendItems = new LegendItems();
+				double min = Integer.MAX_VALUE;
+				double max = Integer.MIN_VALUE;
 				for (final DataSeries d : plotsData) {
 					if (d.getLane() == ln) {
 						if (d.getItemCount() > 0) {
@@ -474,10 +482,14 @@ class Plotter extends JFrame implements ChartMouseListener {
 								li.setFillPaint(d.getColor());
 								legendItems.add(li);
 							}
+							if (d.getMaxY() > max) max = d.getMaxY();
+							if (d.getMaxY() < min) min = d.getMinY();
 						}
 					}
 				}
 				c.getXYPlot().setDataset(dataset);
+				c.getXYPlot().getRangeAxis().setLowerBound(0.95*min);
+				c.getXYPlot().getRangeAxis().setUpperBound(1.1*max);
 				pl.setFixedLegendItems(legendItems);
 				c.getLegend().setPosition(RectangleEdge.RIGHT);
 			}
@@ -500,7 +512,9 @@ class Plotter extends JFrame implements ChartMouseListener {
 	public void reloadTabs() {
 		chartsTabbedPane.removeAll();
 		chartTabs = new ArrayList<>();
+		if (chartPanels.size() == 0) return;
 		final Iterator<ChartPanel> chartIter = chartPanels.iterator();
+		GridBagConstraints c = new GridBagConstraints();
 		int i = 0;
 		while (chartIter.hasNext()) {
 			JPanel p = new JPanel();
@@ -509,14 +523,26 @@ class Plotter extends JFrame implements ChartMouseListener {
 			}
 			else {
 				p.setBorder(new EmptyBorder(5, 5, 5, 5));
-				p.setLayout(new GridLayout(rows, cols));
+//				p.setLayout(new GridLayout(rows, cols));
+				p.setLayout(new GridBagLayout());
+				c.weightx = 0.25; c.weighty = 0.25;
+				c.fill = GridBagConstraints.BOTH;
+				c.ipady = 2; c.ipadx = 2;
 				chartTabs.add(p);
 				final int tab = chartTabs.size() - 1;
 				chartsTabbedPane.addTab("Lanes " + (tab * (rows * cols) + 1) + " - " +
 					(tab * (rows * cols) + 4), p);
 				i = 0;
 			}
-			p.add(chartIter.next());
+
+			c.gridx = i % cols; c.gridy = i/cols;
+			p.add(chartIter.next(), c);
+			i++;
+		}
+		while (i < (rows*cols)) {
+			// Add placeholders for empty plots
+			c.gridx = i % cols; c.gridy = i/cols;
+			chartTabs.get(chartTabs.size() - 1).add(new JPanel(), c);
 			i++;
 		}
 		if (selected == MainDialog.noLaneSelected) chartsTabbedPane.setSelectedIndex(0);
@@ -530,6 +556,23 @@ class Plotter extends JFrame implements ChartMouseListener {
 		removeVerticalMarkers();
 		selected = MainDialog.noLaneSelected;
 	}
+
+	public void savePlots(String savePath) {
+		for (ChartPanel p : chartPanels) {
+			String plotfile =savePath + p.getChart().getTitle().getText() + ".png";
+			try {
+				ChartUtilities.saveChartAsPNG(new File(plotfile),
+																	p.getChart(), 800, 600);
+			}
+			catch (IOException exc) {
+				// TODO Auto-generated catch block
+				exc.printStackTrace();
+			}
+		}
+	}
+	
+
+
 
 	@Override
 	public void chartMouseClicked(final ChartMouseEvent e) {
