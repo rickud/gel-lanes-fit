@@ -18,6 +18,7 @@
 
 package gellanesfit;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Enumeration;
@@ -57,6 +58,7 @@ public class GelLanesFit implements Command {
 	@Parameter
 	private static Context context;
 
+
 	// TODO: private Thread mainWindowThread; // thread for the main window
 	private Thread plotThread; // thread for plotting
 
@@ -65,7 +67,6 @@ public class GelLanesFit implements Command {
 
 	private ImagePlus imp;
 	private String version;
-
 	/**
 	 * Initialization method
 	 */
@@ -77,17 +78,14 @@ public class GelLanesFit implements Command {
 
 		imp = IJ.getImage();
 
-		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
-			"."));
+		final String impName = imp.getTitle()
+				.substring(0, imp.getTitle().indexOf("."));
 		about();
 		final String title = "[" + version + "] Gel Lanes Fit - " + imp.getTitle();
 
-		final MainDialog md = new MainDialog(context, title, imp, prefs);
-		final Fitter fitter = new Fitter(context, impName, md.getDegBG(), md
-			.getTolPK());
-		final Plotter plotter = new Plotter(context, imp, md.getRois());
-		md.setPlotter(plotter);
-		md.setFitter(fitter);
+		final Fitter fitter = new Fitter(context, impName);
+		final Plotter plotter = new Plotter(context, imp);
+		final MainDialog md = new MainDialog(context, title, imp, prefs, plotter, fitter);
 
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
@@ -166,8 +164,57 @@ public class GelLanesFit implements Command {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = new ImageJ();
 		ij.launch(args);
-		final ImagePlus iPlus = new Opener().openImage(
-			"src//main//resources//sample//Destained[1s].tif");
+		String sep = File.separator;
+		String folder = "src" + sep + "main" + sep + "resources"
+									+ sep +"sample" + sep +"Tagment-Test3" + sep 
+									+ "Other Camera" + sep;
+//		String file = "1_top_LM.tif";
+//		String file = "2_top_LM.tif";
+//		String file = "05_top_LM.tif";
+
+//		String file = "1_bottom_LM.tif";
+//		String file = "05_bottom_LM.tif";
+
+//		String file = "1_LM_wo_tray.tif";
+//		String file = "1_LM_wo_tray_2.tif";
+
+//		String file = "05_LM_wo_tray_2.tif";
+
+//		String file = "1_HM.tif";
+//		String file = "1_HM_2.tif";
+//		String file = "1_HM_3.tif";
+//		String file = "05_HM.tif";
+		
+//		String file = "longgel_1s.tif";
+//		String file = "longgel_1_5s.tif";
+
+//		Massa's phone
+//		String file = "IMG_20171122_100940.jpg";
+//		String file = "IMG_20171122_100957.jpg";
+//		String file = "IMG_20171122_101020.jpg";
+//		String file = "IMG_20171122_101059.jpg";
+//		String file = "IMG_20171122_101112.jpg";
+//		String file = "IMG_20171122_101143.jpg";
+//		String file = "IMG_20171122_101151.jpg";
+//		String file = "IMG_20171122_101200.jpg";
+//		String file = "IMG_20171122_101520.jpg";
+//		String file = "IMG_20171122_101527.jpg";
+//		String file = "IMG_20171122_101537.jpg";
+
+//		Other Camera
+//		String file = "LRG_DSC00419.JPEG";
+//		String file = "LRG_DSC00420.JPEG";
+		String file = "LRG_DSC00421.JPEG";
+//		String file = "LRG_DSC00422.JPEG";
+//		String file = "LRG_DSC00423.JPEG";
+//		String file = "LRG_DSC00424.JPEG";
+//		String file = "LRG_DSC00425.JPEG";
+//		String file = "LRG_DSC00426.JPEG";
+//		String file = "LRG_DSC00427.JPEG";
+//		String file = "LRG_DSC00428.JPEG";
+//		String file = "LRG_DSC00429.JPEG";
+		
+		final ImagePlus iPlus = new Opener().openImage(folder + file);
 		iPlus.show();
 		ij.command().run(GelLanesFit.class, true);
 	}

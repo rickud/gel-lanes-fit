@@ -2,7 +2,7 @@
 /.project
 /.classpath
 /target/
-/output/
+/out/
 /src/main/resources/*.java
 /.settings/
 /bin/
