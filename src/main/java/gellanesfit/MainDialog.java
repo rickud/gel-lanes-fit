@@ -71,6 +71,7 @@ import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
+import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
@@ -83,8 +84,18 @@ import net.imagej.ImageJ;
 
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
+import org.jfree.chart.ChartFactory;
+import org.jfree.chart.ChartPanel;
+import org.jfree.chart.JFreeChart;
+import org.jfree.chart.plot.Plot;
+import org.jfree.chart.plot.PlotOrientation;
+import org.jfree.chart.plot.XYPlot;
+import org.jfree.chart.renderer.xy.StandardXYBarPainter;
+import org.jfree.chart.renderer.xy.XYBarRenderer;
 import org.jfree.data.general.SeriesChangeEvent;
 import org.jfree.data.general.SeriesChangeListener;
+import org.jfree.data.statistics.HistogramDataset;
+import org.jfree.data.statistics.HistogramType;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.display.Display;
@@ -933,7 +944,31 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	private void displayLog(String savePath) {
 		String logOutput = fitter.getSummary();
-		new HTMLDialog("LOG", logOutput, false);
+		HTMLDialog logWindow =  new HTMLDialog("LOG", logOutput, false);
+		if (buttonContinuum.isSelected()) { 
+			JTabbedPane distributionsPane = new JTabbedPane();
+			for (int i : getAllLaneNumbers()) {
+				if (i != ladderLaneInt) {
+					String name = String.format("Lane %1$d", i);
+					HistogramDataset hd = new HistogramDataset();
+					hd.setType(HistogramType.RELATIVE_FREQUENCY);
+					double[] values = fitter.getFittedDistribution(i);
+					hd.addSeries(name, values, 20);
+					JFreeChart chart = ChartFactory.createHistogram("", "Length (Base Pairs)", "Frequency", hd,
+						PlotOrientation.VERTICAL, false, false, false);
+					XYPlot plot = chart.getXYPlot();
+					((XYBarRenderer) plot.getRenderer())
+						.setBarPainter(new StandardXYBarPainter());
+					plot.setBackgroundPaint           (Color.white    );
+					plot.setDomainGridlinePaint       (Color.lightGray);
+					plot.setRangeGridlinePaint        (Color.lightGray);
+					plot.getRenderer().setSeriesPaint(0, Color.darkGray );
+					ChartPanel p = new ChartPanel(chart);
+					distributionsPane.addTab(name, p);
+				}
+			}
+			logWindow.getContentPane().add(distributionsPane, BorderLayout.EAST);
+		}
 		String file = impTitle + "_log.html";
 		try (BufferedWriter out = new BufferedWriter(new FileWriter(savePath + file))) {
 			out.write(logOutput);

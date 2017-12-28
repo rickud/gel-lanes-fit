@@ -86,8 +86,11 @@ class Fitter {
 	private List<Peak> allGuessList;
 	private List<Peak> allFittedList;
 	private List<Peak> allCustomList;
+	
+	// Fields used in the summary
 	private RealVector rms;
 	private Array2DRowRealMatrix statMatrix;
+	private List<List<Double>> fittedDistributions;
 	
 	public Fitter(final Context context, final String title ) {
 		context.inject(this);
@@ -137,12 +140,14 @@ class Fitter {
 			}
 			
 			int band = 1;
+			double bpamax = Double.NEGATIVE_INFINITY;
+			double[] scaledCount = new double[guess.size()];
 			for (int p = 0; p < guess.size(); p++) {
 				final double n = fitted.get(p).getNorm();
 				final double m = fitted.get(p).getMean();
 				final double s = fitted.get(p).getSigma();
 				final double a = doIntegrate(d.getX(), n, m, s);
-
+				
 				final double n0 = guess.get(p).getNorm();
 				final double m0 = guess.get(p).getMean();
 				final double s0 = guess.get(p).getSigma();
@@ -163,20 +168,28 @@ class Fitter {
 				rt.addValue(headers[6], String.format("%1$.2f", s * sd2FWHM));
 				rt.addValue(headers[7], String.format("%1$.2f", s0 * sd2FWHM));
 				rt.addValue(headers[8], String.format("%1$.1f", a));
-
+				
 				if (fitMode == continuumMode) {
 					if (lane == ladderLane) { 
 						rt.addValue(headers[9], " - ");
 						rt.addValue(headers[10], " - ");
 						rt.addValue(headers[11], " - ");
 					} else {
-						rt.addValue(headers[9],  String.format("%1$.3f", fragmentDistribution[selectedFragments.get(lane-1).get(p)][0]));
-						rt.addValue(headers[10], String.format("%1$.0f", fragmentDistribution[selectedFragments.get(lane-1).get(p)][1]));
-						rt.addValue(headers[11], String.format("%1$.3f", fragmentDistribution[selectedFragments.get(lane-1).get(p)][2]));
+						double freq = fragmentDistribution[selectedFragments.get(lane-1).get(p)][0];
+						double bp = fragmentDistribution[selectedFragments.get(lane-1).get(p)][1];
+						double mw = fragmentDistribution[selectedFragments.get(lane-1).get(p)][2];
+						rt.addValue(headers[9],  String.format("%1$.3f", freq));
+						rt.addValue(headers[10], String.format("%1$.0f", bp));
+						rt.addValue(headers[11], String.format("%1$.3f", mw));
+						
+						scaledCount[p] = bp * a * 1000;
+						if (bp * a > bpamax)
+							bpamax = bp * a;
 					}
 				}
 				band++;
 			}
+			
 			if (fitMode == continuumMode && lane != ladderLane) {
 				RealVector bpSubarray = new ArrayRealVector();
 				RealMatrix distMatrix = new Array2DRowRealMatrix(fragmentDistribution);
@@ -193,7 +206,14 @@ class Fitter {
 				statMatrix.setRow(lane-1, new double[] {weighedMeanLength, sdLength});
 				String info = String.format("Lane %1$d, Average length: %2$.2f(%3$.2f) %4$.2f", 
 					lane, weighedMeanLength, sdLength, meanLength);
+				
 				log.info(info);
+				fittedDistributions.set(lane-1, new ArrayList<>());
+				for (int i = 0; i < bpSubarray.getDimension(); i++) {
+					int reps = (int) (1000 * scaleFactor.getEntry(i) / scaleFactor.getL1Norm());
+					for (int j = 0; j < reps; j++)
+						fittedDistributions.get(lane-1).add(bpSubarray.getEntry(i));
+				}
 			}
 		}	
 		rt.show("Results Display");
@@ -576,7 +596,9 @@ class Fitter {
 
 	public List<Peak> getGuessPeaks(final int lane) {
 		final List<Peak> g = new ArrayList<>();
-		for (final Peak p : allGuessList) {
+		Iterator<Peak> it = allGuessList.iterator();
+		while (it.hasNext()) {
+			Peak p = it.next();
 			if (p.getLane() == lane)
 				g.add(p);
 		}
@@ -592,6 +614,14 @@ class Fitter {
 		return f;
 	}
 
+	public double[] getFittedDistribution(int l) {
+		List<Double> list = fittedDistributions.get(l-1);
+		double[] array = new double[list.size()];
+		for(int i = 0; i < array.length; i++) 
+			array[i] = list.get(i);
+		return array;
+	}
+
 	public void setDegBG(final int degBG) {
 		this.degBG = degBG;
 	}
@@ -599,10 +629,13 @@ class Fitter {
 	public void setInputData(final ArrayList<DataSeries> inputData) {
 		this.inputData = inputData;
 		this.selectedFragments = new ArrayList<>();
+		this.fittedDistributions = new ArrayList<>();
 		this.rms = new ArrayRealVector(inputData.size());
 		this.statMatrix = new Array2DRowRealMatrix(inputData.size(), 2);
-		for (int i = 0; i< inputData.size(); i++)
+		for (int i = 0; i< inputData.size(); i++) {
 			selectedFragments.add(new ArrayList<>());
+			fittedDistributions.add(new ArrayList<>());
+		}
 	}
 
 	public void setFitMode(final int fitMode) {
@@ -641,13 +674,11 @@ class Peak implements Comparable<Peak> {
 
 	private String name = "";
 	private final int lane;
-	private int bp;
 	private double mean;
 	private double norm;
 	private double sd;
 
 	public Peak(final int lane, final double norm, final double mean) {
-		this.bp = 0;
 		this.lane = lane;
 		this.norm = norm;
 		this.mean = mean;
@@ -655,7 +686,6 @@ class Peak implements Comparable<Peak> {
 	}
 
 	public Peak(final int lane, final double norm, final double mean, final double sd) {
-		this.bp = 0;
 		this.lane = lane;
 		this.norm = norm;
 		this.mean = mean;
