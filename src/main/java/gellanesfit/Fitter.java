@@ -27,19 +27,12 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 
-import net.imagej.table.DefaultGenericTable;
-import net.imagej.table.DefaultTableDisplay;
-import net.imagej.table.GenericColumn;
-
 import org.apache.commons.lang3.time.StopWatch;
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.function.Gaussian;
-import org.apache.commons.math3.analysis.function.Log;
 import org.apache.commons.math3.analysis.function.Log10;
 import org.apache.commons.math3.analysis.integration.gauss.GaussIntegrator;
-import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
 import org.apache.commons.math3.analysis.polynomials.PolynomialFunction;
-import org.apache.commons.math3.analysis.polynomials.PolynomialSplineFunction;
 import org.apache.commons.math3.exception.NotStrictlyPositiveException;
 import org.apache.commons.math3.fitting.PolynomialCurveFitter;
 import org.apache.commons.math3.fitting.WeightedObservedPoints;
@@ -55,7 +48,6 @@ import org.apache.commons.math3.stat.descriptive.moment.Variance;
 import org.apache.commons.math3.util.FastMath;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
-import org.scijava.display.Display;
 import org.scijava.display.DisplayService;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
@@ -241,35 +233,29 @@ class Fitter {
 
 	private double[] interpolateDisplacement(final double[] y) {
 		final WeightedObservedPoints obs = new WeightedObservedPoints();
-		final double[] distLogs = new double[fragmentDistribution.length];
-		for (int l = 0; l < y.length; l++) {
+		RealVector logs = new ArrayRealVector(new Array2DRowRealMatrix(fragmentDistribution).getColumn(2));
+		for (int l = 0; l < y.length; l++)
 			obs.add(Math.log10(ladder[l]), y[l]);
-		}
-		// First-degree polynomial fitter (line).
+
+		// First-degree polynomial fitter (line)
 		final PolynomialCurveFitter linfit = PolynomialCurveFitter.create(1);
-		final double[] coeff = linfit.fit(obs.toList());
-		final double[] yi = new double[fragmentDistribution.length];
-		final UnivariateFunction f = new PolynomialFunction(coeff);
-		for (int i = 0; i < fragmentDistribution.length; i++) {
-			distLogs[i] = Math.log10(fragmentDistribution[i][2]);
-			yi[i] = f.value(Math.log10(fragmentDistribution[i][2]));
-		}
-		return yi;
+		final double[] coeffs = linfit.fit(obs.toList());
+		final UnivariateFunction f = new PolynomialFunction(coeffs);
+		RealVector yi = logs.map(new Log10()).map(f); 
+		return yi.toArray();
 	}
 
 	private double[] interpolateSD(final double[] y, final double[] sd, final double[] yi) {
-		final double[] sdi = new double[yi.length];
+		final WeightedObservedPoints obs = new WeightedObservedPoints();
+		for (int l = 0; l < y.length; l++)
+			obs.add(y[l], sd[l]);
+		
+		// First-degree polynomial fitter (line)
 		final PolynomialCurveFitter linfit = PolynomialCurveFitter.create(1);
-		final PolynomialSplineFunction f = new LinearInterpolator().interpolate(y, sd);
-		for (int i = 0; i < yi.length; i++) {
-			if (yi[i] < y[0])
-				sdi[i] = sd[0];
-			else if (yi[i] > y[y.length - 1])
-				sdi[i] = sd[sd.length - 1];
-			else
-				sdi[i] = f.value(yi[i]);
-		}
-		return sdi;
+		final double[] coeffs = linfit.fit(obs.toList());
+		final UnivariateFunction f = new PolynomialFunction(coeffs);
+		RealVector sdi = new ArrayRealVector(yi).map(f); 
+		return sdi.toArray();
 	}
 
 	private RealVector doGuess(final int lane, final ParameterGuesser pg) {
@@ -312,7 +298,7 @@ class Fitter {
 			}
 			final double[] means = interpolateDisplacement(meanLadder);
 			final double[] sds = interpolateSD(meanLadder, sdLadder, means);
-			final double[] norms = new double[means.length]; // range
+
 			RealVector scaledFrequency = distMatrix.getColumnVector(0);
 			scaledFrequency = scaledFrequency.mapDivide(scaledFrequency.getMaxValue());
 			RealVector mwArray = distMatrix.getColumnVector(2);
@@ -322,10 +308,6 @@ class Fitter {
 				if (d.getLane() == lane) {
 					selectedFragments.set(lane-1, new ArrayList<>());
 					RealVector profile = d.getY().mapSubtractToSelf(d.getMinY());
-					
-//					final double[] y = d.getX().toArray();
-//					final LinearInterpolator li = new LinearInterpolator();
-//					final UnivariateFunction f = li.interpolate(y, profile);
 					for (int i = 0; i < means.length; i++) {
 						// exclude peaks outside the profile domain
 						double m = means[i];
@@ -384,8 +366,6 @@ class Fitter {
 		final GaussIntegrator ti = new GaussIntegrator(xvals.toArray(), weights.toArray());
 		final Gaussian gauss = new Gaussian(n, m, s);
 		double area = ti.integrate(gauss);
-		double area2 = n*s*FastMath.sqrt(2*FastMath.PI);
-		area2 = area2;
 		return area;
 	}
 
@@ -568,14 +548,12 @@ class Fitter {
 	public void resetFit(final int lane) {
 		final Iterator<Peak> itFitted = allFittedList.iterator();
 		while (itFitted.hasNext()) {
-			Peak p = itFitted.next();
-			if (p.getLane() == lane)
+			if (itFitted.next().getLane() == lane)
 				itFitted.remove();
 		}
 		final Iterator<Peak> itGuess = allGuessList.iterator();
 		while (itGuess.hasNext()) {
-			Peak p = itGuess.next();
-			if (p.getLane() == lane)
+			if (itGuess.next().getLane() == lane)
 				itGuess.remove();
 		}
 	}
