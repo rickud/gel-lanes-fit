@@ -240,7 +240,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		ladder = null;
 		
 		setupMainDialog();
-		redoProfilePlots();
+//		redoProfilePlots();
 		frame.setLocation((int) SW / 16, (int) SH / 8);
 //		for (Roi r : rois) {
 //			plotter.updateProfile(r);
@@ -1042,8 +1042,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		}
 		
 		cmbBoxLadderType.setSelectedIndex(ladder.getType());
-		int[] r = ladder.getRange();
-		RealVector ladderweights = ladder.getMolecularWeights().getSubVector(r[0], r[1] - r[0] + 1);
+		RealVector ladderweights = ladder.getMolecularWeights();
 		fitter.setLadder(ladderweights);
 		saveState();
 	}
@@ -1300,6 +1299,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			}
 			plotter.addVerticalMarkers(peaks);
 			
+			// Set ladder in Fitter
+			fitter.setLadder(ladder.getMolecularWeights());
 			// Fit the rest based on selected criterion
 			if (buttonBands.isSelected())
 				fitter.setFitMode(Fitter.bandMode);
@@ -1653,10 +1654,11 @@ class Ladder implements Serializable {
 	
 	public RealVector getMolecularWeights() {
 		RealVector bp = new ArrayRealVector();
+		int nel = ladderRange[1] - ladderRange[0] + 1;
 		if (this.type == HILO) {
-			bp = hilo_bp;
+			bp = hilo_bp.getSubVector(ladderRange[0], nel);
 		} else if (this.type == BP100) {
-			bp = bp100_bp;
+			bp = bp100_bp.getSubVector(ladderRange[0], nel);
 		}
 		RealVector mw = bp.mapMultiply(607.4).mapAdd(157.9);
 		return mw;

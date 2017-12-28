@@ -37,6 +37,7 @@ import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.stat.descriptive.moment.Mean;
 import org.apache.commons.math3.stat.descriptive.moment.StandardDeviation;
 import org.apache.commons.math3.util.FastMath;
+import org.jfree.util.Log;
 
 class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
@@ -650,7 +651,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 				double minNi = FastMath.abs(profile.value(mi) - p.value(mi))*minN;
 				double maxNi = FastMath.max(minN, profile.value(mi) - p.value(mi));
-				if (ni < minNi) norm.setEntry(i, minNi);				
+				if (ni < minNi) norm.setEntry(i, minNi);
 				if (ni > maxNi) norm.setEntry(i, maxNi);
 				
 				if (sd.getEntry(i) < minSD*sd0.getEntry(i)) 
@@ -745,6 +746,7 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 		// as per polynomial parity, we can store coefficients of both P_(n-1)
 		// and
 		// P_n in the same array
+		System.out.println("Need derivative structure!");
 		final PolynomialFunction p = new PolynomialFunction(poly.toArray());
 		return p.value(t);
 	}

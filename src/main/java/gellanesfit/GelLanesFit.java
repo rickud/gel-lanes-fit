@@ -43,7 +43,7 @@ import ij.io.Opener;
 
 @Plugin(type = Command.class, headless = true,
 	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
-@SuppressWarnings("ucd")
+//@SuppressWarnings("ucd")
 public class GelLanesFit implements Command {
 
 	/**
@@ -85,7 +85,7 @@ public class GelLanesFit implements Command {
 
 		final Fitter fitter = new Fitter(context, impName);
 		final Plotter plotter = new Plotter(context, imp);
-		final MainDialog md = new MainDialog(context, title, imp, prefs, plotter, fitter);
+		new MainDialog(context, title, imp, prefs, plotter, fitter);
 
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
@@ -167,9 +167,9 @@ public class GelLanesFit implements Command {
 		String sep = File.separator;
 		String folder = "src" + sep + "main" + sep + "resources"
 									+ sep +"sample" + sep +"Tagment-Test3" + sep 
-									+ "Other Camera" + sep;
+									+ "WRick_112217" + sep;
 //		String file = "1_top_LM.tif";
-//		String file = "2_top_LM.tif";
+		String file = "2_top_LM.tif";
 //		String file = "05_top_LM.tif";
 
 //		String file = "1_bottom_LM.tif";
@@ -204,7 +204,7 @@ public class GelLanesFit implements Command {
 //		Other Camera
 //		String file = "LRG_DSC00419.JPEG";
 //		String file = "LRG_DSC00420.JPEG";
-		String file = "LRG_DSC00421.JPEG";
+//		String file = "LRG_DSC00421.JPEG";
 //		String file = "LRG_DSC00422.JPEG";
 //		String file = "LRG_DSC00423.JPEG";
 //		String file = "LRG_DSC00424.JPEG";
