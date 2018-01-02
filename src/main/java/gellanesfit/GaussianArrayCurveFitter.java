@@ -540,7 +540,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				norm0 = norm0.add(mean0.map(f).mapSubtract(minY)).mapMultiply(0.5);
 			}
 			
-			minN = 0.01; //proportion of the profile/bg difference
+			minN = 0.05; //proportion of the profile/bg difference
 			minSD = 0.8; //proportion of sd0[i]
 			polyOffset = 0.9; //proportion of the profile value
 			if (fitMode == bandMode) 

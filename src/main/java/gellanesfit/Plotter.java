@@ -525,7 +525,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				p.setBorder(new EmptyBorder(5, 5, 5, 5));
 //				p.setLayout(new GridLayout(rows, cols));
 				p.setLayout(new GridBagLayout());
-				c.weightx = 0.25; c.weighty = 0.25;
+				c.weightx = 0.5; c.weighty = 0.5;
 				c.fill = GridBagConstraints.BOTH;
 				c.ipady = 2; c.ipadx = 2;
 				chartTabs.add(p);
