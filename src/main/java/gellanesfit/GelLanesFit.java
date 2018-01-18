@@ -43,7 +43,7 @@ import ij.io.Opener;
 
 @Plugin(type = Command.class, headless = true,
 	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
-//@SuppressWarnings("ucd")
+@SuppressWarnings("ucd")
 public class GelLanesFit implements Command {
 
 	/**
@@ -166,7 +166,8 @@ public class GelLanesFit implements Command {
 		ij.launch(args);
 		String sep = File.separator;
 		String folder = "src" + sep + "main" + sep + "resources"
-									+ sep +"sample" + sep +"Tagment-Test3" + sep;
+									+ sep +"sample" + sep;
+		String file = "second_destain.tif";
 //		String file = "1_top_LM.tif";
 //		String file = "2_top_LM.tif";
 //		String file = "05_top_LM.tif";
@@ -213,7 +214,7 @@ public class GelLanesFit implements Command {
 //		String file = "LRG_DSC00428.JPEG";
 //		String file = "LRG_DSC00429.JPEG";
 		
-		String file = "Dec17Pulldowns.tif";
+//		String file = "Dec17Pulldowns.tif";
 //		String file = "Dec22Pulldowns.tif";
 		
 		final ImagePlus iPlus = new Opener().openImage(folder + file);

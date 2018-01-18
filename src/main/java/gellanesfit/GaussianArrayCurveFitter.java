@@ -37,7 +37,7 @@ import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.stat.descriptive.moment.Mean;
 import org.apache.commons.math3.stat.descriptive.moment.StandardDeviation;
 import org.apache.commons.math3.util.FastMath;
-import org.jfree.util.Log;
+//import org.jfree.util.Log;
 
 class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
@@ -45,7 +45,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private static final GaussianArray.Parametric FUNCTION =
 		new GaussianArray.Parametric();
 	private static final int bandMode = 0;
-	private static final int fragmentMode = 1;
+	private static final int continuumMode = 1;
 	private static final double sd2FWHM = 2 * FastMath.sqrt(2 * FastMath.log(2));
 	
 	/** Initial guess. */
@@ -493,10 +493,11 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private RealVector mean0 = new ArrayRealVector();
 		private RealVector sd0 = new ArrayRealVector();
 		private RealVector area0 = new ArrayRealVector();
+		private RealVector maxMeanDiff = new ArrayRealVector();
 		
 		private final double maxX, minX, maxY, minY;
-		private final double minN, minSD, maxSD, minD1, maxD1;
-		private final double polyOffset, maxMeanDiff;
+		private double minN, minSD, maxSD, minD1, maxD1;
+		private final double polyOffset;
 		private PolynomialSplineFunction profile;
 		
 		private GaussianArrayParameterValidator(
@@ -524,32 +525,33 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			minD1 = -polyDerivative;
 			this.profile = new LinearInterpolator().interpolate(xtarget, ytarget);
 			double mds = 1.3;
-			if (fitMode == fragmentMode) {
-				mds = 1.8;
+			if (fitMode == continuumMode) {
+				mds = 0.0;
 			}
 			if (mean0.getDimension() > 1) {
-				maxMeanDiff = new Mean().evaluate(mean0.getSubVector(1, mean0.getDimension() - 1)
+				maxMeanDiff = mean0.getSubVector(1, mean0.getDimension() - 1)
 						.subtract(mean0.getSubVector(0, mean0.getDimension() - 1))
-						.map(new Abs()).toArray()) / 2.0 * mds;
+						.map(new Abs()).mapMultiply(mds);
+				maxMeanDiff = maxMeanDiff.append(
+					maxMeanDiff.getEntry(maxMeanDiff.getDimension() - 1));
 			} else {
-				maxMeanDiff = (maxX - minX) /2.0;
+				maxMeanDiff = maxMeanDiff.append((maxX - minX) / 2.0);
 			}
 			
-			if (fitMode == fragmentMode) {
+			if (fitMode == continuumMode) {
 				final PolynomialSplineFunction f = new LinearInterpolator().interpolate(xtarget, ytarget);
 				norm0 = norm0.add(mean0.map(f).mapSubtract(minY)).mapMultiply(0.5);
 			}
 			
-			minN = 0.05; //proportion of the profile/bg difference
-			minSD = 0.8; //proportion of sd0[i]
-			polyOffset = 0.9; //proportion of the profile value
-			if (fitMode == bandMode) 
-				maxSD = 1.8;
-			else if (fitMode == fragmentMode)
-				maxSD = 1.2;
-			else 
-				maxSD = 0.0;
+			minN = 0.01; //proportion of the profile-bg difference
+			polyOffset = 0.95; //proportion of the profile value
 			
+			minSD = 0.4; //proportion of sd0[i]
+			maxSD = 2.0;
+			if (fitMode == continuumMode) {
+				minSD = 0.9;
+				maxSD = 1.2;
+			}
 //			System.out.println("" + deg + "; " + polyDerivative + "; " + areaDrift + "; " + maxSD + "; " + maxMeanDiff);
 		}
 
@@ -637,10 +639,13 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 						mean.setEntry(i, mean.getEntry(i - 1)); 
 				}
 				
-				final double diff = mean.getEntry(i) - mean0.getEntry(i);
-				final double sign = diff / Math.abs(diff);
-				if (Math.abs(diff) > maxMeanDiff) 
-					mean.setEntry(i, mean0.getEntry(i) + sign * maxMeanDiff);
+				
+				double diff = mean.getEntry(i) - mean0.getEntry(i);
+				double sign = 0.0;
+				if (diff != 0.0)
+					sign = diff / Math.abs(diff);
+				if (Math.abs(diff) > maxMeanDiff.getEntry(i)) 
+					mean.setEntry(i, mean0.getEntry(i) + sign * maxMeanDiff.getEntry(i));
 				
 				// Upper/Lower bound for each parameter
 				double ni = norm.getEntry(i);
@@ -661,7 +666,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			}
 			
 			// Maintain initial AREA proportions between peaks
-			if (fitMode == GaussianArrayCurveFitter.fragmentMode) {
+			if (fitMode == GaussianArrayCurveFitter.continuumMode) {
 				StandardDeviation sdCalculator = new StandardDeviation();
 				Mean meanCalculator = new Mean();
 				area = norm.ebeMultiply(sd).mapMultiply(FastMath.sqrt(2*FastMath.PI));
