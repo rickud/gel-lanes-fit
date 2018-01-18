@@ -18,13 +18,22 @@
 
 package gellanesfit;
 
+import com.itextpdf.awt.PdfGraphics2D;
+import com.itextpdf.text.Document;
+import com.itextpdf.text.DocumentException;
+import com.itextpdf.text.PageSize;
+import com.itextpdf.text.Rectangle;
+import com.itextpdf.text.pdf.PdfContentByte;
+import com.itextpdf.text.pdf.PdfTemplate;
+import com.itextpdf.text.pdf.PdfWriter;
+
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
-import java.awt.GridLayout;
 import java.awt.Paint;
 import java.awt.Shape;
 import java.awt.Stroke;
@@ -33,6 +42,7 @@ import java.awt.geom.Ellipse2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
@@ -41,12 +51,12 @@ import java.util.Iterator;
 import java.util.List;
 
 import javax.swing.JFrame;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JTabbedPane;
 import javax.swing.WindowConstants;
 import javax.swing.border.EmptyBorder;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
 import org.apache.commons.math3.analysis.polynomials.PolynomialSplineFunction;
@@ -58,13 +68,11 @@ import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartMouseEvent;
 import org.jfree.chart.ChartMouseListener;
 import org.jfree.chart.ChartPanel;
-import org.jfree.chart.ChartUtilities;
+import org.jfree.chart.ChartUtils;
 import org.jfree.chart.JFreeChart;
 import org.jfree.chart.LegendItem;
 import org.jfree.chart.LegendItemCollection;
 import org.jfree.chart.annotations.XYTextAnnotation;
-import org.jfree.chart.event.AxisChangeEvent;
-import org.jfree.chart.event.AxisChangeListener;
 import org.jfree.chart.labels.StandardXYToolTipGenerator;
 import org.jfree.chart.labels.XYToolTipGenerator;
 import org.jfree.chart.plot.PlotOrientation;
@@ -72,13 +80,11 @@ import org.jfree.chart.plot.SeriesRenderingOrder;
 import org.jfree.chart.plot.ValueMarker;
 import org.jfree.chart.plot.XYPlot;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
-import org.jfree.data.general.SeriesChangeListener;
+import org.jfree.chart.ui.Layer;
+import org.jfree.chart.ui.RectangleEdge;
+import org.jfree.chart.ui.TextAnchor;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
-import org.jfree.ui.Layer;
-import org.jfree.ui.RectangleEdge;
-import org.jfree.ui.RectangleInsets;
-import org.jfree.ui.TextAnchor;
 import org.scijava.Context;
 
 import ij.IJ;
@@ -326,9 +332,9 @@ class Plotter extends JFrame implements ChartMouseListener {
 			format.setMaximumFractionDigits(1);
 			final XYToolTipGenerator generator = new StandardXYToolTipGenerator(
 				"({1} {2})", format, format);
-			newPlot.getRenderer().setBaseToolTipGenerator(generator);
+			newPlot.getRenderer().setDefaultToolTipGenerator(generator);
 
-			newChart.getTitle().setMargin(new RectangleInsets(15, 5, 15, 5));
+			newChart.getTitle().setMargin(new org.jfree.chart.ui.RectangleInsets(15, 5, 15, 5));
 			newChart.getTitle().setPaint(Color.BLACK);
 			newPlot.setDomainGridlinePaint(Color.DARK_GRAY);
 			newPlot.setRangeGridlinePaint(Color.DARK_GRAY);
@@ -393,29 +399,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 					.getXYPlot().clearDomainMarkers();
 				if (c.getXYPlot().getAnnotations() != null) c.getXYPlot()
 					.clearAnnotations();
-
-				// Plot vertical markers
-				for (final VerticalMarker m : verticalMarkers) {
-					if (m.getLane() == ln) {
-						final double height = c.getXYPlot().getRangeAxis().getUpperBound();
-						final double offset = 0;
-						final XYTextAnnotation label = new XYTextAnnotation(m.getName(), m
-							.getValue() - offset, height);
-						if (m.getType() == VerticalMarker.VMARK) {
-							label.setPaint(vMarkerColor);
-						}
-						else if (m.getType() == VerticalMarker.BMARK) {
-							label.setPaint(bMarkerColor);
-						}
-						label.setFont(new Font("Sans Serif", Font.PLAIN, 14));
-						label.setRotationAnchor(TextAnchor.BOTTOM_RIGHT);
-						label.setTextAnchor(TextAnchor.TOP_RIGHT);
-						label.setRotationAngle(-Math.PI / 2);
-
-						c.getXYPlot().addAnnotation(label);
-						c.getXYPlot().addDomainMarker(m, Layer.BACKGROUND);
-					}
-				}
 
 				// Plot the data series
 				final LegendItems legendItems = new LegendItems();
@@ -492,6 +475,29 @@ class Plotter extends JFrame implements ChartMouseListener {
 				c.getXYPlot().getRangeAxis().setUpperBound(1.1*max);
 				pl.setFixedLegendItems(legendItems);
 				c.getLegend().setPosition(RectangleEdge.RIGHT);
+				
+				// Plot vertical markers
+				for (final VerticalMarker m : verticalMarkers) {
+					if (m.getLane() == ln) {
+						final double height = c.getXYPlot().getRangeAxis().getUpperBound();
+						final double offset = 0;
+						final XYTextAnnotation label = new XYTextAnnotation(m.getName(), m
+							.getValue() - offset, height);
+						if (m.getType() == VerticalMarker.VMARK) {
+							label.setPaint(vMarkerColor);
+						}
+						else if (m.getType() == VerticalMarker.BMARK) {
+							label.setPaint(bMarkerColor);
+						}
+						label.setFont(new Font("Sans Serif", Font.PLAIN, 14));
+						label.setRotationAnchor(TextAnchor.BOTTOM_RIGHT);
+						label.setTextAnchor(TextAnchor.TOP_RIGHT);
+						label.setRotationAngle(-Math.PI / 2);
+
+						c.getXYPlot().addAnnotation(label);
+						c.getXYPlot().addDomainMarker(m, Layer.BACKGROUND);
+					}
+				}
 			}
 		}
 	}
@@ -545,8 +551,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 			chartTabs.get(chartTabs.size() - 1).add(new JPanel(), c);
 			i++;
 		}
-		if (selected == MainDialog.noLaneSelected) chartsTabbedPane.setSelectedIndex(0);
-		else chartsTabbedPane.setSelectedIndex(selected / (rows * cols) - 1);
+		if (selected != MainDialog.noLaneSelected)
+			chartsTabbedPane.setSelectedIndex(selected / (rows * cols) - 1);
 	}
 
 	public void resetData() {
@@ -558,15 +564,39 @@ class Plotter extends JFrame implements ChartMouseListener {
 	}
 
 	public void savePlots(String savePath) {
+		Iterator<File> it = FileUtils.iterateFiles(new File(savePath), 
+				new String[] {"png", "pdf"}, false);
+		while (it.hasNext()) {
+			it.next().delete();
+		}
+		
 		for (ChartPanel p : chartPanels) {
-			String plotfile =savePath + p.getChart().getTitle().getText() + ".png";
+			String plotfile = savePath + p.getChart().getTitle().getText() + ".png";
 			try {
-				ChartUtilities.saveChartAsPNG(new File(plotfile),
+				ChartUtils.saveChartAsPNG(new File(plotfile),
 																	p.getChart(), 800, 600);
 			}
-			catch (IOException exc) {
-				// TODO Auto-generated catch block
-				exc.printStackTrace();
+			catch (IOException e) {
+				e.printStackTrace();
+			}
+			String pdffile = savePath + p.getChart().getTitle().getText() + ".pdf";
+			try {
+				float x = PageSize.A4.getWidth();
+				float y = PageSize.A4.getHeight() / 2;
+				Rectangle ps = new Rectangle(x, y);
+				Document doc = new Document( ps, 20, 20, 20, 20 );
+				PdfWriter writer = PdfWriter.getInstance(doc, new FileOutputStream(pdffile));
+				doc.open();
+				PdfContentByte cb = writer.getDirectContent();
+				PdfTemplate t = cb.createTemplate(x, y);
+				Graphics2D  g = new PdfGraphics2D(t, x, y);
+				Rectangle2D r = new Rectangle2D.Double(0, 0, x, y);
+				p.getChart().draw(g, r);
+				g.dispose();
+				cb.addTemplate(t, 0, 0);
+				doc.close();
+			} catch (DocumentException | IOException e) {
+				e.printStackTrace();
 			}
 		}
 	}
@@ -822,15 +852,15 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 		this.color = color;
 	}
 
-	public void addAll(final RealVector x, final RealVector y) {
-		if (x.getDimension() == y.getDimension()) {
-			for (int i = 0; i < x.getDimension(); i++) {
-				add(x.getEntry(i), y.getEntry(i));
-			}
-		}
-		else throw new DimensionMismatchException(x.getDimension(), y
-			.getDimension());
-	}
+//	public void addAll(final RealVector x, final RealVector y) {
+//		if (x.getDimension() == y.getDimension()) {
+//			for (int i = 0; i < x.getDimension(); i++) {
+//				add(x.getEntry(i), y.getEntry(i));
+//			}
+//		}
+//		else throw new DimensionMismatchException(x.getDimension(), y
+//			.getDimension());
+//	}
 
 	@Override
 	public int compareTo(final DataSeries d) {
