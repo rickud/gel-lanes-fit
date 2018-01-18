@@ -18,10 +18,10 @@
 
 package gellanesfit;
 
+import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Checkbox;
 import java.awt.Color;
-import java.awt.Dialog.ModalityType;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -80,22 +80,16 @@ import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
-import net.imagej.ImageJ;
-
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
-import org.jfree.chart.plot.Plot;
 import org.jfree.chart.plot.PlotOrientation;
 import org.jfree.chart.plot.XYPlot;
-import org.jfree.chart.renderer.xy.StandardXYBarPainter;
-import org.jfree.chart.renderer.xy.XYBarRenderer;
 import org.jfree.data.general.SeriesChangeEvent;
 import org.jfree.data.general.SeriesChangeListener;
-import org.jfree.data.statistics.HistogramDataset;
-import org.jfree.data.statistics.HistogramType;
+import org.jfree.data.xy.XYSeriesCollection;
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.display.Display;
@@ -110,7 +104,6 @@ import ij.gui.HTMLDialog;
 import ij.gui.ImageCanvas;
 import ij.gui.Line;
 import ij.gui.MessageDialog;
-import ij.gui.NonBlockingGenericDialog;
 import ij.gui.Overlay;
 import ij.gui.Roi;
 import ij.gui.TextRoi;
@@ -942,7 +935,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		d.addChangeListener(this);
 	}
 
-	private void displayLog(String savePath) {
+	private void displayLog() {
 		String logOutput = fitter.getSummary();
 		HTMLDialog logWindow =  new HTMLDialog("LOG", logOutput, false);
 		if (buttonContinuum.isSelected()) { 
@@ -950,19 +943,18 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			for (int i : getAllLaneNumbers()) {
 				if (i != ladderLaneInt) {
 					String name = String.format("Lane %1$d", i);
-					HistogramDataset hd = new HistogramDataset();
-					hd.setType(HistogramType.RELATIVE_FREQUENCY);
-					double[] values = fitter.getFittedDistribution(i);
-					hd.addSeries(name, values, 20);
-					JFreeChart chart = ChartFactory.createHistogram("", "Length (Base Pairs)", "Frequency", hd,
-						PlotOrientation.VERTICAL, false, false, false);
+					XYSeriesCollection dataset = new XYSeriesCollection();
+					dataset.addSeries(fitter.getFittedDistribution(i));
+					JFreeChart chart = ChartFactory.createXYLineChart("",
+						"Length (Base Pairs)", "Normalized, Length-weighed, Intensity", dataset,
+						PlotOrientation.VERTICAL, false, true, false);
 					XYPlot plot = chart.getXYPlot();
-					((XYBarRenderer) plot.getRenderer())
-						.setBarPainter(new StandardXYBarPainter());
+					plot.getDomainAxis().setInverted(true);
 					plot.setBackgroundPaint           (Color.white    );
 					plot.setDomainGridlinePaint       (Color.lightGray);
 					plot.setRangeGridlinePaint        (Color.lightGray);
 					plot.getRenderer().setSeriesPaint(0, Color.darkGray );
+					plot.getRenderer().setSeriesStroke(0, new BasicStroke(2.0f));
 					ChartPanel p = new ChartPanel(chart);
 					distributionsPane.addTab(name, p);
 				}
@@ -980,9 +972,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 
 	private boolean loadState() {
 		rois = new ArrayList<>();
-		final String path = "gel-lanes-fit/data/saved-state.bak";
-		log.info("Loading " + path + " ...");
-		try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(path))) {
+		String file = "saved-state.bak";
+		String fullPath = savePath + file;
+		log.info("Loading " + fullPath + " ...");
+		try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(fullPath))) {
 			try {
 				int i = 1;
 				while (true) {
@@ -1008,11 +1001,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	}
 
 	private boolean saveState() {
-		final String path = "gel-lanes-fit/data/";
-		final String file = "saved-state.bak";
-		new File(path).mkdirs();
-		log.info("Saving to " + path + file + " ...");
-		try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(path + file))) {
+		String file = "saved-state.bak";
+		String fullPath = savePath + file;
+		new File(savePath).mkdirs();
+		log.info("Saving to " + fullPath + " ...");
+		try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(fullPath))) {
 			if (!auto) {
 				for (final Roi r : rois) {
 					oos.writeObject(r.getBounds());
@@ -1095,6 +1088,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		}
 
 		saveState();
+		plotter.savePlots(savePath);
 		plotter.closePlot();
 		for (final Display<?> d : displayServ.getDisplays()) {
 			log.info(d.getName() + " is closing...");
@@ -1204,7 +1198,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		}
 	}
 	
-	void sliderUpdate() {
+	private void sliderUpdate() {
 		resetAutoROIs();
 		redoProfilePlots();
 		reDrawROIs(imp, "none");
@@ -1354,8 +1348,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			}
 			fitted.addAll(fitter.doFit(otherLanes));
 			fitter.updateResultsTable(savePath);
-			
 			fitDone = true;
+			
 			plotter.removeFit();
 			plotter.addDataSeries(fitted);
 			for (final int i : getAllLaneNumbers()) {
@@ -1364,7 +1358,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			reDrawROIs(imp, "none"); // adds the bands to the ROIs
 			
 			plotter.savePlots(savePath);
-			displayLog(savePath);
+			displayLog();
 			new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
 		}
 		
