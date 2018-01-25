@@ -515,10 +515,10 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.areaDrift = areaDrift;
 			
 			sortParameters();
-			
+			polyOffset = 0.98; //proportion of the profile value
 			minX = this.xtarget.getMinValue();
 			maxX = this.xtarget.getMaxValue();
-			minY = this.ytarget.getMinValue();
+			minY = this.ytarget.getMinValue()*polyOffset;
 			maxY = this.ytarget.getMaxValue();
 			
 			maxD1 = polyDerivative;
@@ -526,7 +526,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.profile = new LinearInterpolator().interpolate(xtarget, ytarget);
 			double mds = 1.3;
 			if (fitMode == continuumMode) {
-				mds = 0.0;
+				mds = 0.1;
 			}
 			if (mean0.getDimension() > 1) {
 				maxMeanDiff = mean0.getSubVector(1, mean0.getDimension() - 1)
@@ -544,13 +544,12 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			}
 			
 			minN = 0.01; //proportion of the profile-bg difference
-			polyOffset = 0.95; //proportion of the profile value
 			
 			minSD = 0.4; //proportion of sd0[i]
 			maxSD = 2.0;
 			if (fitMode == continuumMode) {
-				minSD = 0.9;
-				maxSD = 1.2;
+				minSD = 0.95;
+				maxSD = 1.05;
 			}
 //			System.out.println("" + deg + "; " + polyDerivative + "; " + areaDrift + "; " + maxSD + "; " + maxMeanDiff);
 		}
@@ -587,36 +586,44 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			
 			// Polynomyal parameters
 			if (poly.getDimension() > 0) {
+				double tolHigh = (maxY - minY) * (1 - polyOffset);
+				double tolLow  = tolHigh * 3.0;
 				p = new PolynomialFunction(poly.toArray());
 				PolynomialFunction p1 = p.polynomialDerivative();
 				double d1bg = xtarget.map(p1).getMaxValue();
 				RealVector coeffs0 = poly.getSubVector(0, 1);
 				RealVector coeffs1end = poly.getSubVector(1, poly.getDimension() - 1);
-				RealVector bg = xtarget.map(p);
-				double tol = (maxY - minY) / 100;
-				double margin = bg.mapDivide(polyOffset).subtract(ytarget).getMaxValue();
+				RealVector bg = xtarget.map(p);				
+				RealVector diff = ytarget.subtract(bg.mapAdd(tolHigh));
 				
-				boolean tooHigh =  margin > tol;
-//				boolean tooHigh =  false;
-				boolean tooLow = margin < -tol;
-//				boolean tooLow = false;
+				double marginUpper = diff.getMinValue();
+				double marginLower = ytarget.getMinValue() - (bg.getMaxValue() + tolLow);
+				
+				boolean tooHigh = marginUpper < 0.0;
+				boolean tooLow =  marginLower > 0.0;
 				boolean tooSteep = d1bg <= minD1 || d1bg > maxD1;
+				
 				while (tooSteep || tooHigh || tooLow) {
 					if (tooSteep)
 						coeffs1end = coeffs1end.mapMultiplyToSelf(0.8);
-					if (tooHigh || tooLow)
-						coeffs0.setEntry(0, coeffs0.getEntry(0) - margin);
+					if (tooHigh)
+							coeffs0.setEntry(0, coeffs0.getEntry(0) + marginUpper);
+					if (tooLow)
+						coeffs0.setEntry(0, coeffs0.getEntry(0) + 
+							FastMath.max(marginLower, 1e-5));
 					
 					poly = coeffs0.append(coeffs1end);
 					p = new PolynomialFunction(poly.toArray());
 					p1 = p.polynomialDerivative();
+					d1bg = xtarget.map(p1).getMaxValue();
+					diff = ytarget.subtract(bg.mapAdd(tolHigh));
 					
 					bg = xtarget.map(p);
-					d1bg = xtarget.map(p1).getMaxValue();
-					margin = bg.mapDivide(polyOffset).subtract(ytarget).getMaxValue();
+					marginUpper = diff.getMinValue();
+					marginLower = ytarget.getMinValue() - (bg.getMaxValue() + tolLow);
 					
-					tooHigh =  margin > tol;
-					tooLow = margin < -tol;
+					tooHigh = marginUpper < 0.0;
+					tooLow =  marginLower > 0.0;
 					tooSteep = d1bg <= minD1 || d1bg > maxD1;
 				}
 			}

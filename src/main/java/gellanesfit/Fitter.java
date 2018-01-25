@@ -340,19 +340,6 @@ class Fitter {
 	}
 
 	private RealVector doGuess(final int lane, final ParameterGuesser pg) {
-//		// Remove guess and fit for this lane
-//		final Iterator<Peak> peakIter = allGuessList.iterator();
-//		while (peakIter.hasNext()) {
-//			if (peakIter.next().getLane() == lane)
-//				peakIter.remove();
-//		}
-//
-//		final Iterator<Peak> peakIter2 = allFittedList.iterator();
-//		while (peakIter2.hasNext()) {
-//			if (peakIter2.next().getLane() == lane)
-//				peakIter2.remove();
-//		}
-
 		List<Peak> peaks = new ArrayList<>();
 		RealVector guess = new ArrayRealVector();
 		if (fitMode == bandMode || (fitMode == continuumMode &&
