@@ -1,19 +1,13 @@
 /**
- * Gauss Fit
+ * Gel Lanes Fit
  * GelLanesFit.java
  * author: Rick Ziraldo, 2017
  * The /University of Texas at Dallas, Richardson, TX
  * http://www.utdallas.edu
  *
- * Feature: Fitting of multiple Gaussian functions to intensity profiles along the gel lanes
- * Gauss Fit is a tool for fitting gaussian profiles and estimating
- * the profile parameters on selected lanes in gel electrophoresis images.
+ * The source code is maintained and made available on GitHub
+ * https://github.com/rickud/gauss-curve-fit
  *
- *    The GaussianArrayCurveFitter class is implemented using
- *    Abstract classes from Apache Commons project
- *
- *    The source code is maintained and made available on GitHub
- *    https://github.com/rickud/gauss-curve-fit
  */
 
 package gellanesfit;
@@ -218,24 +212,24 @@ class Fitter {
 					weighedMeanLength, sdLength, meanLength);
 
 				log.info(info);
-				
+
 				// Update the fitted distribution list with appropriate scale
 				RealVector x = new ArrayRealVector();
 				RealVector y = new ArrayRealVector();
-				Iterator<DataSeries> it = fittedDistributions.iterator(); 
+				final Iterator<DataSeries> it = fittedDistributions.iterator();
 				while (it.hasNext()) {
-					DataSeries dfit = it.next(); 
+					final DataSeries dfit = it.next();
 					if (dfit.getLane() == lane) {
 						x = dfit.getX();
 						y = dfit.getY();
 						it.remove();
 					}
 				}
-				
-				WeightedObservedPoints obs = new WeightedObservedPoints();
+
+				final WeightedObservedPoints obs = new WeightedObservedPoints();
 				for (int l = 0; l < bpSubarray.getDimension(); l++)
 					obs.add(means.getEntry(l), Math.log10(bpSubarray.getEntry(l)));
-				
+
 				// First-degree polynomial fitter (line)
 				final PolynomialCurveFitter linfit = PolynomialCurveFitter.create(1);
 				final double[] coeffs = linfit.fit(obs.toList());
@@ -245,8 +239,8 @@ class Fitter {
 					x.setEntry(i, new Pow().value(10, x.getEntry(i)));
 				y = y.ebeMultiply(x);
 				y = y.mapDivide(y.getMaxValue());
-				fittedDistributions.add(new DataSeries("Fit", lane,
-					DataSeries.FITTED, x, y, Plotter.fittedColor));
+				fittedDistributions.add(new DataSeries("Fit", lane, DataSeries.FITTED,
+					x, y, Plotter.fittedColor));
 			}
 		}
 		rt.show("Results Display");
@@ -282,7 +276,7 @@ class Fitter {
 			out.write(outText);
 			out.close();
 		}
-		catch (IOException e) {
+		catch (final IOException e) {
 			log.info("Exception", e);
 		}
 	}
@@ -292,33 +286,25 @@ class Fitter {
 		final RealVector logs = new ArrayRealVector(new Array2DRowRealMatrix(
 			fragmentDistribution).getColumn(2)).map(new Log10());
 		RealVector yi = new ArrayRealVector();
-		if (false) {
-			// First-degree polynomial fitter (line); error too large
-			for (int l = 0; l < y.length; l++)
-				obs.add(Math.log10(ladder[l]), y[l]);
-			final PolynomialCurveFitter linfit = PolynomialCurveFitter.create(1);
-			final double[] coeffs = linfit.fit(obs.toList());
-			final UnivariateFunction f1 = new PolynomialFunction(coeffs);
-			yi = logs.map(f1);
-		} else {
-			// Linear interpolator between ladder points
-			LinearInterpolator li = new LinearInterpolator();
-			double[] l = new ArrayRealVector(ladder).map(new Log10()).toArray();
-			ArrayUtils.reverse(l);
-			ArrayUtils.reverse(y);
-			PolynomialSplineFunction f = li.interpolate(l, y);
-			double[] kn = f.getKnots();
-			PolynomialFunction[] fi = f.getPolynomials();
-			
-			for (int i = 0; i < logs.getDimension(); i++) {
-				double logsi = logs.getEntry(i);
-				if (logsi < kn[0]) {
-					yi = yi.append(fi[0].value(logsi - kn[0]));
-				} else if (logsi > kn[kn.length - 1]) {
-					yi = yi.append(fi[fi.length - 1].value(logsi - kn[kn.length - 2]));
-				} else {
-					yi = yi.append(f.value(logsi));
-				}
+		// Linear interpolator between ladder points
+		final LinearInterpolator li = new LinearInterpolator();
+		final double[] l = new ArrayRealVector(ladder).map(new Log10()).toArray();
+		ArrayUtils.reverse(l);
+		ArrayUtils.reverse(y);
+		final PolynomialSplineFunction f = li.interpolate(l, y);
+		final double[] kn = f.getKnots();
+		final PolynomialFunction[] fi = f.getPolynomials();
+
+		for (int i = 0; i < logs.getDimension(); i++) {
+			final double logsi = logs.getEntry(i);
+			if (logsi < kn[0]) {
+				yi = yi.append(fi[0].value(logsi - kn[0]));
+			}
+			else if (logsi > kn[kn.length - 1]) {
+				yi = yi.append(fi[fi.length - 1].value(logsi - kn[kn.length - 2]));
+			}
+			else {
+				yi = yi.append(f.value(logsi));
 			}
 		}
 		return yi.toArray();
@@ -370,27 +356,20 @@ class Fitter {
 			}
 			final double[] means = interpolateDisplacement(meanLadder);
 			final double[] sds = interpolateSD(meanLadder, sdLadder, means);
-
-			RealVector scaledFrequency = distMatrix.getColumnVector(0);
-//			scaledFrequency = scaledFrequency.mapDivide(scaledFrequency
-//				.getMaxValue());
-			RealVector mwArray = distMatrix.getColumnVector(2);
-//			mwArray = mwArray.map(new Log10());
-//			final RealVector scaledMW = mwArray.mapDivide(mwArray.getMaxValue());
+			final RealVector scaledFrequency = distMatrix.getColumnVector(0);
+			final RealVector mwArray = distMatrix.getColumnVector(2);
 			RealVector scale = scaledFrequency.ebeMultiply(mwArray);
 			scale = scale.mapDivide(scale.getMaxValue());
 			for (final DataSeries d : inputData) {
 				if (d.getLane() == lane) {
 					selectedFragments.set(lane - 1, new ArrayList<>());
 					final RealVector profile = d.getY().mapSubtractToSelf(d.getMinY());
-					double meanProfile = new Mean().evaluate(profile.toArray());
+					final double meanProfile = new Mean().evaluate(profile.toArray());
 					for (int i = 0; i < means.length; i++) {
 						// exclude peaks outside the profile domain
 						final double m = means[i];
 						if (m > d.getMinX() && m < d.getMaxX()) {
 							selectedFragments.get(lane - 1).add(i);
-//							final double frequency = scaledFrequency.getEntry(i);
-//							final double mw = mwArray.getEntry(i);
 							final double n = meanProfile * scale.getEntry(i);
 							final double s = sds[i];
 							peaks.add(new Peak(lane, n, m, s));
@@ -406,18 +385,17 @@ class Fitter {
 			double minDistance = Double.POSITIVE_INFINITY;
 			Peak closest = c;
 			for (final Peak g : peaks) {
-				double distance = FastMath.abs(c.getMean() - g.getMean());
+				final double distance = FastMath.abs(c.getMean() - g.getMean());
 				if (distance < minDistance) {
 					minDistance = distance;
 					closest = g;
 				}
 			}
 			if ((fitMode == bandMode && minDistance <= peakDistanceTol) ||
-					fitMode == continuumMode) { // replace closest
-				log.info("[LANE " + closest.getLane() + 
-					"] Peak guess: " + closest.getNorm() +
-					", " + closest.getMean() +
-					", " + closest.getSigma());
+				fitMode == continuumMode)
+			{ // replace closest
+				log.info("[LANE " + closest.getLane() + "] Peak guess: " + closest
+					.getNorm() + ", " + closest.getMean() + ", " + closest.getSigma());
 				closest.setMean(c.getMean());
 				closest.setNorm(c.getNorm());
 				closest.setSigma(c.getSigma());
@@ -553,7 +531,7 @@ class Fitter {
 		}
 		final GaussianArray fittedCurve = new GaussianArray(norms, means, sds,
 			poly);
-		DataSeries fit = new DataSeries("Fit", lane, DataSeries.FITTED, xvals,
+		final DataSeries fit = new DataSeries("Fit", lane, DataSeries.FITTED, xvals,
 			fittedCurve, Plotter.fittedColor);
 		boolean contains = false;
 		for (DataSeries d : fittedDistributions) {
@@ -562,8 +540,7 @@ class Fitter {
 				d = fit;
 			}
 		}
-		if (!contains)
-			fittedDistributions.add(fit);
+		if (!contains) fittedDistributions.add(fit);
 		output.add(fit);
 
 		// Print RMS to console
@@ -654,16 +631,15 @@ class Fitter {
 	public void resetFit(final int lane) {
 		final Iterator<Peak> itFitted = allFittedList.iterator();
 		while (itFitted.hasNext()) {
-			Peak f = itFitted.next();
+			final Peak f = itFitted.next();
 			if (f == null || f.getLane() == lane) itFitted.remove();
 		}
 		Collections.sort(allFittedList);
-		
+
 		final Iterator<Peak> itGuess = allGuessList.iterator();
 		while (itGuess.hasNext()) {
-			Peak g = itGuess.next();
-			if (g == null || g.getLane() == lane)
-				itGuess.remove();
+			final Peak g = itGuess.next();
+			if (g == null || g.getLane() == lane) itGuess.remove();
 		}
 		Collections.sort(allGuessList);
 	}

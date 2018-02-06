@@ -1,3 +1,14 @@
+/**
+ * Gel Lanes Fit
+ * GelLanesFit.java
+ * author: Rick Ziraldo, 2017
+ * The /University of Texas at Dallas, Richardson, TX
+ * http://www.utdallas.edu
+ *
+ * The source code is maintained and made available on GitHub
+ * https://github.com/rickud/gauss-curve-fit
+ *
+ */
 
 package gellanesfit;
 
@@ -14,8 +25,6 @@ import org.apache.commons.math3.analysis.differentiation.DerivativeStructure;
 import org.apache.commons.math3.analysis.differentiation.UnivariateDifferentiableFunction;
 import org.apache.commons.math3.analysis.function.Abs;
 import org.apache.commons.math3.analysis.function.Gaussian;
-import org.apache.commons.math3.analysis.function.Sqrt;
-import org.apache.commons.math3.analysis.integration.gauss.GaussIntegrator;
 import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
 import org.apache.commons.math3.analysis.polynomials.PolynomialFunction;
 import org.apache.commons.math3.analysis.polynomials.PolynomialSplineFunction;
@@ -47,7 +56,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private static final int bandMode = 0;
 	private static final int continuumMode = 1;
 	private static final double sd2FWHM = 2 * FastMath.sqrt(2 * FastMath.log(2));
-	
+
 	/** Initial guess. */
 	private final double[] initialGuess;
 	/** Maximum number of iterations of the optimization algorithm. */
@@ -55,6 +64,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private final int fitMode;
 	private final int deg;
 	private final double peakTol, areaDrift, polyConcavity;
+
 	/**
 	 * Constructor used by the factory methods.
 	 *
@@ -62,11 +72,9 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 *          guess will be estimated using the {@link ParameterGuesser}.
 	 * @param maxIter Maximum number of iterations of the optimization algorithm.
 	 */
-	private GaussianArrayCurveFitter(
-		final double[] initialGuess,
-		final int maxIter, final int fitMode, final int deg, 
-		final double polyConcavity, final double peakTol, 
-		final double areaDrift)
+	private GaussianArrayCurveFitter(final double[] initialGuess,
+		final int maxIter, final int fitMode, final int deg,
+		final double polyConcavity, final double peakTol, final double areaDrift)
 	{
 		this.initialGuess = initialGuess;
 		this.maxIter = maxIter;
@@ -82,17 +90,16 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * be {@link ParameterGuesser} computed automatically, and the maximum number
 	 * of iterations of the optimization algorithm is set to
 	 * {@link Integer#MAX_VALUE}.
+	 *
 	 * @param fitMode
 	 * @return a curve fitter.
 	 * @see #withStartPoint(double[])
 	 */
-	static GaussianArrayCurveFitter create(
-		final int fitMode, final int deg, 
-		final double polyConcavity, final double peakTol, 
-		final double areaDrift)
+	static GaussianArrayCurveFitter create(final int fitMode, final int deg,
+		final double polyConcavity, final double peakTol, final double areaDrift)
 	{
-		return new GaussianArrayCurveFitter(null, Integer.MAX_VALUE,
-			fitMode, deg, polyConcavity, peakTol, areaDrift);
+		return new GaussianArrayCurveFitter(null, Integer.MAX_VALUE, fitMode, deg,
+			polyConcavity, peakTol, areaDrift);
 	}
 
 	/**
@@ -102,10 +109,9 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * @return a new instance.
 	 */
 	GaussianArrayCurveFitter withStartPoint(final double[] newStart) {
-		return new GaussianArrayCurveFitter(newStart.clone(), maxIter,
-			fitMode, deg, polyConcavity, peakTol, areaDrift);
+		return new GaussianArrayCurveFitter(newStart.clone(), maxIter, fitMode, deg,
+			polyConcavity, peakTol, areaDrift);
 	}
-
 
 	/** {@inheritDoc} */
 	@Override
@@ -134,8 +140,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			: new ParameterGuesser(observations, deg, peakTol).guess();
 
 		final GaussianArrayParameterValidator parValid =
-			new GaussianArrayParameterValidator(fitMode, startPoint, 
-				xx, target, polyConcavity, areaDrift);
+			new GaussianArrayParameterValidator(fitMode, startPoint, xx, target,
+				polyConcavity, areaDrift);
 
 		return new LeastSquaresBuilder().parameterValidator(parValid)
 			.maxEvaluations(Integer.MAX_VALUE).maxIterations(maxIter).lazyEvaluation(
@@ -178,8 +184,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * @throws NullArgumentException if {@code observations} is {@code null}.
 		 * @throws NumberIsTooSmallException if there are less than 3 observations.
 		 */
-		ParameterGuesser(
-			final Collection<WeightedObservedPoint> observations,
+		ParameterGuesser(final Collection<WeightedObservedPoint> observations,
 			final int deg, final double peakTol)
 		{
 			if (observations == null) {
@@ -297,14 +302,14 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			final double maxX = xvals.getMaxValue();
 			final double minY = yvals.getMinValue();
 			final double maxY = yvals.getMinValue();
-			final double slope = (maxY-minY)/(maxX-minX);
-			final double p0 = minY - slope*minX;
+			final double slope = (maxY - minY) / (maxX - minX);
+			final double p0 = minY - slope * minX;
 
 			RealVector polyGuess = new ArrayRealVector();
 			RealVector gaussGuess = new ArrayRealVector();
 			polyGuess = polyGuess.append(deg);
-			if (deg >= 0) polyGuess = polyGuess.append(p0).append(
-				new ArrayRealVector(deg));
+			if (deg >= 0) polyGuess = polyGuess.append(p0).append(new ArrayRealVector(
+				deg));
 
 			// Local maxima where the peaks are
 			final int[] maximaIdx = findMaxima(points, tolpk, true);
@@ -318,9 +323,9 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				norms[m] = yvals.getEntry(maximaIdx[m]) - minY;
 				means[m] = xvals.getEntry(maximaIdx[m]);
 			}
-			
+
 			// estimate sds from maxima and mean
-			for (int m = 0; m < maximaIdx.length; m++) {						
+			for (int m = 0; m < maximaIdx.length; m++) {
 				boolean foundFWHM = false; // Full width at half maximum
 				boolean foundRWHM = false;
 				boolean foundLWHM = false;
@@ -336,14 +341,18 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				double peakDistance;
 				if (maximaIdx.length == 1) {
 					peakDistance = FastMath.min(means[0] - minX, maxX - means[0]);
-				} else if (m == 0){
-					peakDistance = FastMath.min(means[m + 1] - means[m], means[m] - minX);
-				}	else if (m + 1 == maximaIdx.length){
-					peakDistance = FastMath.min(maxX - means[m], means[m] - means[m - 1]);
-				} else {
-					peakDistance = FastMath.min(means[m + 1] - means[m], means[m] - means[m - 1]);
 				}
-				
+				else if (m == 0) {
+					peakDistance = FastMath.min(means[m + 1] - means[m], means[m] - minX);
+				}
+				else if (m + 1 == maximaIdx.length) {
+					peakDistance = FastMath.min(maxX - means[m], means[m] - means[m - 1]);
+				}
+				else {
+					peakDistance = FastMath.min(means[m + 1] - means[m], means[m] -
+						means[m - 1]);
+				}
+
 				while ((!foundFWHM || FWHM > peakDistance) && hm * inc < 0.9 * yRange) {
 					foundFWHM = false;
 					foundRWHM = false;
@@ -458,53 +467,49 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				maxPositions[m] = (int) midPos;
 				maxValues[m] = x[maxPositions[m]].getY();
 			}
-			// int[] rankPositions = Tools.rank(maxValues);
-			// int[] returnArr = new int[maxCount];
-			// for (int n = 0; n < maxCount; n++) {
-			// int pos = maxPositions[rankPositions[n]];
-			// returnArr[maxCount - n - 1] = pos; //in descending order
-			// }
-			// return returnArr;
 			Arrays.sort(maxPositions);
 			return maxPositions;
 		}
 	}
 
 	/**
-	 * Checks on the polynomial coefficients {@code poly} and the parameter triplets
-	 * {@code norm}, {@code mean}, and {@code sigma} of a
+	 * Checks on the polynomial coefficients {@code poly} and the parameter
+	 * triplets {@code norm}, {@code mean}, and {@code sigma} of a
 	 * {@code GaussianArray.Parametric} for applied constraints, based on the
 	 * specified points and initial guess.
 	 */
 	private static class GaussianArrayParameterValidator implements
 		ParameterValidator
 	{
+
 		private final int fitMode;
 		private final RealVector initialParameterSet;
 		private final RealVector xtarget;
 		private final RealVector ytarget;
-		
+
 		private final int deg;
 
 		private final double areaDrift;
-		
+
 		private RealVector poly0 = new ArrayRealVector();
 		private RealVector norm0 = new ArrayRealVector();
 		private RealVector mean0 = new ArrayRealVector();
 		private RealVector sd0 = new ArrayRealVector();
 		private RealVector area0 = new ArrayRealVector();
 		private RealVector maxMeanDiff = new ArrayRealVector();
-		
+
 		private final double maxX, minX, maxY, minY;
-		private double minN, minSD, maxSD, minD1, maxD1;
+		private final double minN;
+		private double minSD;
+		private double maxSD;
+		private final double minD1;
+		private final double maxD1;
 		private final double polyOffset;
-		private PolynomialSplineFunction profile;
-		
-		private GaussianArrayParameterValidator(
-			final int fitMode,
-			final double[] initialParameterSet,
-			final double[] xtarget, final double[] ytarget,
-			final double polyDerivative,
+		private final PolynomialSplineFunction profile;
+
+		private GaussianArrayParameterValidator(final int fitMode,
+			final double[] initialParameterSet, final double[] xtarget,
+			final double[] ytarget, final double polyDerivative,
 			final double areaDrift)
 		{
 			this.fitMode = fitMode;
@@ -513,14 +518,14 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.ytarget = new ArrayRealVector(ytarget);
 			this.deg = (int) initialParameterSet[0];
 			this.areaDrift = areaDrift;
-			
+
 			sortParameters();
-			polyOffset = 0.9; //proportion of the profile value
+			polyOffset = 0.9; // proportion of the profile value
 			minX = this.xtarget.getMinValue();
 			maxX = this.xtarget.getMaxValue();
-			minY = this.ytarget.getMinValue()*polyOffset;
+			minY = this.ytarget.getMinValue() * polyOffset;
 			maxY = this.ytarget.getMaxValue();
-			
+
 			maxD1 = polyDerivative;
 			minD1 = -polyDerivative;
 			this.profile = new LinearInterpolator().interpolate(xtarget, ytarget);
@@ -529,29 +534,30 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				mds = 0.1;
 			}
 			if (mean0.getDimension() > 1) {
-				maxMeanDiff = mean0.getSubVector(1, mean0.getDimension() - 1)
-						.subtract(mean0.getSubVector(0, mean0.getDimension() - 1))
-						.map(new Abs()).mapMultiply(mds);
-				maxMeanDiff = maxMeanDiff.append(
-					maxMeanDiff.getEntry(maxMeanDiff.getDimension() - 1));
-			} else {
+				maxMeanDiff = mean0.getSubVector(1, mean0.getDimension() - 1).subtract(
+					mean0.getSubVector(0, mean0.getDimension() - 1)).map(new Abs())
+					.mapMultiply(mds);
+				maxMeanDiff = maxMeanDiff.append(maxMeanDiff.getEntry(maxMeanDiff
+					.getDimension() - 1));
+			}
+			else {
 				maxMeanDiff = maxMeanDiff.append((maxX - minX) / 2.0);
 			}
-			
+
 			if (fitMode == continuumMode) {
-				final PolynomialSplineFunction f = new LinearInterpolator().interpolate(xtarget, ytarget);
+				final PolynomialSplineFunction f = new LinearInterpolator().interpolate(
+					xtarget, ytarget);
 				norm0 = norm0.add(mean0.map(f).mapSubtract(minY)).mapMultiply(0.5);
 			}
-			
-			minN = 0.01; //proportion of the profile-bg difference
-			
-			minSD = 0.4; //proportion of sd0[i]
+
+			minN = 0.01; // proportion of the profile-bg difference
+
+			minSD = 0.4; // proportion of sd0[i]
 			maxSD = 2.0;
 			if (fitMode == continuumMode) {
 				minSD = 0.95;
 				maxSD = 1.05;
 			}
-//			System.out.println("" + deg + "; " + polyDerivative + "; " + areaDrift + "; " + maxSD + "; " + maxMeanDiff);
 		}
 
 		private void sortParameters() {
@@ -561,7 +567,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				mean0 = mean0.append(initialParameterSet.getEntry(i + 1));
 				sd0 = sd0.append(initialParameterSet.getEntry(i + 2));
 			}
-			area0 = norm0.ebeMultiply(sd0).mapMultiply(FastMath.sqrt(2*FastMath.PI));
+			area0 = norm0.ebeMultiply(sd0).mapMultiply(FastMath.sqrt(2 *
+				FastMath.PI));
 		}
 
 		@Override
@@ -573,7 +580,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			RealVector mean = new ArrayRealVector();
 			RealVector sd = new ArrayRealVector();
 			RealVector area = new ArrayRealVector();
-			PolynomialFunction p = new PolynomialFunction(new double[] {0.0});
+			PolynomialFunction p = new PolynomialFunction(new double[] { 0.0 });
 			if (deg != -1) { // no polynomial
 				poly = param.getSubVector(1, deg + 1);
 			}
@@ -583,122 +590,129 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				mean = mean.append(param.getEntry(i + 1));
 				sd = sd.append(param.getEntry(i + 2));
 			}
-			
+
 			// Polynomyal parameters
 			if (poly.getDimension() > 0) {
-				double tolHigh = (maxY - minY) * (1 - polyOffset);
-				double tolLow  = tolHigh * 3.0;
+				final double tolHigh = (maxY - minY) * (1 - polyOffset);
+				final double tolLow = tolHigh * 3.0;
 				p = new PolynomialFunction(poly.toArray());
 				PolynomialFunction p1 = p.polynomialDerivative();
 				double d1bg = xtarget.map(p1).getMaxValue();
-				RealVector coeffs0 = poly.getSubVector(0, 1);
+				final RealVector coeffs0 = poly.getSubVector(0, 1);
 				RealVector coeffs1end = poly.getSubVector(1, poly.getDimension() - 1);
-				RealVector bg = xtarget.map(p);				
+				RealVector bg = xtarget.map(p);
 				RealVector diff = ytarget.subtract(bg.mapAdd(tolHigh));
-				
+
 				double marginUpper = diff.getMinValue();
-				double marginLower = ytarget.getMinValue() - (bg.getMaxValue() + tolLow);
-				
+				double marginLower = ytarget.getMinValue() - (bg.getMaxValue() +
+					tolLow);
+
 				boolean tooHigh = marginUpper < 0.0;
-				boolean tooLow =  marginLower > 0.0;
+				boolean tooLow = marginLower > 0.0;
 				boolean tooSteep = d1bg <= minD1 || d1bg > maxD1;
-				
+
 				while (tooSteep || tooHigh || tooLow) {
-					if (tooSteep)
-						coeffs1end = coeffs1end.mapMultiplyToSelf(0.8);
-					if (tooHigh)
-							coeffs0.setEntry(0, coeffs0.getEntry(0) + marginUpper);
-					if (tooLow)
-						coeffs0.setEntry(0, coeffs0.getEntry(0) + 
-							FastMath.max(marginLower, 1e-5));
-					
+					if (tooSteep) coeffs1end = coeffs1end.mapMultiplyToSelf(0.8);
+					if (tooHigh) coeffs0.setEntry(0, coeffs0.getEntry(0) + marginUpper);
+					if (tooLow) coeffs0.setEntry(0, coeffs0.getEntry(0) + FastMath.max(
+						marginLower, 1e-5));
+
 					poly = coeffs0.append(coeffs1end);
 					p = new PolynomialFunction(poly.toArray());
 					p1 = p.polynomialDerivative();
 					d1bg = xtarget.map(p1).getMaxValue();
 					diff = ytarget.subtract(bg.mapAdd(tolHigh));
-					
+
 					bg = xtarget.map(p);
 					marginUpper = diff.getMinValue();
 					marginLower = ytarget.getMinValue() - (bg.getMaxValue() + tolLow);
-					
+
 					tooHigh = marginUpper < 0.0;
-					tooLow =  marginLower > 0.0;
+					tooLow = marginLower > 0.0;
 					tooSteep = d1bg <= minD1 || d1bg > maxD1;
 				}
 			}
-			
-			// Gaussian Parameters		
+
+			// Gaussian Parameters
 			for (int i = 0; i < mean0.getDimension(); i++) {
 				// Keep means close to maxima
 				if (mean0.getDimension() == 1) {
 					// Do not restrict
-				} else if (i == 0) {
-					if (mean.getEntry(i) > mean.getEntry(i + 1) ) 
-						mean.setEntry(i, mean.getEntry(i + 1));
-				} else if (i + 1 == mean0.getDimension()) {
-					if (mean.getEntry(i) < mean.getEntry(i - 1) ) 
-						mean.setEntry(i, mean.getEntry(i - 1)); 
-				} else {
-					if (mean.getEntry(i) > mean.getEntry(i + 1) ) 
-						mean.setEntry(i, mean.getEntry(i + 1));
-					if (mean.getEntry(i) < mean.getEntry(i - 1) ) 
-						mean.setEntry(i, mean.getEntry(i - 1)); 
 				}
-				
-				
-				double diff = mean.getEntry(i) - mean0.getEntry(i);
-				double sign = 0.0;
-				if (diff != 0.0)
-					sign = diff / Math.abs(diff);
-				if (Math.abs(diff) > maxMeanDiff.getEntry(i)) 
-					mean.setEntry(i, mean0.getEntry(i) + sign * maxMeanDiff.getEntry(i));
-				
-				// Upper/Lower bound for each parameter
-				double ni = norm.getEntry(i);
-				double mi = mean.getEntry(i);
-				if (mi < minX) {mi = minX; mean.setEntry(i, minX);}
-				if (mi > maxX) {mi = maxX; mean.setEntry(i, maxX);}
-				
+				else if (i == 0) {
+					if (mean.getEntry(i) > mean.getEntry(i + 1)) mean.setEntry(i, mean
+						.getEntry(i + 1));
+				}
+				else if (i + 1 == mean0.getDimension()) {
+					if (mean.getEntry(i) < mean.getEntry(i - 1)) mean.setEntry(i, mean
+						.getEntry(i - 1));
+				}
+				else {
+					if (mean.getEntry(i) > mean.getEntry(i + 1)) mean.setEntry(i, mean
+						.getEntry(i + 1));
+					if (mean.getEntry(i) < mean.getEntry(i - 1)) mean.setEntry(i, mean
+						.getEntry(i - 1));
+				}
 
-				double minNi = FastMath.abs(profile.value(mi) - p.value(mi))*minN;
-				double maxNi = FastMath.max(minN, profile.value(mi) - p.value(mi));
+				final double diff = mean.getEntry(i) - mean0.getEntry(i);
+				double sign = 0.0;
+				if (diff != 0.0) sign = diff / Math.abs(diff);
+				if (Math.abs(diff) > maxMeanDiff.getEntry(i)) mean.setEntry(i, mean0
+					.getEntry(i) + sign * maxMeanDiff.getEntry(i));
+
+				// Upper/Lower bound for each parameter
+				final double ni = norm.getEntry(i);
+				double mi = mean.getEntry(i);
+				if (mi < minX) {
+					mi = minX;
+					mean.setEntry(i, minX);
+				}
+				if (mi > maxX) {
+					mi = maxX;
+					mean.setEntry(i, maxX);
+				}
+
+				final double minNi = FastMath.abs(profile.value(mi) - p.value(mi)) *
+					minN;
+				final double maxNi = FastMath.max(minN, profile.value(mi) - p.value(
+					mi));
 				if (ni < minNi) norm.setEntry(i, minNi);
 				if (ni > maxNi) norm.setEntry(i, maxNi);
-				
-				if (sd.getEntry(i) < minSD*sd0.getEntry(i)) 
-					sd.setEntry(i, minSD*sd0.getEntry(i));
-				if (sd.getEntry(i) > maxSD*sd0.getEntry(i))
-					sd.setEntry(i, maxSD*sd0.getEntry(i));
+
+				if (sd.getEntry(i) < minSD * sd0.getEntry(i)) sd.setEntry(i, minSD * sd0
+					.getEntry(i));
+				if (sd.getEntry(i) > maxSD * sd0.getEntry(i)) sd.setEntry(i, maxSD * sd0
+					.getEntry(i));
 			}
-			
+
 			// Maintain initial AREA proportions between peaks
 			if (fitMode == GaussianArrayCurveFitter.continuumMode) {
-				StandardDeviation sdCalculator = new StandardDeviation();
-				Mean meanCalculator = new Mean();
-				area = norm.ebeMultiply(sd).mapMultiply(FastMath.sqrt(2*FastMath.PI));
-				RealVector ratio = area.ebeDivide(area0);
-				double sdRatio = sdCalculator.evaluate(ratio.toArray());
-				double meanRatio = meanCalculator.evaluate(ratio.toArray());
-				
+				final StandardDeviation sdCalculator = new StandardDeviation();
+				final Mean meanCalculator = new Mean();
+				area = norm.ebeMultiply(sd).mapMultiply(FastMath.sqrt(2 * FastMath.PI));
+				final RealVector ratio = area.ebeDivide(area0);
+				final double sdRatio = sdCalculator.evaluate(ratio.toArray());
+				final double meanRatio = meanCalculator.evaluate(ratio.toArray());
+
 				if (sdRatio > areaDrift) {
-					Random r = new Random();
+					final Random r = new Random();
 					RealVector rand = new ArrayRealVector();
 					for (int i = 0; i < area.getDimension(); i++) {
-						rand = rand.append((r.nextDouble() - 0.5)*areaDrift);
+						rand = rand.append((r.nextDouble() - 0.5) * areaDrift);
 					}
-					RealVector scale = norm0.mapMultiply(meanRatio);
+					final RealVector scale = norm0.mapMultiply(meanRatio);
 					norm = scale.add(rand).map(new Abs());
 				}
 //				System.out.println(meanNormRatio + "; " + sdNormRatio
 //					+ "; " + meanSDRatio+ "; " + sdSDRatio);
 			}
-			
+
 			// Repackage parameter array
 			RealVector out = new ArrayRealVector();
 			out = out.append(deg).append(poly);
-			for (int i = 0; i < mean0.getDimension(); i++) 
-				out = out.append(norm.getEntry(i)).append(mean.getEntry(i)).append(sd.getEntry(i));
+			for (int i = 0; i < mean0.getDimension(); i++)
+				out = out.append(norm.getEntry(i)).append(mean.getEntry(i)).append(sd
+					.getEntry(i));
 			return out;
 		}
 	}
@@ -729,8 +743,7 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 		double output = 0;
 		final int degPoly = (int) poly.getEntry(0);
 		for (int i = 0; i < norms.getDimension(); i++) {
-			if (sds.getEntry(i) <= 0.0) 
-				System.out.println("sd = " + sds.getEntry(i));
+			if (sds.getEntry(i) <= 0.0) System.out.println("sd = " + sds.getEntry(i));
 			output += new Gaussian(norms.getEntry(i), means.getEntry(i), sds.getEntry(
 				i)).value(x);
 		}
@@ -831,8 +844,6 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 			throws NullArgumentException, DimensionMismatchException,
 			NotStrictlyPositiveException
 		{
-			// validateParameters(param);
-
 			final int degPoly = (int) param[0];
 			RealVector out = new ArrayRealVector();
 			RealVector poly = new ArrayRealVector();

@@ -1,19 +1,13 @@
 /**
- * Gauss Fit
+ * Gel Lanes Fit
  * GelLanesFit.java
  * author: Rick Ziraldo, 2017
  * The /University of Texas at Dallas, Richardson, TX
  * http://www.utdallas.edu
  *
- * Feature: Fitting of multiple Gaussian functions to intensity profiles along the gel lanes
- * Gauss Fit is a tool for fitting gaussian profiles and estimating
- * the profile parameters on selected lanes in gel electrophoresis images.
+ * The source code is maintained and made available on GitHub
+ * https://github.com/rickud/gauss-curve-fit
  *
- *    The GaussianArrayCurveFitter class is implemented using
- *    Abstract classes from Apache Commons project
- *
- *    The source code is maintained and made available on GitHub
- *    https://github.com/rickud/gauss-curve-fit
  */
 
 package gellanesfit;
@@ -40,12 +34,9 @@ import java.awt.event.WindowEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
-import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
 import java.io.IOException;
-import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.text.NumberFormat;
@@ -127,16 +118,15 @@ class Plotter extends JFrame implements ChartMouseListener {
 	static final int regMode = 0;
 	static final int editPeaksMode = 1;
 
-
 	private static final Color plotSelColor = new Color(240, 240, 240);
 	private static final Color plotUnselColor = Color.WHITE;
 	private static final Color plotAddSelColor = new Color(192, 255, 185);
 	private static final Color plotRefColor = new Color(206, 217, 255);
 
 	private final ImagePlus imp;
-	private List<ChartPanel> chartPanels;
-	private List<DataSeries> plotsData;
-	private List<Integer> plotNumbers;
+	private final List<ChartPanel> chartPanels;
+	private final List<DataSeries> plotsData;
+	private final List<Integer> plotNumbers;
 	private List<VerticalMarker> verticalMarkers;
 
 	private List<JPanel> chartTabs;
@@ -147,8 +137,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 	private int selected = MainDialog.noLaneSelected; // Which plot is highlighted
 	private int plotMode = regMode;
 
-	public Plotter(final Context context, final ImagePlus imp)
-	{
+	public Plotter(final Context context, final ImagePlus imp) {
 		context.inject(this);
 		setDefaultCloseOperation(WindowConstants.HIDE_ON_CLOSE);
 		setBounds((int) (SW * 0.3), 0, (int) (SW * 0.7), (int) (SH * 0.9));
@@ -159,13 +148,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 		plotsData = new ArrayList<>();
 		plotNumbers = new ArrayList<>();
 		verticalMarkers = new ArrayList<>();
-
 		chartsTabbedPane = new JTabbedPane();
 		this.getContentPane().add(chartsTabbedPane, BorderLayout.CENTER);
 		this.setVisible(true);
 	}
-
-	
 
 	/**
 	 * Profile data from Roi, ready for fitting (null if not possible)
@@ -196,26 +182,24 @@ class Plotter extends JFrame implements ChartMouseListener {
 		plotsData.addAll(data);
 	}
 
-	public void addVerticalMarkers(List<Peak> peaks) {
+	public void addVerticalMarkers(final List<Peak> peaks) {
 		for (final DataSeries d : plotsData) {
 			final int ln = d.getLane();
 			final ArrayList<VerticalMarker> bands = new ArrayList<>();
 			for (final Peak p : peaks) {
 				final double x = p.getMean();
 				final VerticalMarker m = new VerticalMarker(p.getName(), ln,
-						VerticalMarker.BMARK, x, Plotter.bMarkerColor,
-						Plotter.bMarkerStroke);
+					VerticalMarker.BMARK, x, Plotter.bMarkerColor, Plotter.bMarkerStroke);
 				bands.add(m);
 			}
 			verticalMarkers.addAll(bands);
 		}
 	}
-	
+
 	public void removeVerticalMarkers() {
 		verticalMarkers = new ArrayList<>();
-		for (int i : plotNumbers)
+		for (final int i : plotNumbers)
 			updatePlot(i);
-
 	}
 
 	void setVLine(final int ln, final double x) {
@@ -264,7 +248,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 				}
 			}
 		}
-
 		selected = MainDialog.noLaneSelected;
 		updatePlot(ln);
 	}
@@ -277,9 +260,9 @@ class Plotter extends JFrame implements ChartMouseListener {
 		return profiles;
 	}
 
-	public DataSeries getPlotsCustomPeaks(int lane) {
+	public DataSeries getPlotsCustomPeaks(final int lane) {
 		for (final DataSeries d : plotsData) {
-			if (d.getLane() == lane && d.getType() == DataSeries.CUSTOMPEAKS) 
+			if (d.getLane() == lane && d.getType() == DataSeries.CUSTOMPEAKS)
 				return d;
 		}
 		return null;
@@ -293,7 +276,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 		return verticalMarkers;
 	}
 
-	void setPlotMode(int plotMode) {
+	void setPlotMode(final int plotMode) {
 		this.plotMode = plotMode;
 	}
 
@@ -309,7 +292,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 	public void setReferencePlot(final int ref) {
 		referencePlot = ref;
 		removeVerticalMarkers();
-		for (int i : plotNumbers)
+		for (final int i : plotNumbers)
 			updatePlot(i);
 	}
 
@@ -342,7 +325,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 				"({1} {2})", format, format);
 			newPlot.getRenderer().setDefaultToolTipGenerator(generator);
 
-			newChart.getTitle().setMargin(new org.jfree.chart.ui.RectangleInsets(15, 5, 15, 5));
+			newChart.getTitle().setMargin(new org.jfree.chart.ui.RectangleInsets(15,
+				5, 15, 5));
 			newChart.getTitle().setPaint(Color.BLACK);
 			newPlot.setDomainGridlinePaint(Color.DARK_GRAY);
 			newPlot.setRangeGridlinePaint(Color.DARK_GRAY);
@@ -364,8 +348,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 		thePlot.getRangeAxis().setUpperBound(max);
 	}
 
-	public void updatePlot(Roi r) {
-		int n = Integer.parseInt(r.getName().substring((5)));
+	public void updatePlot(final Roi r) {
+		final int n = Integer.parseInt(r.getName().substring((5)));
 		updatePlot(n);
 	}
 
@@ -388,7 +372,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				int gcount = 0;
 				final JFreeChart c = p.getChart();
 				final XYPlot pl = c.getXYPlot();
-				
+
 				if (plotNumber == referencePlot) {
 					pl.setBackgroundPaint(plotRefColor);
 					c.setBackgroundPaint(plotRefColor);
@@ -401,7 +385,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 					pl.setBackgroundPaint(plotUnselColor);
 					c.setBackgroundPaint(plotUnselColor);
 				}
-				
+
 				// Clear Markers and Annotations
 				if (c.getXYPlot().getDomainMarkers(Layer.BACKGROUND) != null) c
 					.getXYPlot().clearDomainMarkers();
@@ -479,14 +463,14 @@ class Plotter extends JFrame implements ChartMouseListener {
 					}
 				}
 				c.getXYPlot().setDataset(dataset);
-				Range rng = dataset.getRangeBounds(true);
-				double below = rng.getLength() * 0.05;
-				double above = rng.getLength() * 0.3;
-				c.getXYPlot().getRangeAxis().setLowerBound(rng.getLowerBound()-below);
-				c.getXYPlot().getRangeAxis().setUpperBound(rng.getUpperBound()+above);
+				final Range rng = dataset.getRangeBounds(true);
+				final double below = rng.getLength() * 0.05;
+				final double above = rng.getLength() * 0.3;
+				c.getXYPlot().getRangeAxis().setLowerBound(rng.getLowerBound() - below);
+				c.getXYPlot().getRangeAxis().setUpperBound(rng.getUpperBound() + above);
 				pl.setFixedLegendItems(legendItems);
 				c.getLegend().setPosition(RectangleEdge.RIGHT);
-				
+
 				// Plot vertical markers
 				for (final VerticalMarker m : verticalMarkers) {
 					if (m.getLane() == ln) {
@@ -531,7 +515,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 		chartTabs = new ArrayList<>();
 		if (chartPanels.size() == 0) return;
 		final Iterator<ChartPanel> chartIter = chartPanels.iterator();
-		GridBagConstraints c = new GridBagConstraints();
+		final GridBagConstraints c = new GridBagConstraints();
 		int i = 0;
 		while (chartIter.hasNext()) {
 			JPanel p = new JPanel();
@@ -542,9 +526,11 @@ class Plotter extends JFrame implements ChartMouseListener {
 				p.setBorder(new EmptyBorder(5, 5, 5, 5));
 //				p.setLayout(new GridLayout(rows, cols));
 				p.setLayout(new GridBagLayout());
-				c.weightx = 0.5; c.weighty = 0.5;
+				c.weightx = 0.5;
+				c.weighty = 0.5;
 				c.fill = GridBagConstraints.BOTH;
-				c.ipady = 2; c.ipadx = 2;
+				c.ipady = 2;
+				c.ipadx = 2;
 				chartTabs.add(p);
 				final int tab = chartTabs.size() - 1;
 				chartsTabbedPane.addTab("Lanes " + (tab * (rows * cols) + 1) + " - " +
@@ -552,18 +538,20 @@ class Plotter extends JFrame implements ChartMouseListener {
 				i = 0;
 			}
 
-			c.gridx = i % cols; c.gridy = i/cols;
+			c.gridx = i % cols;
+			c.gridy = i / cols;
 			p.add(chartIter.next(), c);
 			i++;
 		}
-		while (i < (rows*cols)) {
+		while (i < (rows * cols)) {
 			// Add placeholders for empty plots
-			c.gridx = i % cols; c.gridy = i/cols;
+			c.gridx = i % cols;
+			c.gridy = i / cols;
 			chartTabs.get(chartTabs.size() - 1).add(new JPanel(), c);
 			i++;
 		}
-		if (selected != MainDialog.noLaneSelected)
-			chartsTabbedPane.setSelectedIndex(selected / (rows * cols) - 1);
+		if (selected != MainDialog.noLaneSelected) chartsTabbedPane
+			.setSelectedIndex(selected / (rows * cols) - 1);
 	}
 
 	public void resetData() {
@@ -574,64 +562,65 @@ class Plotter extends JFrame implements ChartMouseListener {
 		selected = MainDialog.noLaneSelected;
 	}
 
-	public void savePlots(String savePath) {
-		Iterator<File> it = FileUtils.iterateFiles(new File(savePath), 
-				new String[] {"png", "pdf"}, false);
+	public void savePlots(final String savePath) {
+		final Iterator<File> it = FileUtils.iterateFiles(new File(savePath),
+			new String[] { "png", "pdf" }, false);
 		while (it.hasNext()) {
 			it.next().delete();
 		}
-		
-		for (ChartPanel p : chartPanels) {
-			String plotfile = savePath + p.getChart().getTitle().getText();
-			float x = PageSize.A4.getWidth();
-			float y = PageSize.A4.getHeight() / 2;
-			Rectangle2D r = new Rectangle2D.Double(0, 0, x, y);
-			
+
+		for (final ChartPanel p : chartPanels) {
+			final String plotfile = savePath + p.getChart().getTitle().getText();
+			final float x = PageSize.A4.getWidth();
+			final float y = PageSize.A4.getHeight() / 2;
+			final Rectangle2D r = new Rectangle2D.Double(0, 0, x, y);
+
 			try { // Save PNG
-				ChartUtils.saveChartAsPNG(new File(plotfile + ".png"),
-																	p.getChart(), 800, 600);
+				ChartUtils.saveChartAsPNG(new File(plotfile + ".png"), p.getChart(),
+					800, 600);
 			}
-			catch (IOException e) {
+			catch (final IOException e) {
 				e.printStackTrace();
 			}
-			
+
 			try { // Save PDF
-				Rectangle ps = new Rectangle(x, y);
-				com.itextpdf.text.Document doc 
-					= new com.itextpdf.text.Document(ps, 20, 20, 20, 20);
-				PdfWriter writer = PdfWriter.getInstance(doc, new FileOutputStream(plotfile + ".pdf"));
+				final Rectangle ps = new Rectangle(x, y);
+				final com.itextpdf.text.Document doc = new com.itextpdf.text.Document(
+					ps, 20, 20, 20, 20);
+				final PdfWriter writer = PdfWriter.getInstance(doc,
+					new FileOutputStream(plotfile + ".pdf"));
 				doc.open();
-				PdfContentByte cb = writer.getDirectContent();
-				PdfTemplate t = cb.createTemplate(x, y);
-				Graphics2D  g = new PdfGraphics2D(t, x, y);
-				
+				final PdfContentByte cb = writer.getDirectContent();
+				final PdfTemplate t = cb.createTemplate(x, y);
+				final Graphics2D g = new PdfGraphics2D(t, x, y);
+
 				p.getChart().draw(g, r);
 				g.dispose();
 				cb.addTemplate(t, 0, 0);
 				doc.close();
-			} catch (DocumentException | IOException e) {
+			}
+			catch (DocumentException | IOException e) {
 				e.printStackTrace();
 			}
-			
-			try (Writer out = new OutputStreamWriter(
-				new FileOutputStream(plotfile + ".svg")))
+
+			try (Writer out = new OutputStreamWriter(new FileOutputStream(plotfile +
+				".svg")))
 			{ // Save SVG
-				DOMImplementation domImpl =
-					GenericDOMImplementation.getDOMImplementation();
-				org.w3c.dom.Document document = domImpl.createDocument(null, "svg", null);
-				SVGGraphics2D svgGen = new SVGGraphics2D(document);
+				final DOMImplementation domImpl = GenericDOMImplementation
+					.getDOMImplementation();
+				final org.w3c.dom.Document document = domImpl.createDocument(null,
+					"svg", null);
+				final SVGGraphics2D svgGen = new SVGGraphics2D(document);
 				p.getChart().draw(svgGen, r);
 				svgGen.stream(out, true /* use css */);
 				out.flush();
 				out.close();
-			} catch (IOException e) {
+			}
+			catch (final IOException e) {
 				e.printStackTrace();
 			}
 		}
 	}
-	
-
-
 
 	@Override
 	public void chartMouseClicked(final ChartMouseEvent e) {
@@ -655,7 +644,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 								final PolynomialSplineFunction f = new LinearInterpolator()
 									.interpolate(x, y);
 								final double yi = f.value(xi);
-
 								final DataSeries cp = getPlotsCustomPeaks(ln);
 								boolean found = false;
 								for (int i = 0; i < cp.getItemCount(); i++) {
@@ -843,9 +831,6 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 		return name;
 	}
 
-	/**
-	 * @return the lane
-	 */
 	public int getLane() {
 		return lane;
 	}
@@ -880,16 +865,6 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 	public void setColor(final Color color) {
 		this.color = color;
 	}
-
-//	public void addAll(final RealVector x, final RealVector y) {
-//		if (x.getDimension() == y.getDimension()) {
-//			for (int i = 0; i < x.getDimension(); i++) {
-//				add(x.getEntry(i), y.getEntry(i));
-//			}
-//		}
-//		else throw new DimensionMismatchException(x.getDimension(), y
-//			.getDimension());
-//	}
 
 	@Override
 	public int compareTo(final DataSeries d) {

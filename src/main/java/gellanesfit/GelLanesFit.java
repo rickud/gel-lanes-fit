@@ -6,14 +6,15 @@
  * http://www.utdallas.edu
  *
  * Feature: Fitting of multiple Gaussian functions to intensity profiles along the gel lanes
- * Gauss Fit is a tool for fitting gaussian profiles and estimating
+ * Gel Lanes Fit is a tool for fitting gaussian profiles and estimating
  * the profile parameters on selected lanes in gel electrophoresis images.
  *
- *    The GaussianArrayCurveFitter class is implemented using
- *    Abstract classes from Apache Commons project
+ * The GaussianArrayCurveFitter class is implemented using
+ * Abstract classes from Apache Commons project
  *
- *    The source code is maintained and made available on GitHub
- *    https://github.com/rickud/gauss-curve-fit
+ * The source code is maintained and made available on GitHub
+ * https://github.com/rickud/gauss-curve-fit
+ *
  */
 
 package gellanesfit;
@@ -47,9 +48,6 @@ import ij.process.LUT;
 @SuppressWarnings("ucd")
 public class GelLanesFit implements Command {
 
-	/**
-	 *
-	 */
 	@Parameter
 	private LogService log;
 	@Parameter
@@ -59,7 +57,6 @@ public class GelLanesFit implements Command {
 	@Parameter
 	private static Context context;
 
-
 	// TODO: private Thread mainWindowThread; // thread for the main window
 	private Thread plotThread; // thread for plotting
 
@@ -68,6 +65,7 @@ public class GelLanesFit implements Command {
 
 	private ImagePlus imp;
 	private String version;
+
 	/**
 	 * Initialization method
 	 */
@@ -79,8 +77,8 @@ public class GelLanesFit implements Command {
 
 		imp = IJ.getImage();
 
-		final String impName = imp.getTitle()
-				.substring(0, imp.getTitle().indexOf("."));
+		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
+			"."));
 		about();
 		final String title = "[" + version + "] Gel Lanes Fit - " + imp.getTitle();
 
@@ -103,23 +101,11 @@ public class GelLanesFit implements Command {
 		plotThread.start();
 	}
 
-	
 	@Override
 	public void run() {
 		if (setup) {
 			init();
 			setup = false;
-		}
-
-		synchronized (this) {
-			// if (doUpdate) {
-			// doUpdate = false; //and loop again
-			// } else {
-			// try {wait();} //notify wakes up the thread
-			// catch(InterruptedException e) { //interrupted tells the thread to exit
-			// return;
-			// }
-			// }
 		}
 	}
 
@@ -144,14 +130,12 @@ public class GelLanesFit implements Command {
 						version = a.getValue("Implementation-Version");
 						log.info(name + " " + version);
 					}
-				}
-				catch (final IOException e) {
-					// handle
+				} catch (final IOException e) {
+					log.info("Manifest not found");
 				}
 			}
-		}
-		catch (final IOException e) {
-
+		} catch (final IOException e) {
+			log.info("Manifest not found");
 		}
 	}
 
@@ -160,14 +144,16 @@ public class GelLanesFit implements Command {
 	 *
 	 * @param args
 	 * @throws Exception
+	 * 
 	 */
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = new ImageJ();
 		ij.launch(args);
-		String sep = File.separator;
-		String folder = "src" + sep + "main" + sep + "resources"
-											+ sep +"sample" + sep + "Tagment-Test3" + sep + "WRick_112217" + sep;
+		final String sep = File.separator;
+		final String folder = "src" + sep + "main" + sep + "resources" + sep +
+			"sample" + sep + "Tagment-Test3" + sep + "WRick_112217" + sep;
+		// List of files available for debugging purposes
 //		String file = "second_destain.tif";
 //		String file = "1_top_LM.tif";
 //		String file = "2_top_LM.tif";
@@ -185,9 +171,9 @@ public class GelLanesFit implements Command {
 //		String file = "1_HM_2.tif";
 //		String file = "1_HM_3.tif";
 //		String file = "05_HM.tif";
-		
+
 //		String file = "longgel_1s.tif";
-		String file = "longgel_1_5s.tif";
+		final String file = "longgel_1_5s.tif";
 
 //		Massa's phone
 //		String file = "IMG_20171122_100940.jpg";
@@ -214,12 +200,12 @@ public class GelLanesFit implements Command {
 //		String file = "LRG_DSC00427.JPEG";
 //		String file = "LRG_DSC00428.JPEG";
 //		String file = "LRG_DSC00429.JPEG";
-		
+
 //		String file = "Dec17Pulldowns.tif";
 //		String file = "Dec22Pulldowns.tif";
-		
+
 		final ImagePlus iPlus = new Opener().openImage(folder + file);
-		LUT[] lut = iPlus.getLuts();
+		final LUT[] lut = iPlus.getLuts();
 		iPlus.setLut(lut[0].createInvertedLut());
 		iPlus.show();
 		ij.command().run(GelLanesFit.class, true);
