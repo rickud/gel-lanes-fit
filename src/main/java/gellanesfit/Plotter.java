@@ -19,7 +19,6 @@
 package gellanesfit;
 
 import com.itextpdf.awt.PdfGraphics2D;
-import com.itextpdf.text.Document;
 import com.itextpdf.text.DocumentException;
 import com.itextpdf.text.PageSize;
 import com.itextpdf.text.Rectangle;
@@ -41,9 +40,14 @@ import java.awt.event.WindowEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
+import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -56,6 +60,8 @@ import javax.swing.JTabbedPane;
 import javax.swing.WindowConstants;
 import javax.swing.border.EmptyBorder;
 
+import org.apache.batik.dom.GenericDOMImplementation;
+import org.apache.batik.svggen.SVGGraphics2D;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
@@ -83,9 +89,11 @@ import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
 import org.jfree.chart.ui.Layer;
 import org.jfree.chart.ui.RectangleEdge;
 import org.jfree.chart.ui.TextAnchor;
+import org.jfree.data.Range;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
 import org.scijava.Context;
+import org.w3c.dom.DOMImplementation;
 
 import ij.IJ;
 import ij.ImagePlus;
@@ -402,8 +410,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 
 				// Plot the data series
 				final LegendItems legendItems = new LegendItems();
-				double min = Integer.MAX_VALUE;
-				double max = Integer.MIN_VALUE;
+//				double min = Integer.MAX_VALUE;
+//				double max = Integer.MIN_VALUE;
 				for (final DataSeries d : plotsData) {
 					if (d.getLane() == ln) {
 						if (d.getItemCount() > 0) {
@@ -465,14 +473,17 @@ class Plotter extends JFrame implements ChartMouseListener {
 								li.setFillPaint(d.getColor());
 								legendItems.add(li);
 							}
-							if (d.getMaxY() > max) max = d.getMaxY();
-							if (d.getMaxY() < min) min = d.getMinY();
+//							if (d.getMaxY() > max) max = d.getMaxY();
+//							if (d.getMaxY() < min) min = d.getMinY();
 						}
 					}
 				}
 				c.getXYPlot().setDataset(dataset);
-				c.getXYPlot().getRangeAxis().setLowerBound(0.95*min);
-				c.getXYPlot().getRangeAxis().setUpperBound(1.1*max);
+				Range rng = dataset.getRangeBounds(true);
+				double below = rng.getLength() * 0.05;
+				double above = rng.getLength() * 0.3;
+				c.getXYPlot().getRangeAxis().setLowerBound(rng.getLowerBound()-below);
+				c.getXYPlot().getRangeAxis().setUpperBound(rng.getUpperBound()+above);
 				pl.setFixedLegendItems(legendItems);
 				c.getLegend().setPosition(RectangleEdge.RIGHT);
 				
@@ -571,31 +582,49 @@ class Plotter extends JFrame implements ChartMouseListener {
 		}
 		
 		for (ChartPanel p : chartPanels) {
-			String plotfile = savePath + p.getChart().getTitle().getText() + ".png";
-			try {
-				ChartUtils.saveChartAsPNG(new File(plotfile),
+			String plotfile = savePath + p.getChart().getTitle().getText();
+			float x = PageSize.A4.getWidth();
+			float y = PageSize.A4.getHeight() / 2;
+			Rectangle2D r = new Rectangle2D.Double(0, 0, x, y);
+			
+			try { // Save PNG
+				ChartUtils.saveChartAsPNG(new File(plotfile + ".png"),
 																	p.getChart(), 800, 600);
 			}
 			catch (IOException e) {
 				e.printStackTrace();
 			}
-			String pdffile = savePath + p.getChart().getTitle().getText() + ".pdf";
-			try {
-				float x = PageSize.A4.getWidth();
-				float y = PageSize.A4.getHeight() / 2;
+			
+			try { // Save PDF
 				Rectangle ps = new Rectangle(x, y);
-				Document doc = new Document( ps, 20, 20, 20, 20 );
-				PdfWriter writer = PdfWriter.getInstance(doc, new FileOutputStream(pdffile));
+				com.itextpdf.text.Document doc 
+					= new com.itextpdf.text.Document(ps, 20, 20, 20, 20);
+				PdfWriter writer = PdfWriter.getInstance(doc, new FileOutputStream(plotfile + ".pdf"));
 				doc.open();
 				PdfContentByte cb = writer.getDirectContent();
 				PdfTemplate t = cb.createTemplate(x, y);
 				Graphics2D  g = new PdfGraphics2D(t, x, y);
-				Rectangle2D r = new Rectangle2D.Double(0, 0, x, y);
+				
 				p.getChart().draw(g, r);
 				g.dispose();
 				cb.addTemplate(t, 0, 0);
 				doc.close();
 			} catch (DocumentException | IOException e) {
+				e.printStackTrace();
+			}
+			
+			try (Writer out = new OutputStreamWriter(
+				new FileOutputStream(plotfile + ".svg")))
+			{ // Save SVG
+				DOMImplementation domImpl =
+					GenericDOMImplementation.getDOMImplementation();
+				org.w3c.dom.Document document = domImpl.createDocument(null, "svg", null);
+				SVGGraphics2D svgGen = new SVGGraphics2D(document);
+				p.getChart().draw(svgGen, r);
+				svgGen.stream(out, true /* use css */);
+				out.flush();
+				out.close();
+			} catch (IOException e) {
 				e.printStackTrace();
 			}
 		}
