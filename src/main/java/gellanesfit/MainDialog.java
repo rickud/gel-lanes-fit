@@ -22,6 +22,8 @@ import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Checkbox;
 import java.awt.Color;
+import java.awt.Component;
+import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
@@ -71,6 +73,7 @@ import javax.swing.JPanel;
 import javax.swing.JRadioButton;
 import javax.swing.JSlider;
 import javax.swing.JSpinner;
+import javax.swing.JSplitPane;
 import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
 import javax.swing.SpinnerNumberModel;
@@ -82,6 +85,7 @@ import javax.swing.event.ChangeListener;
 
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
+import org.apache.commons.math3.util.FastMath;
 import org.jfree.chart.ChartFactory;
 import org.jfree.chart.ChartPanel;
 import org.jfree.chart.JFreeChart;
@@ -99,6 +103,7 @@ import org.scijava.plugin.Parameter;
 
 import ij.IJ;
 import ij.ImagePlus;
+import ij.gui.GUI;
 import ij.gui.GenericDialog;
 import ij.gui.HTMLDialog;
 import ij.gui.ImageCanvas;
@@ -224,6 +229,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private JToggleButton buttonEditPeaks;
 	private JButton buttonResetCustomPeaks;
 
+	private JPanel topButtonsPanel;
 	private JPanel dialogPanel;
 	private final JFrame frame;
 
@@ -314,10 +320,39 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		        "Lane Selection", TitledBorder.LEADING, TitledBorder.BELOW_TOP,
 		        new Font("Sans", Font.PLAIN, 11)));
 		
+		buttonPanelFitType = new JPanel();
+		buttonPanelFitType.setLayout(new BoxLayout(buttonPanelFitType, BoxLayout.Y_AXIS));
+		buttonBands = new JRadioButton("Banded");
+		buttonBands.setActionCommand("Banded");
+		buttonContinuum = new JRadioButton("Continuum");
+		buttonContinuum.setActionCommand("Continuum");
+		
+		buttonGroupFitType = new ButtonGroup();
+		buttonGroupFitType.add(buttonBands);
+		buttonGroupFitType.add(buttonContinuum);
+		
+		buttonPanelFitType.add(buttonBands);
+		buttonPanelFitType.add(buttonContinuum);
+		buttonPanelFitType.setBorder(new TitledBorder(BorderFactory.createEtchedBorder(),
+		        "Fit Type", TitledBorder.LEADING, TitledBorder.BELOW_TOP,
+		        new Font("Sans", Font.PLAIN, 11)));
+		
+		topButtonsPanel = new JPanel();
+		topButtonsPanel.setLayout(new GridBagLayout());
+		GridBagConstraints c0 = new GridBagConstraints();
+		c0.gridx = 0; c0.gridy = 0; c0.weightx = 0.1;
+		c0.fill = GridBagConstraints.HORIZONTAL;
+		
+		topButtonsPanel.add(buttonPanelAutoManual, c0);
+		c0.gridx = 1; c0.gridy = 0; c0.weightx = 0.0;
+		c0.anchor = GridBagConstraints.EAST;
+		topButtonsPanel.add(buttonPanelFitType, c0);
+
+		
 		sliderPanel = new JPanel();
 		lanesPanel = new JPanel();
 		lanesPanel.setLayout(new GridBagLayout());
-		GridBagConstraints c0 = new GridBagConstraints();
+		GridBagConstraints c1 = new GridBagConstraints();
 		lanesPanel.setBorder(new EmptyBorder(3, 5, 3, 3));
 		labelNLanes = new JLabel("Number of Lanes");
 		textNLanes = new JSpinner(new SpinnerNumberModel(nLanes, 1, 100, 1));
@@ -325,14 +360,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			textNLanes.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textNLanes.getEditor()).getTextField().setColumns(textWidth);
 		
-		c0.gridx = 0; c0.gridy = 0; c0.weightx = 0.2;
-		c0.fill = GridBagConstraints.HORIZONTAL;
-		lanesPanel.add(labelNLanes, c0);
+		c1.gridx = 0; c1.gridy = 0; c1.weightx = 0.2;
+		c1.fill = GridBagConstraints.HORIZONTAL;
+		lanesPanel.add(labelNLanes, c1);
 		
-		c0.gridx = 1; c0.gridy = 0; c0.weightx = 0.0;
-		c0.fill = GridBagConstraints.NONE;
-		c0.ipady = 2; c0.ipadx = 2;		
-		lanesPanel.add(textNLanes, c0);
+		c1.gridx = 1; c1.gridy = 0; c1.weightx = 0.0;
+		c1.fill = GridBagConstraints.NONE;
+		c1.ipady = 2; c1.ipadx = 2;		
+		lanesPanel.add(textNLanes, c1);
 		sliderPanel.add(lanesPanel);
 		
 		sliderPanel.setLayout(new BoxLayout(sliderPanel, BoxLayout.Y_AXIS));
@@ -362,20 +397,20 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		settingsPanel = new JPanel();
 		settingsPanel.setLayout(new GridBagLayout());
 		settingsPanel.setBorder(new EmptyBorder(2, 2, 2, 2));
-		GridBagConstraints c1 = new GridBagConstraints();
+		GridBagConstraints c2 = new GridBagConstraints();
 		
 		labelDegBG = new JLabel("Polynomial Degree");
-		labelPolyDerivative = new JLabel("Max Polynomial Derivative");
-		labelTolPK = new JLabel("Peak Tolerance");
+		labelPolyDerivative = new JLabel("Max Polynomial Derivative (grayvalue/px)");
+		labelTolPK = new JLabel("Peak Tolerance (%)");
 
-		labelAreaDrift = new JLabel("Area Drift");
+		labelAreaDrift = new JLabel("Area Drift ");
 		
 		textDegBG = new JSpinner(new SpinnerNumberModel(degBG, -1, 15, 1));
 		textDegBG.setBorder(BorderFactory.createCompoundBorder(
 			textDegBG.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textDegBG.getEditor()).getTextField().setColumns(textWidth);
 		
-		textPolyDerivative = new JSpinner(new SpinnerNumberModel(polyDerivative, 0.001, 10.0, 0.001));
+		textPolyDerivative = new JSpinner(new SpinnerNumberModel(polyDerivative, 0.00, 10.0, 0.01));
 		textPolyDerivative.setBorder(BorderFactory.createCompoundBorder(
 			textPolyDerivative.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textPolyDerivative.getEditor()).getTextField().setColumns(textWidth);
@@ -385,29 +420,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			textTolPK.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textTolPK.getEditor()).getTextField().setColumns(textWidth);
 		
-		textAreaDrift = new JSpinner(new SpinnerNumberModel(areaDrift, 0.0, 20.0, 0.01));
+		textAreaDrift = new JSpinner(new SpinnerNumberModel(areaDrift, 0.0, 20.0, 0.1));
 		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(
 			textAreaDrift.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField().setColumns(textWidth);
 		
 		chkBoxBands = new JCheckBox("Show Bands");
-		
-		buttonPanelFitType = new JPanel();
-		buttonPanelFitType.setLayout(new BoxLayout(buttonPanelFitType, BoxLayout.Y_AXIS));
-		buttonBands = new JRadioButton("Banded");
-		buttonBands.setActionCommand("Banded");
-		buttonContinuum = new JRadioButton("Continuum");
-		buttonContinuum.setActionCommand("Continuum");
-		
-		buttonGroupFitType = new ButtonGroup();
-		buttonGroupFitType.add(buttonBands);
-		buttonGroupFitType.add(buttonContinuum);
-		
-		buttonPanelFitType.add(buttonBands);
-		buttonPanelFitType.add(buttonContinuum);
-		buttonPanelFitType.setBorder(new TitledBorder(BorderFactory.createEtchedBorder(),
-		        "Lane Contents Pattern", TitledBorder.LEADING, TitledBorder.BELOW_TOP,
-		        new Font("Sans", Font.PLAIN, 11)));
 		
 		final String[] lanes = new String[1 + nLanes];
 		lanes[0] = "Select Ladder Lane";
@@ -421,63 +439,63 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 		buttonEditPeaks = new JToggleButton("Edit Custom Peaks");
 		buttonResetCustomPeaks = new JButton("Reset Custom Peaks");
 		
-		c1.fill = GridBagConstraints.HORIZONTAL;
-		c1.ipadx = 2; c1.ipady = 2;
-		c1.gridx = 0; c1.gridy = 0; c1.weightx = 0.1;		
-		settingsPanel.add(labelDegBG, c1);
-		c1.gridx = 0; c1.gridy = 1; c1.weightx = 0.1;
-		settingsPanel.add(labelPolyDerivative, c1);
-		c1.gridx = 0; c1.gridy = 2; c1.weightx = 0.1;
-		settingsPanel.add(labelTolPK, c1);
-		c1.gridx = 0; c1.gridy = 3; c1.weightx = 0.1;
-		settingsPanel.add(labelAreaDrift, c1);
+		c2.fill = GridBagConstraints.HORIZONTAL;
+		c2.ipadx = 2; c2.ipady = 2;
+		c2.gridx = 0; c2.gridy = 0; c2.weightx = 0.1;		
+		settingsPanel.add(labelDegBG, c2);
+		c2.gridx = 0; c2.gridy = 1; c2.weightx = 0.1;
+		settingsPanel.add(labelPolyDerivative, c2);
+		c2.gridx = 0; c2.gridy = 2; c2.weightx = 0.1;
+		settingsPanel.add(labelTolPK, c2);
+		c2.gridx = 0; c2.gridy = 3; c2.weightx = 0.1;
+		settingsPanel.add(labelAreaDrift, c2);
 		
-		c1.fill = GridBagConstraints.NONE;
-		c1.gridx = 1; c1.gridy = 0; c1.weightx = 0.0;
-		settingsPanel.add(textDegBG, c1);
-		c1.gridx = 1; c1.gridy = 1; c1.weightx = 0.0;
-		settingsPanel.add(textPolyDerivative, c1);
-		c1.gridx = 1; c1.gridy = 2; c1.weightx = 0.0;
-		settingsPanel.add(textTolPK, c1);
-		c1.gridx = 1; c1.gridy = 3; c1.weightx = 0.0;
-		settingsPanel.add(textAreaDrift, c1);
-			
-		c1.gridx = 2; c1.gridy = 0; 
-		c1.gridheight = 4;
-		c1.fill = GridBagConstraints.VERTICAL;
-		c1.weightx = 0.0;
-		settingsPanel.add(buttonPanelFitType, c1);
+		c2.fill = GridBagConstraints.NONE;
+		c2.gridx = 1; c2.gridy = 0; c2.weightx = 0.0;
+		settingsPanel.add(textDegBG, c2);
+		c2.gridx = 1; c2.gridy = 1; c2.weightx = 0.0;
+		settingsPanel.add(textPolyDerivative, c2);
+		c2.gridx = 1; c2.gridy = 2; c2.weightx = 0.0;
+		settingsPanel.add(textTolPK, c2);
+		c2.gridx = 1; c2.gridy = 3; c2.weightx = 0.0;
+		settingsPanel.add(textAreaDrift, c2);
 		
-		c1.gridx = 0; c1.gridy = 5;
-		c1.gridwidth = 1; c1.gridheight = 1; 
-		c1.fill = GridBagConstraints.HORIZONTAL;
-		settingsPanel.add(chkBoxBands, c1); 
+//		c1.gridx = 2; c1.gridy = 0; 
+//		c1.gridheight = 4;
+//		c1.fill = GridBagConstraints.VERTICAL;
+//		c1.weightx = 0.0;
+//		settingsPanel.add(buttonPanelFitType, c1);
 		
-		c1.gridx = 0; c1.gridy = 6; c1.gridwidth = 3; c1.gridheight = 1;
-		settingsPanel.add(cmbBoxLadderLane, c1);
+		c2.gridx = 0; c2.gridy = 5;
+		c2.gridwidth = 1; c2.gridheight = 1; 
+		c2.fill = GridBagConstraints.HORIZONTAL;
+		settingsPanel.add(chkBoxBands, c2); 
 		
-		c1.gridx = 0; c1.gridy = 7;
-		settingsPanel.add(cmbBoxLadderType, c1);
+		c2.gridx = 0; c2.gridy = 6; c2.gridwidth = 3; c2.gridheight = 1;
+		settingsPanel.add(cmbBoxLadderLane, c2);
 		
-		c1.gridx = 0; c1.gridy = 8; 
-		settingsPanel.add(cmbBoxDist, c1);
+		c2.gridx = 0; c2.gridy = 7;
+		settingsPanel.add(cmbBoxLadderType, c2);
 		
-		c1.gridx = 0; c1.gridy = 9; 
-		c1.gridwidth = 1;
-		settingsPanel.add(buttonEditPeaks, c1);
+		c2.gridx = 0; c2.gridy = 8; 
+		settingsPanel.add(cmbBoxDist, c2);
 		
-		c1.gridx = 0; c1.gridy = 10; 
-		settingsPanel.add(buttonResetCustomPeaks, c1);
+		c2.gridx = 0; c2.gridy = 9; 
+		c2.gridwidth = 1;
+		settingsPanel.add(buttonEditPeaks, c2);
 		
-		c1.gridx = 0; c1.gridy = 11;
-		c1.gridwidth = GridBagConstraints.REMAINDER; 
-		c1.gridheight = 1; c1.weighty = 1.0;
-		settingsPanel.add(new JLabel(), c1);
+		c2.gridx = 0; c2.gridy = 10; 
+		settingsPanel.add(buttonResetCustomPeaks, c2);
+		
+		c2.gridx = 0; c2.gridy = 11;
+		c2.gridwidth = GridBagConstraints.REMAINDER; 
+		c2.gridheight = 1; c2.weighty = 1.0;
+		settingsPanel.add(new JLabel(), c2);
 		
 		dialogPanel = new JPanel();
 		dialogPanel.setBackground(Color.darkGray);
 		dialogPanel.setLayout(new BorderLayout());
-		dialogPanel.add(buttonPanelAutoManual, BorderLayout.NORTH);
+		dialogPanel.add(topButtonsPanel, BorderLayout.NORTH);
 		dialogPanel.add(sliderPanel, BorderLayout.CENTER);
 		dialogPanel.add(settingsPanel, BorderLayout.EAST);
 		dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
@@ -938,8 +956,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 	private void displayLog() {
 		String logOutput = fitter.getSummary();
 		HTMLDialog logWindow =  new HTMLDialog("LOG", logOutput, false);
+
 		if (buttonContinuum.isSelected()) { 
 			JTabbedPane distributionsPane = new JTabbedPane();
+			Component[] c = logWindow.getContentPane().getComponents();
+//					(JRootPane) ((BorderLayout) 
+//							logWindow.getLayout()).getLayoutComponent(BorderLayout.CENTER).get;
+			
 			for (int i : getAllLaneNumbers()) {
 				if (i != ladderLaneInt) {
 					String name = String.format("Lane %1$d", i);
@@ -959,7 +982,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 					distributionsPane.addTab(name, p);
 				}
 			}
-			logWindow.getContentPane().add(distributionsPane, BorderLayout.EAST);
+			JSplitPane sp = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, distributionsPane, c[0]);
+			c = logWindow.getContentPane().getComponents();
+			log.info(c.toString());
+			sp.setDividerLocation(0.5);
+			logWindow.getContentPane().add(sp);
+			Dimension screenD = IJ.getScreenSize();
+			Dimension dialogD = logWindow.getSize();
+			dialogD.width = (int) FastMath.min(0.80*screenD.width, 1500);
+			logWindow.setSize(dialogD);
+			GUI.center(logWindow);
 		}
 		String file = impTitle + "_log.html";
 		try (BufferedWriter out = new BufferedWriter(new FileWriter(savePath + file))) {
@@ -1290,7 +1322,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			fitDone = false;
 			
 			chkBoxBands.setEnabled(true);
-			chkBoxBands.setSelected(true);
+			chkBoxBands.setSelected(false);
 			buttonEditPeaks.setEnabled(true);
 			buttonResetCustomPeaks.setEnabled(true);
 			if (!buttonEditPeaks.isSelected())
@@ -1485,7 +1517,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener, Serie
 			if (rois.size() == 0 || plotter == null)
 				return;
 			final int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
-			final int y = ((ImageCanvas) e.getSource()).offScreenX(e.getY());
+			final int y = ((ImageCanvas) e.getSource()).offScreenY(e.getY());
 			statusServ.showStatus("[" + x + ":" + y + "]");
 			if (!selectionUpdate) { // Not dragging an ROI
 				String roiCurrent = "none"; // None selected
