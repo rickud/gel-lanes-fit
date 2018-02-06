@@ -515,7 +515,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.areaDrift = areaDrift;
 			
 			sortParameters();
-			polyOffset = 0.98; //proportion of the profile value
+			polyOffset = 0.9; //proportion of the profile value
 			minX = this.xtarget.getMinValue();
 			maxX = this.xtarget.getMaxValue();
 			minY = this.ytarget.getMinValue()*polyOffset;

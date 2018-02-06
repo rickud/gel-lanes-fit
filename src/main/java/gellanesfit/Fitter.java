@@ -142,7 +142,7 @@ class Fitter {
 			final List<Peak> fitted = getFittedPeaks(lane);
 			RealVector areas = new ArrayRealVector();
 			if (guess.size() != fitted.size()) {
-				log.error("Size mismatch: " + guess.size() + ", " + fitted.size());
+				log.info("Size mismatch: " + guess.size() + ", " + fitted.size());
 			}
 
 			int band = 1;
@@ -282,7 +282,7 @@ class Fitter {
 			out.write(outText);
 			out.close();
 		}
-		catch (final IOException e) {
+		catch (IOException e) {
 			log.info("Exception", e);
 		}
 	}
@@ -654,14 +654,18 @@ class Fitter {
 	public void resetFit(final int lane) {
 		final Iterator<Peak> itFitted = allFittedList.iterator();
 		while (itFitted.hasNext()) {
-			if (itFitted.next().getLane() == lane) itFitted.remove();
+			Peak f = itFitted.next();
+			if (f == null || f.getLane() == lane) itFitted.remove();
 		}
-
+		Collections.sort(allFittedList);
+		
 		final Iterator<Peak> itGuess = allGuessList.iterator();
 		while (itGuess.hasNext()) {
-			if (itGuess.next().getLane() == lane)
+			Peak g = itGuess.next();
+			if (g == null || g.getLane() == lane)
 				itGuess.remove();
 		}
+		Collections.sort(allGuessList);
 	}
 
 	public void resetAllFitter() {
