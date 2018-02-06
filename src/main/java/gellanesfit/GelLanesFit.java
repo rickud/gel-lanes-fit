@@ -40,6 +40,7 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.ImageWindow;
 import ij.io.Opener;
+import ij.process.LUT;
 
 @Plugin(type = Command.class, headless = true,
 	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
@@ -166,8 +167,8 @@ public class GelLanesFit implements Command {
 		ij.launch(args);
 		String sep = File.separator;
 		String folder = "src" + sep + "main" + sep + "resources"
-									+ sep +"sample" + sep;
-		String file = "second_destain.tif";
+											+ sep +"sample" + sep + "Tagment-Test3" + sep + "WRick_112217" + sep;
+//		String file = "second_destain.tif";
 //		String file = "1_top_LM.tif";
 //		String file = "2_top_LM.tif";
 //		String file = "05_top_LM.tif";
@@ -186,7 +187,7 @@ public class GelLanesFit implements Command {
 //		String file = "05_HM.tif";
 		
 //		String file = "longgel_1s.tif";
-//		String file = "longgel_1_5s.tif";
+		String file = "longgel_1_5s.tif";
 
 //		Massa's phone
 //		String file = "IMG_20171122_100940.jpg";
@@ -218,6 +219,8 @@ public class GelLanesFit implements Command {
 //		String file = "Dec22Pulldowns.tif";
 		
 		final ImagePlus iPlus = new Opener().openImage(folder + file);
+		LUT[] lut = iPlus.getLuts();
+		iPlus.setLut(lut[0].createInvertedLut());
 		iPlus.show();
 		ij.command().run(GelLanesFit.class, true);
 	}
