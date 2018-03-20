@@ -20,6 +20,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.time.StopWatch;
@@ -433,7 +434,7 @@ class Fitter {
 	}
 
 	public List<DataSeries> doFit(final List<Integer> lanes) {
-		int progress = 1;
+		
 		final ArrayList<DataSeries> in = new ArrayList<>();
 		for (final int i : lanes) {
 			for (final DataSeries d : inputData) {
@@ -444,8 +445,10 @@ class Fitter {
 		final StopWatch sw = new StopWatch();
 		sw.start();
 		try {
+			AtomicInteger progress = new AtomicInteger();
 			in.parallelStream().forEach((d) -> {
 				out.addAll(doFit(d.getLane()));
+				statusServ.showProgress(progress.incrementAndGet(), in.size());
 			});
 		}
 		catch (final NullPointerException np) {
@@ -454,7 +457,7 @@ class Fitter {
 		final String t = String.format("Time elapsed: %1$.1f s\n", sw.getTime() /
 			1000.0);
 		log.info(t);
-		statusServ.showProgress(++progress, in.size());
+		
 		return out;
 	}
 
@@ -664,6 +667,7 @@ class Fitter {
 		final Iterator<Peak> it = allGuessList.iterator();
 		while (it.hasNext()) {
 			final Peak p = it.next();
+			if (p == null) continue;	
 			if (p.getLane() == lane) g.add(p);
 		}
 		return g;
