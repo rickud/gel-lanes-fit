@@ -264,7 +264,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			auto = prefs.getBoolean(AUTO, true);
 			nLanes = prefs.getInt(NLANES, 4);
 			ladderLaneInt = prefs.getInt(LADDERLANEINT, noLadderLane);
-
+			
 			lw = prefs.getInt(LW, (int) Math.round(0.8 * iw / nLanes));
 			lh = prefs.getInt(LH, (int) Math.round(ih * 0.8));
 			lsp = prefs.getInt(LSP, Math.round((iw - lw * nLanes) / (nLanes + 1)));
@@ -294,6 +294,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			prefs.putInt(LVOFF, lvoff);
 		}
 
+		ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
 		buttonPanelAutoManual = new JPanel();
 		buttonAuto = new JRadioButton("Automatic Rectangle Selection");
 		buttonAuto.setActionCommand("Auto");
@@ -433,6 +434,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		textAreaDrift = new JSpinner(new SpinnerNumberModel(areaDrift, 0.0, 20.0,
 			0.1));
+		textAreaDrift.setEditor(new JSpinner.NumberEditor(textAreaDrift, "###.#"));
 		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(textAreaDrift
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField()
@@ -557,7 +559,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonBands.setSelected(true);
 		chkBoxBands.setSelected(false);
 		chkBoxBands.setEnabled(false);
-		cmbBoxLadderLane.setSelectedIndex(ladderLaneInt);
 		cmbBoxLadderType.setSelectedIndex(ladderType);
 		cmbBoxLadderType.setEnabled(ladder != null);
 		updateLadderLane();
@@ -613,11 +614,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				cleanupAndClose();
 			}
 		});
-
-		while (rois.size() == 0) {
-			log.info("Loading...");
-			IJ.wait(250); // delay to make sure ROIs have updated
-		}
 
 		reDrawROIs(imp, "none");
 		imp.killRoi();
@@ -843,11 +839,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				}
 			}
 			else if (roi.getName().equals(ladderLaneStr)) {
-				if (ladderLaneInt != noLadderLane && !ladderLaneStr.equals(roiName)) {
-					roi.setStrokeWidth(3);
-					roi.setStrokeColor(MainDialog.reference);
-					labelRoi.setFillColor(MainDialog.reference);
-				}
+				roi.setStrokeWidth(3);
+				roi.setStrokeColor(MainDialog.reference);
+				labelRoi.setFillColor(MainDialog.reference);
 			}
 			else {
 				roi.setStrokeWidth(1);
@@ -988,7 +982,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		DataSeries d = plotter.getPlotsCustomPeaks(lane);
 		if (d == null) {
 			final RealVector empty = new ArrayRealVector();
-			d = new DataSeries("Custom Points", lane, DataSeries.CUSTOMPEAKS, empty,
+			d = new DataSeries("Custom Peaks", lane, DataSeries.CUSTOMPEAKS, empty,
 				empty, Plotter.vMarkerEditPeakColor);
 			plotter.addDataSeries(d);
 		}
@@ -1030,15 +1024,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			}
 			final JSplitPane sp = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
 				distributionsPane, c[0]);
-			c = logWindow.getContentPane().getComponents();
-			log.info(c.toString());
-			sp.setDividerLocation(0.5);
+//			c = logWindow.getContentPane().getComponents();
+//			log.info(c.toString());
 			logWindow.getContentPane().add(sp);
 			final Dimension screenD = IJ.getScreenSize();
 			final Dimension dialogD = logWindow.getSize();
 			dialogD.width = (int) FastMath.min(0.80 * screenD.width, 1500);
 			logWindow.setSize(dialogD);
 			GUI.center(logWindow);
+			sp.setDividerLocation(0.9);
 		}
 		final String file = impTitle + "_log.html";
 		try (BufferedWriter out = new BufferedWriter(new FileWriter(savePath +
@@ -1115,31 +1109,23 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private void updateLadderLane() {
-		int ref = cmbBoxLadderLane.getSelectedIndex();
-		boolean found = false;
-		cmbBoxLadderLane.removeActionListener(this);
-		if (ladderLaneInt != noLadderLane) {
-			ref = ladderLaneInt;
-		}
-		final String str = cmbBoxLadderLane.getItemAt(0);
-		cmbBoxLadderLane.removeAllItems();
-		cmbBoxLadderLane.addItem(str);
-		for (final Roi r : rois) {
-			final String name = r.getName();
-			final int ln = Integer.parseInt(name.substring(5));
-			cmbBoxLadderLane.addItem(name);
-			if (ln == ref) {
-				found = true;
-				ladderLaneInt = ref;
-
+		if (cmbBoxLadderLane.getItemCount() != rois.size() + 1) {
+			if (ladderLaneInt > rois.size()) 
+				ladderLaneInt = 0;
+			final String str = cmbBoxLadderLane.getItemAt(0);
+			cmbBoxLadderLane.setEnabled(false);
+			cmbBoxLadderLane.removeAllItems();
+			cmbBoxLadderLane.addItem(str);
+			for (final Roi r : rois) {
+				final String name = r.getName();
+				cmbBoxLadderLane.addItem(name);
 			}
+			cmbBoxLadderLane.setEnabled(true);
 		}
-		cmbBoxLadderLane.addActionListener(this);
-		if (found) {
-			cmbBoxLadderLane.setSelectedIndex(ref);
-			cmbBoxLadderType.setEnabled(true);
-		}
-		else cmbBoxLadderLane.setSelectedIndex(noLadderLane);
+		
+		if (cmbBoxLadderLane.getSelectedIndex() != ladderLaneInt)
+			cmbBoxLadderLane.setSelectedIndex(ladderLaneInt);
+		
 		fitter.setReferenceLane(ladderLaneInt);
 		plotter.setReferencePlot(ladderLaneInt);
 		prefs.putInt(LADDERLANEINT, ladderLaneInt);
@@ -1278,7 +1264,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		if (o == textNLanes) {
 			nLanes = (int) textNLanes.getModel().getValue();
 			prefs.putInt(NLANES, nLanes);
+			ladderLaneInt = ladderLaneInt <= nLanes ? ladderLaneInt : noLadderLane;
+			ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
 			sliderUpdate();
+			updateLadderLane();
 		}
 		else if (o == textDegBG) {
 			degBG = (int) textDegBG.getModel().getValue();
@@ -1470,6 +1459,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			reDrawROIs(imp, "none"); // adds the bands to the ROIs
 
 			plotter.savePlots(savePath);
+			if (!plotter.isVisible()){
+				plotter.pack();
+				plotter.setVisible(true);
+			};
 			displayLog();
 			new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
 		}
@@ -1549,20 +1542,20 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// ComboBoxes
 		// -------------------------------------------------------------
 		if (e.getSource().equals(cmbBoxLadderLane)) {
-			final String laneStr = (String) cmbBoxLadderLane.getSelectedItem();
+			//final String laneStr = cmbBoxLadderLane.getSelectedItem().toString();			
 			final int laneInt = cmbBoxLadderLane.getSelectedIndex();
+			if (laneInt == -1) return;
 			if (laneInt == 0) {
-				ladderLaneStr = "none";
 				ladderLaneInt = MainDialog.noLadderLane;
 				cmbBoxLadderType.setEnabled(false);
 				cmbBoxDist.setEnabled(false);
 			}
 			else {
-				ladderLaneStr = laneStr;
 				ladderLaneInt = laneInt;
 				cmbBoxLadderType.setEnabled(true);
 				cmbBoxDist.setEnabled(true);
 			}
+			ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
 			updateLadderLane();
 			reDrawROIs(imp, "none");
 		}
@@ -1617,7 +1610,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 						plotter.setVLine(ln, y);
 					}
 					else {
-						plotter.setSelected(MainDialog.noLadderLane);
+						plotter.setSelected(MainDialog.noLaneSelected);
 					}
 
 					if (!roiPreviouslySelected.equals("none")) {
@@ -1677,6 +1670,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			if (selectionUpdate) {
 				final Roi roiNew = imp.getRoi();
 				if (roiNew != null) {
+					if (roiNew.getType() != Roi.RECTANGLE) return;
 					// If ROI exists and larger that 100 px
 					final Rectangle rN = roiNew.getBounds();
 					if (rN.getWidth() * rN.getHeight() > 100) {
