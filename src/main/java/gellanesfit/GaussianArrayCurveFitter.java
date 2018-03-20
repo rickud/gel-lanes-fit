@@ -46,7 +46,6 @@ import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.stat.descriptive.moment.Mean;
 import org.apache.commons.math3.stat.descriptive.moment.StandardDeviation;
 import org.apache.commons.math3.util.FastMath;
-//import org.jfree.util.Log;
 
 class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
@@ -83,6 +82,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		this.polyConcavity = polyConcavity;
 		this.peakTol = peakTol;
 		this.areaDrift = areaDrift;
+
+//		f.getContentPane().add(new ChartPanel(chart));
 	}
 
 	/**
@@ -512,6 +513,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			final double[] ytarget, final double polyDerivative,
 			final double areaDrift)
 		{
+
 			this.fitMode = fitMode;
 			this.initialParameterSet = new ArrayRealVector(initialParameterSet);
 			this.xtarget = new ArrayRealVector(xtarget);
@@ -520,10 +522,10 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.areaDrift = areaDrift;
 
 			sortParameters();
-			polyOffset = 0.9; // proportion of the profile value
+			polyOffset = 0.97; // proportion of the profile value
 			minX = this.xtarget.getMinValue();
 			maxX = this.xtarget.getMaxValue();
-			minY = this.ytarget.getMinValue() * polyOffset;
+			minY = this.ytarget.getMinValue();
 			maxY = this.ytarget.getMaxValue();
 
 			maxD1 = polyDerivative;
@@ -531,7 +533,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.profile = new LinearInterpolator().interpolate(xtarget, ytarget);
 			double mds = 1.3;
 			if (fitMode == continuumMode) {
-				mds = 0.1;
+				mds = 0.5;
 			}
 			if (mean0.getDimension() > 1) {
 				maxMeanDiff = mean0.getSubVector(1, mean0.getDimension() - 1).subtract(
@@ -550,13 +552,13 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				norm0 = norm0.add(mean0.map(f).mapSubtract(minY)).mapMultiply(0.5);
 			}
 
-			minN = 0.01; // proportion of the profile-bg difference
+			minN = 0.05; // proportion of the profile-bg difference
 
 			minSD = 0.4; // proportion of sd0[i]
 			maxSD = 2.0;
 			if (fitMode == continuumMode) {
-				minSD = 0.95;
-				maxSD = 1.05;
+				minSD = 0.8;
+				maxSD = 1.5;
 			}
 		}
 
@@ -593,44 +595,57 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 			// Polynomyal parameters
 			if (poly.getDimension() > 0) {
-				final double tolHigh = (maxY - minY) * (1 - polyOffset);
-				final double tolLow = tolHigh * 3.0;
+				final double tolHigh = ytarget.getMinValue() * polyOffset;
+				final double tolLow = 0.5 * polyOffset * ytarget.getMinValue();
 				p = new PolynomialFunction(poly.toArray());
 				PolynomialFunction p1 = p.polynomialDerivative();
 				double d1bg = xtarget.map(p1).getMaxValue();
 				final RealVector coeffs0 = poly.getSubVector(0, 1);
 				RealVector coeffs1end = poly.getSubVector(1, poly.getDimension() - 1);
 				RealVector bg = xtarget.map(p);
-				RealVector diff = ytarget.subtract(bg.mapAdd(tolHigh));
 
-				double marginUpper = diff.getMinValue();
-				double marginLower = ytarget.getMinValue() - (bg.getMaxValue() +
-					tolLow);
-
-				boolean tooHigh = marginUpper < 0.0;
-				boolean tooLow = marginLower > 0.0;
-				boolean tooSteep = d1bg <= minD1 || d1bg > maxD1;
-
-				while (tooSteep || tooHigh || tooLow) {
-					if (tooSteep) coeffs1end = coeffs1end.mapMultiplyToSelf(0.8);
-					if (tooHigh) coeffs0.setEntry(0, coeffs0.getEntry(0) + marginUpper);
-					if (tooLow) coeffs0.setEntry(0, coeffs0.getEntry(0) + FastMath.max(
-						marginLower, 1e-5));
-
+				boolean tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() -
+					bg.getMinValue() > tolHigh - tolLow;
+				while (tooSteep) {
+					coeffs1end = coeffs1end.mapMultiplyToSelf(0.9);
 					poly = coeffs0.append(coeffs1end);
 					p = new PolynomialFunction(poly.toArray());
 					p1 = p.polynomialDerivative();
 					d1bg = xtarget.map(p1).getMaxValue();
-					diff = ytarget.subtract(bg.mapAdd(tolHigh));
-
 					bg = xtarget.map(p);
-					marginUpper = diff.getMinValue();
-					marginLower = ytarget.getMinValue() - (bg.getMaxValue() + tolLow);
-
-					tooHigh = marginUpper < 0.0;
-					tooLow = marginLower > 0.0;
-					tooSteep = d1bg <= minD1 || d1bg > maxD1;
+					tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() - bg
+						.getMinValue() > tolHigh - tolLow;
 				}
+
+				final boolean tooHigh = bg.getMaxValue() > tolHigh;
+				if (tooHigh) {
+					final double marginUpper = bg.getMaxValue() - tolHigh;
+					coeffs0.setEntry(0, coeffs0.getEntry(0) - (marginUpper < 1e-3
+						? 1e-3 : marginUpper));
+					poly = coeffs0.append(coeffs1end);
+				}
+
+				final boolean tooLow = bg.getMinValue() < tolLow;
+				if (tooLow) {
+					final double marginLower = tolLow - bg.getMinValue();
+					coeffs0.setEntry(0, coeffs0.getEntry(0) + (marginLower < 1e-3
+						? 1e-3 : marginLower));
+					poly = coeffs0.append(coeffs1end);
+				}
+
+//					final RealVector bg1 = bg;
+//					Timer timer = new Timer(1, new ActionListener(){
+//							@Override
+//							public void actionPerformed(ActionEvent e) {
+//							final XYSeriesCollection d = new XYSeriesCollection();
+//							d.addSeries(new DataSeries("", 0, 0, xtarget, ytarget, Plotter.profileColor));
+//							d.addSeries(new DataSeries("", 0, 1, xtarget, bg1, Plotter.bgColor));
+//							chart.getXYPlot().setDataset(d);
+//							f.setVisible(true);
+//						}
+//					});
+//					timer.start();
+
 			}
 
 			// Gaussian Parameters
