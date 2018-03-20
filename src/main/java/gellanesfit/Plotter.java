@@ -27,6 +27,7 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.GridLayout;
 import java.awt.Paint;
 import java.awt.Shape;
 import java.awt.Stroke;
@@ -108,7 +109,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 			5.0f, 5.0f, 5.0f }, 0.0f);
 
 	// Colors for DataSeries in plots
-	private static final Color profileColor = Color.BLACK;
+	static final Color profileColor = Color.BLACK;
 	static final Color gaussColor = Color.RED;
 	static final Color bgColor = Color.BLUE;
 	static final Color fittedColor = new Color(255, 153, 0);
@@ -515,39 +516,26 @@ class Plotter extends JFrame implements ChartMouseListener {
 		chartTabs = new ArrayList<>();
 		if (chartPanels.size() == 0) return;
 		final Iterator<ChartPanel> chartIter = chartPanels.iterator();
-		final GridBagConstraints c = new GridBagConstraints();
 		int i = 0;
 		while (chartIter.hasNext()) {
 			JPanel p = new JPanel();
 			if (!chartTabs.isEmpty() && i < (rows * cols)) {
 				p = chartTabs.get(chartTabs.size() - 1);
-			}
-			else {
+			} else {
 				p.setBorder(new EmptyBorder(5, 5, 5, 5));
-//				p.setLayout(new GridLayout(rows, cols));
-				p.setLayout(new GridBagLayout());
-				c.weightx = 0.5;
-				c.weighty = 0.5;
-				c.fill = GridBagConstraints.BOTH;
-				c.ipady = 2;
-				c.ipadx = 2;
+				p.setLayout(new GridLayout(rows, cols));
 				chartTabs.add(p);
 				final int tab = chartTabs.size() - 1;
 				chartsTabbedPane.addTab("Lanes " + (tab * (rows * cols) + 1) + " - " +
 					(tab * (rows * cols) + 4), p);
 				i = 0;
 			}
-
-			c.gridx = i % cols;
-			c.gridy = i / cols;
-			p.add(chartIter.next(), c);
+			p.add(chartIter.next());
 			i++;
 		}
 		while (i < (rows * cols)) {
 			// Add placeholders for empty plots
-			c.gridx = i % cols;
-			c.gridy = i / cols;
-			chartTabs.get(chartTabs.size() - 1).add(new JPanel(), c);
+			chartTabs.get(chartTabs.size() - 1).add(new JPanel());
 			i++;
 		}
 		if (selected != MainDialog.noLaneSelected) chartsTabbedPane
@@ -559,7 +547,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 		plotNumbers.clear();
 		chartPanels.clear();
 		removeVerticalMarkers();
-		selected = MainDialog.noLaneSelected;
 	}
 
 	public void savePlots(final String savePath) {
