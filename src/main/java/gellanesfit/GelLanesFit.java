@@ -152,28 +152,31 @@ public class GelLanesFit implements Command {
 		ij.launch(args);
 		final String sep = File.separator;
 		final String folder = "src" + sep + "main" + sep + "resources" + sep +
-			"sample" + sep + "Tagment-Test3" + sep + "WRick_112217" + sep;
+			"sample" + sep + "Tagment-Test3" + sep
+//			+ "Gel Camera" + sep;
+		+ "Massa's Phone" + sep;
+//			+ "Rick's Phone" + sep;
+//			+ "Other Camera" + sep;
 		// List of files available for debugging purposes
 //		String file = "second_destain.tif";
-//		String file = "1_top_LM.tif";
-//		String file = "2_top_LM.tif";
-//		String file = "05_top_LM.tif";
+//		String file = "LM_1_top.tif";
+//		String file = "LM_1_bottom.tif";
+//		String file = "LM_1_wo_tray.tif";
+//		String file = "LM_1_wo_tray_2.tif";
 
-//		String file = "1_bottom_LM.tif";
-//		String file = "05_bottom_LM.tif";
+//		String file = "LM_2_top.tif";
 
-//		String file = "1_LM_wo_tray.tif";
-//		String file = "1_LM_wo_tray_2.tif";
+//		String file = "LM_5_bottom.tif";
+//		String file = "LM_5_top.tif";
+//		String file = "LM_5_wo_tray_2.tif";
 
-//		String file = "05_LM_wo_tray_2.tif";
+//		String file = "HM_1_1.tif";
+//		String file = "HM_1_2.tif";
+//		String file = "HM_1_3.tif";
+//		String file = "HM_5.tif";
 
-//		String file = "1_HM.tif";
-//		String file = "1_HM_2.tif";
-//		String file = "1_HM_3.tif";
-//		String file = "05_HM.tif";
-
-//		String file = "longgel_1s.tif";
-		final String file = "longgel_1_5s.tif";
+//		String file = "Long_1s.tif";
+//		String file = "Long_5s.tif";
 
 //		Massa's phone
 //		String file = "IMG_20171122_100940.jpg";
@@ -184,29 +187,33 @@ public class GelLanesFit implements Command {
 //		String file = "IMG_20171122_101143.jpg";
 //		String file = "IMG_20171122_101151.jpg";
 //		String file = "IMG_20171122_101200.jpg";
-//		String file = "IMG_20171122_101520.jpg";
-//		String file = "IMG_20171122_101527.jpg";
-//		String file = "IMG_20171122_101537.jpg";
+//		String file = "HM_IMG_20171122_101520.jpg";
+//		String file = "HM_IMG_20171122_101527.jpg";
+		String file = "HM_IMG_20171122_101537.jpg";
+
+//		Rick's phone
+//		String file = "HM_Immagine 2017-11-22_11-24-27-570_Crop.jpeg";
+//		String file = "IMG_20171122_100957.jpg";
 
 //		Other Camera
 //		String file = "LRG_DSC00419.JPEG";
 //		String file = "LRG_DSC00420.JPEG";
-//		String file = "LRG_DSC00421.JPEG";
+//		String file = "HM_DSC00421_Crop.jpg";
 //		String file = "LRG_DSC00422.JPEG";
 //		String file = "LRG_DSC00423.JPEG";
 //		String file = "LRG_DSC00424.JPEG";
 //		String file = "LRG_DSC00425.JPEG";
 //		String file = "LRG_DSC00426.JPEG";
-//		String file = "LRG_DSC00427.JPEG";
-//		String file = "LRG_DSC00428.JPEG";
-//		String file = "LRG_DSC00429.JPEG";
+//		String file = "Long_DSC00427_Crop.JPEG";
 
 //		String file = "Dec17Pulldowns.tif";
 //		String file = "Dec22Pulldowns.tif";
 
 		final ImagePlus iPlus = new Opener().openImage(folder + file);
-		final LUT[] lut = iPlus.getLuts();
-		iPlus.setLut(lut[0].createInvertedLut());
+		if (iPlus.getType() == ImagePlus.GRAY8 || iPlus.getType() == ImagePlus.GRAY16) {
+			final LUT[] lut = iPlus.getLuts();
+			iPlus.setLut(lut[0].createInvertedLut());
+		}
 		iPlus.show();
 		ij.command().run(GelLanesFit.class, true);
 	}
