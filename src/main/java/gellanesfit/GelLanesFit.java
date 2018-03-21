@@ -152,9 +152,9 @@ public class GelLanesFit implements Command {
 		ij.launch(args);
 		final String sep = File.separator;
 		final String folder = "src" + sep + "main" + sep + "resources" + sep +
-			"sample" + sep + "Tagment-Test3" + sep
+			"sample" + sep + "Tagment-Test3" + sep;
 //			+ "Gel Camera" + sep;
-		+ "Massa's Phone" + sep;
+//			+ "Massa's Phone" + sep;
 //			+ "Rick's Phone" + sep;
 //			+ "Other Camera" + sep;
 		// List of files available for debugging purposes
@@ -189,7 +189,7 @@ public class GelLanesFit implements Command {
 //		String file = "IMG_20171122_101200.jpg";
 //		String file = "HM_IMG_20171122_101520.jpg";
 //		String file = "HM_IMG_20171122_101527.jpg";
-		String file = "HM_IMG_20171122_101537.jpg";
+//		String file = "HM_IMG_20171122_101537.jpg";
 
 //		Rick's phone
 //		String file = "HM_Immagine 2017-11-22_11-24-27-570_Crop.jpeg";
@@ -207,7 +207,7 @@ public class GelLanesFit implements Command {
 //		String file = "Long_DSC00427_Crop.JPEG";
 
 //		String file = "Dec17Pulldowns.tif";
-//		String file = "Dec22Pulldowns.tif";
+		String file = "Dec22Pulldowns.tif";
 
 		final ImagePlus iPlus = new Opener().openImage(folder + file);
 		if (iPlus.getType() == ImagePlus.GRAY8 || iPlus.getType() == ImagePlus.GRAY16) {

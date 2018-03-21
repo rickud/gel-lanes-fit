@@ -72,6 +72,7 @@ class Fitter {
 	private int degBG;
 	private double tolPK;
 	private double areaDrift;
+	private double sdDrift;
 	private double polyDerivative;
 	private int fitMode = bandMode;
 	private int ladderLane = MainDialog.noLadderLane;
@@ -492,7 +493,7 @@ class Fitter {
 
 		final double[] firstGuess = doGuess(lane, pg).toArray();
 		final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(fitMode,
-			degBG, polyDerivative, tolpk, areaDrift).withStartPoint(firstGuess)
+			degBG, polyDerivative, tolpk, areaDrift, sdDrift).withStartPoint(firstGuess)
 			.getProblem(obs.toList());
 
 		final LeastSquaresOptimizer.Optimum optimum =
@@ -569,7 +570,9 @@ class Fitter {
 		s += "<tr> <td>Maximum Polynomial Derivative</td><td>" + polyDerivative +
 			"</td></tr>";
 		s += "<tr> <td>Area Drift Limit</td>             <td>" + areaDrift +
-			"</td></tr></table>";
+			"</td></tr>";
+		s += "<tr> <td>SD Drift Limit</td>             <td>" + sdDrift +
+				"</td></tr></table>";
 		s += "<h2>RESULTS</h2>";
 		s += "<table>";
 		for (final DataSeries d : inputData) {
@@ -726,6 +729,9 @@ class Fitter {
 
 	public void setAreaDrift(final double areaDrift) {
 		this.areaDrift = areaDrift;
+	}
+	public void setSDDrift(final double sdDrift) {
+		this.sdDrift = sdDrift;
 	}
 }
 

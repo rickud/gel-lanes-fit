@@ -62,7 +62,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private final int maxIter;
 	private final int fitMode;
 	private final int deg;
-	private final double peakTol, areaDrift, polyConcavity;
+	private final double peakTol, areaDrift, sdDrift, polyConcavity;
 
 	/**
 	 * Constructor used by the factory methods.
@@ -73,7 +73,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 */
 	private GaussianArrayCurveFitter(final double[] initialGuess,
 		final int maxIter, final int fitMode, final int deg,
-		final double polyConcavity, final double peakTol, final double areaDrift)
+		final double polyConcavity, final double peakTol, final double areaDrift, final double sdDrift)
 	{
 		this.initialGuess = initialGuess;
 		this.maxIter = maxIter;
@@ -82,6 +82,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		this.polyConcavity = polyConcavity;
 		this.peakTol = peakTol;
 		this.areaDrift = areaDrift;
+		this.sdDrift = sdDrift;
 
 //		f.getContentPane().add(new ChartPanel(chart));
 	}
@@ -93,14 +94,15 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * {@link Integer#MAX_VALUE}.
 	 *
 	 * @param fitMode
+	 * @param sdDrift 
 	 * @return a curve fitter.
 	 * @see #withStartPoint(double[])
 	 */
 	static GaussianArrayCurveFitter create(final int fitMode, final int deg,
-		final double polyConcavity, final double peakTol, final double areaDrift)
+		final double polyConcavity, final double peakTol, final double areaDrift, final double sdDrift)
 	{
 		return new GaussianArrayCurveFitter(null, Integer.MAX_VALUE, fitMode, deg,
-			polyConcavity, peakTol, areaDrift);
+			polyConcavity, peakTol, areaDrift, sdDrift);
 	}
 
 	/**
@@ -111,7 +113,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 */
 	GaussianArrayCurveFitter withStartPoint(final double[] newStart) {
 		return new GaussianArrayCurveFitter(newStart.clone(), maxIter, fitMode, deg,
-			polyConcavity, peakTol, areaDrift);
+			polyConcavity, peakTol, areaDrift, sdDrift);
 	}
 
 	/** {@inheritDoc} */
@@ -142,7 +144,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 		final GaussianArrayParameterValidator parValid =
 			new GaussianArrayParameterValidator(fitMode, startPoint, xx, target,
-				polyConcavity, areaDrift);
+				polyConcavity, areaDrift, sdDrift);
 
 		return new LeastSquaresBuilder().parameterValidator(parValid)
 			.maxEvaluations(Integer.MAX_VALUE).maxIterations(maxIter).lazyEvaluation(
@@ -491,6 +493,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private final int deg;
 
 		private final double areaDrift;
+		private final double sdDrift;
 
 		private RealVector poly0 = new ArrayRealVector();
 		private RealVector norm0 = new ArrayRealVector();
@@ -511,7 +514,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private GaussianArrayParameterValidator(final int fitMode,
 			final double[] initialParameterSet, final double[] xtarget,
 			final double[] ytarget, final double polyDerivative,
-			final double areaDrift)
+			final double areaDrift, final double sdDrift)
 		{
 
 			this.fitMode = fitMode;
@@ -520,6 +523,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.ytarget = new ArrayRealVector(ytarget);
 			this.deg = (int) initialParameterSet[0];
 			this.areaDrift = areaDrift;
+			this.sdDrift = sdDrift;
 
 			sortParameters();
 			polyOffset = 0.97; // proportion of the profile value
@@ -557,8 +561,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			minSD = 0.4; // proportion of sd0[i]
 			maxSD = 2.0;
 			if (fitMode == continuumMode) {
-				minSD = 0.8;
-				maxSD = 1.5;
+				minSD = 1/sdDrift;
+				maxSD = sdDrift;
 			}
 		}
 

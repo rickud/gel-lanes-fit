@@ -127,6 +127,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private static final String POLYDERIVATIVE = "polyDerivative";
 	private static final String TOLPK = "tolPK";
 	private static final String AREADRIFT = "areaDrift";
+	private static final String SDDRIFT = "sdSDrift";
 
 	private static final String NLANES = "nLanes";
 	private static final String LADDERLANEINT = "ladderLaneInt";
@@ -164,7 +165,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private int ladderLaneInt = noLadderLane;
 	private final String[] ladderStr = { "Select Ladder Type", "Hi-Lo", "100bp" };
 	private final String[] distStr = { "Select Fragment Distribution",
-		"AciI-Lambda", "Uniform" };
+		"AciI-Lambda", "AciI-Lambda4", "AciI-Lambda3", "AciI-Lambda2",
+		"Uniform", "Ladder" };
 	private Ladder ladder;
 	private final String warningFit =
 		"The current plots will be reset and the current fitting data will be lost.";
@@ -183,6 +185,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private double polyDerivative;
 	private double tolPK; // Peak detection tolerance as % of range
 	private double areaDrift;
+	private double sdDrift;
 
 	private JPanel buttonPanelAutoManual;
 	private JRadioButton buttonAuto;
@@ -209,11 +212,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private JLabel labelPolyDerivative;
 	private JLabel labelTolPK;
 	private JLabel labelAreaDrift;
+	private JLabel labelSDDrift;
 
 	private JSpinner textDegBG;
 	private JSpinner textPolyDerivative;
 	private JSpinner textTolPK;
 	private JSpinner textAreaDrift;
+	private JSpinner textSDDrift;
 
 	private JPanel buttonPanelFitType;
 	private JRadioButton buttonBands;
@@ -411,7 +416,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		labelTolPK = new JLabel("Peak Tolerance (%)");
 
 		labelAreaDrift = new JLabel("Area Drift ");
-
+		labelSDDrift = new JLabel("SD Drift ");
+		
 		textDegBG = new JSpinner(new SpinnerNumberModel(degBG, -1, 15, 1));
 		textDegBG.setBorder(BorderFactory.createCompoundBorder(textDegBG
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
@@ -439,6 +445,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField()
 			.setColumns(textWidth);
+		
+		textSDDrift = new JSpinner(new SpinnerNumberModel(areaDrift, 0.0, 5.0,
+			0.1));
+		textSDDrift.setEditor(new JSpinner.NumberEditor(textSDDrift, "###.#"));
+		textSDDrift.setBorder(BorderFactory.createCompoundBorder(textSDDrift
+			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
+		((JSpinner.DefaultEditor) textSDDrift.getEditor()).getTextField()
+			.setColumns(textWidth);
 
 		chkBoxBands = new JCheckBox("Show Bands");
 
@@ -455,75 +469,63 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonResetCustomPeaks = new JButton("Reset Custom Peaks");
 
 		c2.fill = GridBagConstraints.HORIZONTAL;
-		c2.ipadx = 2;
-		c2.ipady = 2;
-		c2.gridx = 0;
-		c2.gridy = 0;
+		c2.ipadx = 2; c2.ipady = 2;
+		c2.gridx = 0; c2.gridy = 0;
 		c2.weightx = 0.1;
 		settingsPanel.add(labelDegBG, c2);
-		c2.gridx = 0;
-		c2.gridy = 1;
+		c2.gridx = 0; c2.gridy = 1;
 		c2.weightx = 0.1;
 		settingsPanel.add(labelPolyDerivative, c2);
-		c2.gridx = 0;
-		c2.gridy = 2;
+		c2.gridx = 0; c2.gridy = 2;
 		c2.weightx = 0.1;
 		settingsPanel.add(labelTolPK, c2);
-		c2.gridx = 0;
-		c2.gridy = 3;
+		c2.gridx = 0; c2.gridy = 3;
 		c2.weightx = 0.1;
 		settingsPanel.add(labelAreaDrift, c2);
+		c2.gridx = 0; c2.gridy = 4;
+		c2.weightx = 0.1;
+		settingsPanel.add(labelSDDrift, c2);
 
 		c2.fill = GridBagConstraints.NONE;
-		c2.gridx = 1;
-		c2.gridy = 0;
+		c2.gridx = 1; c2.gridy = 0;
 		c2.weightx = 0.0;
 		settingsPanel.add(textDegBG, c2);
-		c2.gridx = 1;
-		c2.gridy = 1;
+		c2.gridx = 1; c2.gridy = 1;
 		c2.weightx = 0.0;
 		settingsPanel.add(textPolyDerivative, c2);
-		c2.gridx = 1;
-		c2.gridy = 2;
+		c2.gridx = 1; c2.gridy = 2;
 		c2.weightx = 0.0;
 		settingsPanel.add(textTolPK, c2);
-		c2.gridx = 1;
-		c2.gridy = 3;
+		c2.gridx = 1; c2.gridy = 3;
 		c2.weightx = 0.0;
 		settingsPanel.add(textAreaDrift, c2);
+		c2.gridx = 1; c2.gridy = 4;
+		c2.weightx = 0.0;
+		settingsPanel.add(textSDDrift, c2);
 
-		c2.gridx = 0;
-		c2.gridy = 5;
-		c2.gridwidth = 1;
-		c2.gridheight = 1;
+		c2.gridx = 0; c2.gridy = 5;
+		c2.gridwidth = 1; c2.gridheight = 1;
 		c2.fill = GridBagConstraints.HORIZONTAL;
 		settingsPanel.add(chkBoxBands, c2);
 
-		c2.gridx = 0;
-		c2.gridy = 6;
-		c2.gridwidth = 3;
-		c2.gridheight = 1;
+		c2.gridx = 0; c2.gridy = 6;
+		c2.gridwidth = 3; c2.gridheight = 1;
 		settingsPanel.add(cmbBoxLadderLane, c2);
 
-		c2.gridx = 0;
-		c2.gridy = 7;
+		c2.gridx = 0; c2.gridy = 7;
 		settingsPanel.add(cmbBoxLadderType, c2);
 
-		c2.gridx = 0;
-		c2.gridy = 8;
+		c2.gridx = 0; c2.gridy = 8;
 		settingsPanel.add(cmbBoxDist, c2);
 
-		c2.gridx = 0;
-		c2.gridy = 9;
+		c2.gridx = 0; c2.gridy = 9;
 		c2.gridwidth = 1;
 		settingsPanel.add(buttonEditPeaks, c2);
 
-		c2.gridx = 0;
-		c2.gridy = 10;
+		c2.gridx = 0; c2.gridy = 10;
 		settingsPanel.add(buttonResetCustomPeaks, c2);
 
-		c2.gridx = 0;
-		c2.gridy = 11;
+		c2.gridx = 0; c2.gridy = 11;
 		c2.gridwidth = GridBagConstraints.REMAINDER;
 		c2.gridheight = 1;
 		c2.weighty = 1.0;
@@ -573,6 +575,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitter.setPolyDerivative(polyDerivative);
 		fitter.setTolPK(tolPK);
 		fitter.setAreaDrift(areaDrift);
+		fitter.setSDDrift(sdDrift);
 
 		// Add this class to all components as listener here for easy reference
 		imp.getCanvas().addMouseMotionListener(this);
@@ -587,7 +590,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textPolyDerivative.addChangeListener(this);
 		textTolPK.addChangeListener(this);
 		textAreaDrift.addChangeListener(this);
-
+		textSDDrift.addChangeListener(this);
+		
 		chkBoxBands.addActionListener(this);
 		buttonBands.addActionListener(this);
 		buttonContinuum.addActionListener(this);
@@ -1288,6 +1292,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			areaDrift = (double) textAreaDrift.getModel().getValue();
 			fitter.setAreaDrift(areaDrift);
 			prefs.putDouble(AREADRIFT, areaDrift);
+		}
+		else if (o == textSDDrift) {
+			sdDrift = (double) textSDDrift.getModel().getValue();
+			fitter.setAreaDrift(sdDrift);
+			prefs.putDouble(SDDRIFT, sdDrift);
 		}
 	}
 
