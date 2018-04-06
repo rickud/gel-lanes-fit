@@ -207,8 +207,8 @@ public class GelLanesFit implements Command {
 //		String file = "Long_DSC00427_Crop.JPEG";
 
 //		String file = "Dec17Pulldowns.tif";
-		String file = "Dec22Pulldowns.tif";
-
+//		String file = "Dec22Pulldowns.tif";
+		String file = "040518_ingelico_free.tif";
 		final ImagePlus iPlus = new Opener().openImage(folder + file);
 		if (iPlus.getType() == ImagePlus.GRAY8 || iPlus.getType() == ImagePlus.GRAY16) {
 			final LUT[] lut = iPlus.getLuts();
