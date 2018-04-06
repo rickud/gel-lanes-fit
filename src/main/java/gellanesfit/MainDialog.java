@@ -264,6 +264,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		polyDerivative = prefs.getDouble(POLYDERIVATIVE, 10.0);
 		tolPK = prefs.getDouble(TOLPK, 0.1);
 		areaDrift = prefs.getDouble(AREADRIFT, 0.1);
+		sdDrift = prefs.getDouble(SDDRIFT, 0.1);
 
 		if (oldImpTitle.equals(impTitle)) {
 			auto = prefs.getBoolean(AUTO, true);
@@ -445,8 +446,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField()
 			.setColumns(textWidth);
-		
-		textSDDrift = new JSpinner(new SpinnerNumberModel(areaDrift, 0.0, 5.0,
+		textSDDrift = new JSpinner(new SpinnerNumberModel(sdDrift, 1.0, 5.0,
 			0.1));
 		textSDDrift.setEditor(new JSpinner.NumberEditor(textSDDrift, "###.#"));
 		textSDDrift.setBorder(BorderFactory.createCompoundBorder(textSDDrift
@@ -1295,7 +1295,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 		else if (o == textSDDrift) {
 			sdDrift = (double) textSDDrift.getModel().getValue();
-			fitter.setAreaDrift(sdDrift);
+			fitter.setSDDrift(sdDrift);
 			prefs.putDouble(SDDRIFT, sdDrift);
 		}
 	}
@@ -1305,7 +1305,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		redoProfilePlots();
 		reDrawROIs(imp, "none");
 		plotter.setReferencePlot(MainDialog.noLadderLane);
-		fitter.resetAllFitter();
 		if (plotter.getProfiles().size() < 1) return;
 		fitter.setInputData(plotter.getProfiles());
 	}
@@ -1428,6 +1427,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				message = message + "\n Peaks detected: " + l1;
 				message = message + "\n Bands in range: " + l2;
 				new MessageDialog(frame, "WARNING", message);
+				plotter.savePlots(savePath);
+				new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
 				return;
 			}
 
@@ -1471,7 +1472,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			if (!plotter.isVisible()){
 				plotter.pack();
 				plotter.setVisible(true);
-			};
+			}
 			displayLog();
 			new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
 		}

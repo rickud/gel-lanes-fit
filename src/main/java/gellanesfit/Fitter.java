@@ -693,7 +693,21 @@ class Fitter {
 	}
 
 	public void setInputData(final ArrayList<DataSeries> inputData) {
+		for (DataSeries d : this.inputData) 
+			resetFit(d.getLane());
+		
 		this.inputData = inputData;
+
+		for (DataSeries d :inputData) {
+			double minX = d.getMinX();
+			double maxX = d.getMaxX();
+			Iterator<Peak> pIter = allCustomList.iterator();
+			while (pIter.hasNext()) {
+				Peak c = pIter.next();
+				if ( c.getLane() == d.getLane() && (c.getMean() < minX || c.getMean() > maxX))
+					pIter.remove();
+			}
+		}
 		this.selectedFragments = new ArrayList<>();
 		this.fittedDistributions = new ArrayList<>();
 		this.rms = new ArrayRealVector(inputData.size());

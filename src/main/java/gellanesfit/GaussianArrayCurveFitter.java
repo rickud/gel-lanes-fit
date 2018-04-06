@@ -526,7 +526,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.sdDrift = sdDrift;
 
 			sortParameters();
-			polyOffset = 0.97; // proportion of the profile value
+			polyOffset = 0.85; // proportion of the profile value
 			minX = this.xtarget.getMinValue();
 			maxX = this.xtarget.getMaxValue();
 			minY = this.ytarget.getMinValue();
@@ -556,7 +556,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				norm0 = norm0.add(mean0.map(f).mapSubtract(minY)).mapMultiply(0.5);
 			}
 
-			minN = 0.05; // proportion of the profile-bg difference
+			minN = 0.0005; // proportion of the profile-bg difference
 
 			minSD = 0.4; // proportion of sd0[i]
 			maxSD = 2.0;
@@ -695,7 +695,9 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					minN;
 				final double maxNi = FastMath.max(minN, profile.value(mi) - p.value(
 					mi));
-				if (ni < minNi) norm.setEntry(i, minNi);
+				if (ni < minNi) {
+					norm.setEntry(i, minNi);
+				}
 				if (ni > maxNi) norm.setEntry(i, maxNi);
 
 				if (sd.getEntry(i) < minSD * sd0.getEntry(i)) sd.setEntry(i, minSD * sd0
