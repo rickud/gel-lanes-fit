@@ -264,7 +264,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		polyDerivative = prefs.getDouble(POLYDERIVATIVE, 10.0);
 		tolPK = prefs.getDouble(TOLPK, 0.1);
 		areaDrift = prefs.getDouble(AREADRIFT, 0.1);
-		sdDrift = prefs.getDouble(SDDRIFT, 0.1);
+		sdDrift = prefs.getDouble(SDDRIFT, 1.0);
 
 		if (oldImpTitle.equals(impTitle)) {
 			auto = prefs.getBoolean(AUTO, true);
