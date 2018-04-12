@@ -25,8 +25,6 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
 import java.awt.GridLayout;
 import java.awt.Paint;
 import java.awt.Shape;
@@ -38,8 +36,6 @@ import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.OutputStreamWriter;
-import java.io.Writer;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -52,8 +48,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.WindowConstants;
 import javax.swing.border.EmptyBorder;
 
-import org.apache.batik.dom.GenericDOMImplementation;
-import org.apache.batik.svggen.SVGGraphics2D;
+//import org.apache.batik.svggen.SVGGraphics2D;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
@@ -84,8 +79,9 @@ import org.jfree.chart.ui.TextAnchor;
 import org.jfree.data.Range;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
+import org.jfree.graphics2d.svg.SVGGraphics2D;
+import org.jfree.graphics2d.svg.SVGUtils;
 import org.scijava.Context;
-import org.w3c.dom.DOMImplementation;
 
 import ij.IJ;
 import ij.ImagePlus;
@@ -512,6 +508,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 	}
 
 	public void reloadTabs() {
+		int t = chartsTabbedPane.getSelectedIndex();
 		chartsTabbedPane.removeAll();
 		chartTabs = new ArrayList<>();
 		if (chartPanels.size() == 0) return;
@@ -538,8 +535,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 			chartTabs.get(chartTabs.size() - 1).add(new JPanel());
 			i++;
 		}
-		if (selected != MainDialog.noLaneSelected) chartsTabbedPane
-			.setSelectedIndex(selected / (rows * cols) - 1);
+		if (t <  chartsTabbedPane.getTabCount())
+			chartsTabbedPane.setSelectedIndex(t);
+		else
+			chartsTabbedPane.setSelectedIndex(chartsTabbedPane.getTabCount() -1);
 	}
 
 	public void resetData() {
@@ -551,7 +550,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 
 	public void savePlots(final String savePath) {
 		final Iterator<File> it = FileUtils.iterateFiles(new File(savePath),
-			new String[] { "png", "pdf" }, false);
+			new String[] { "png", "pdf", "svg" }, false);
 		while (it.hasNext()) {
 			it.next().delete();
 		}
@@ -590,18 +589,11 @@ class Plotter extends JFrame implements ChartMouseListener {
 				e.printStackTrace();
 			}
 
-			try (Writer out = new OutputStreamWriter(new FileOutputStream(plotfile +
-				".svg")))
-			{ // Save SVG
-				final DOMImplementation domImpl = GenericDOMImplementation
-					.getDOMImplementation();
-				final org.w3c.dom.Document document = domImpl.createDocument(null,
-					"svg", null);
-				final SVGGraphics2D svgGen = new SVGGraphics2D(document);
+			try { // Save SVG
+				final SVGGraphics2D svgGen = new SVGGraphics2D((int) x, (int)y);
 				p.getChart().draw(svgGen, r);
-				svgGen.stream(out, true /* use css */);
-				out.flush();
-				out.close();
+				File out = new File(plotfile + ".svg");
+				SVGUtils.writeToSVG(out, svgGen.getSVGElement());
 			}
 			catch (final IOException e) {
 				e.printStackTrace();

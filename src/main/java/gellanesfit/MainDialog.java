@@ -1304,7 +1304,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		resetAutoROIs();
 		redoProfilePlots();
 		reDrawROIs(imp, "none");
-		plotter.setReferencePlot(MainDialog.noLadderLane);
 		if (plotter.getProfiles().size() < 1) return;
 		fitter.setInputData(plotter.getProfiles());
 	}
