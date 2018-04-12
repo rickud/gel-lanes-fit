@@ -526,7 +526,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.sdDrift = sdDrift;
 
 			sortParameters();
-			polyOffset = 0.85; // proportion of the profile value
+			polyOffset = 0.95; // proportion of the profile value
 			minX = this.xtarget.getMinValue();
 			maxX = this.xtarget.getMaxValue();
 			minY = this.ytarget.getMinValue();
@@ -537,7 +537,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.profile = new LinearInterpolator().interpolate(xtarget, ytarget);
 			double mds = 1.3;
 			if (fitMode == continuumMode) {
-				mds = 0.5;
+				mds = 0.8;
 			}
 			if (mean0.getDimension() > 1) {
 				maxMeanDiff = mean0.getSubVector(1, mean0.getDimension() - 1).subtract(
