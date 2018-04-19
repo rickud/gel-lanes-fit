@@ -557,28 +557,28 @@ class Plotter extends JFrame implements ChartMouseListener {
 
 		for (final ChartPanel p : chartPanels) {
 			final String plotfile = savePath + p.getChart().getTitle().getText();
-			final float x = PageSize.A4.getWidth();
-			final float y = PageSize.A4.getHeight() / 2;
+			final double x = PageSize.LETTER.getWidth() * 0.8;
+			final double y = x / 1.6;
 			final Rectangle2D r = new Rectangle2D.Double(0, 0, x, y);
 
 			try { // Save PNG
 				ChartUtils.saveChartAsPNG(new File(plotfile + ".png"), p.getChart(),
-					800, 600);
+					(int) x, (int) y);
 			}
 			catch (final IOException e) {
 				e.printStackTrace();
 			}
 
 			try { // Save PDF
-				final Rectangle ps = new Rectangle(x, y);
+				final Rectangle ps = new Rectangle((float) x, (float) y);
 				final com.itextpdf.text.Document doc = new com.itextpdf.text.Document(
 					ps, 20, 20, 20, 20);
 				final PdfWriter writer = PdfWriter.getInstance(doc,
 					new FileOutputStream(plotfile + ".pdf"));
 				doc.open();
 				final PdfContentByte cb = writer.getDirectContent();
-				final PdfTemplate t = cb.createTemplate(x, y);
-				final Graphics2D g = new PdfGraphics2D(t, x, y);
+				final PdfTemplate t = cb.createTemplate((float) x, (float) y);
+				final Graphics2D g = new PdfGraphics2D(t, (float) x, (float) y);
 
 				p.getChart().draw(g, r);
 				g.dispose();
@@ -590,7 +590,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 			}
 
 			try { // Save SVG
-				final SVGGraphics2D svgGen = new SVGGraphics2D((int) x, (int)y);
+				final SVGGraphics2D svgGen = new SVGGraphics2D((int) x, (int) y);
 				p.getChart().draw(svgGen, r);
 				File out = new File(plotfile + ".svg");
 				SVGUtils.writeToSVG(out, svgGen.getSVGElement());
