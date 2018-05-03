@@ -38,9 +38,9 @@
 
 	<developers>
 		<developer>
-			<id>ctrueden</id>
-			<name>Curtis Rueden</name>
-			<url>http://imagej.net/User:Rueden</url>
+			<id>rickud</id>
+			<name>Rick Ziraldo</name>
+			<url>https://github.com/rickud</url>
 			<roles>
 				<role>lead</role>
 				<role>developer</role>
@@ -51,67 +51,37 @@
 			</roles>
 		</developer>
 	</developers>
+
 	<contributors>
 		<contributor>
-			<name>Johannes Schindelin</name>
-			<url>http://imagej.net/User:Schindelin</url>
-			<roles>
-				<role>founder</role>
-			</roles>
-			<properties>
-				<id>dscho</id>
-			</properties>
+			<name>Massa Shoura</name>
 		</contributor>
 		<contributor>
-			<name>Olivier Burri</name>
-			<url>http://imagej.net/User:Oburri</url>
-			<properties>
-				<id>lacan</id>
-			</properties>
-		</contributor>
-		<contributor>
-			<name>Mark Hiner</name>
-			<url>http://imagej.net/User:Hinerm</url>
-			<properties>
-				<id>hinerm</id>
-			</properties>
-		</contributor>
-		<contributor>
-			<name>Jules Maselbas</name>
-		</contributor>
-		<contributor>
-			<name>Kota Miura</name>
-			<url>http://imagej.net/User:Miura</url>
-			<properties>
-				<id>cmci</id>
-			</properties>
-		</contributor>
-		<contributor>
-			<name>Yili Zhao</name>
-			<url>http://imagej.net/User:Panovr</url>
-			<properties>
-				<id>panovr</id>
-			</properties>
+			<name>Stephen Levene</name>
 		</contributor>
 	</contributors>
+
 	<mailingLists>
 		<mailingList>
 			<name>ImageJ Forum</name>
 			<archive>http://forum.imagej.net/</archive>
 		</mailingList>
 	</mailingLists>
+
 	<scm>
 		<connection>scm:git:git://github.com/rickud/gel-lanes-fit</connection>
 		<developerConnection>scm:git:git@github.com:rickud/gel-lanes-fit</developerConnection>
 		<tag>HEAD</tag>
 		<url>https://github.com/rickud/gel-lanes-fit/</url>
 	</scm>
+
 	<issueManagement>
-		<system>GitHub Issues</system>
+		<system>GitHub</system>
 		<url>http://github.com/rickud/gel-lanes-fit/issues</url>
 	</issueManagement>
+	
 	<ciManagement>
-		<system>None</system>
+		<system>Travis</system>
 	</ciManagement>
 
 	<repositories>
@@ -119,10 +89,10 @@
 			<id>imagej.public</id>
 			<url>http://maven.imagej.net/content/groups/public</url>
 		</repository>
-		<repository>
-			<id>gel-lanes-fit</id>
-			<url>https://github.com/rickud/gel-lanes-fit</url>
-		</repository>
+<!-- 		<repository> -->
+<!-- 			<id>gel-lanes-fit</id> -->
+<!-- 			<url>https://github.com/rickud/gel-lanes-fit</url> -->
+<!-- 		</repository> -->
 	</repositories>
 	
 	<build>
@@ -176,5 +146,4 @@
 			<version>3.3</version>
 		</dependency>
 	</dependencies>
-	
 </project>
