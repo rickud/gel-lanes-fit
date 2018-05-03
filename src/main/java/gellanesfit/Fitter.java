@@ -87,7 +87,7 @@ class Fitter {
 	private List<Peak> allCustomList;
 
 	// Fields used in the summary
-	private RealVector rms;
+	private RealVector rms; // normalized to y-range
 	private Array2DRowRealMatrix statMatrix;
 	private List<DataSeries> fittedDistributions;
 
@@ -195,20 +195,25 @@ class Fitter {
 
 			if (fitMode == continuumMode && lane != ladderLane) {
 				RealVector bpSubarray = new ArrayRealVector();
+				RealVector wSubarray  = new ArrayRealVector();
 				final RealMatrix distMatrix = new Array2DRowRealMatrix(
 					fragmentDistribution);
 				final RealVector bpArray = distMatrix.getColumnVector(1);
-				bpSubarray = new ArrayRealVector();
-				for (final int i : selectedFragments.get(lane - 1))
+				final RealVector wArray  = distMatrix.getColumnVector(2);
+
+				for (final int i : selectedFragments.get(lane - 1)) {
 					bpSubarray = bpSubarray.append(bpArray.getEntry(i));
-				final double meanLength = new Mean().evaluate(bpSubarray.toArray());
+					wSubarray  =  wSubarray.append( wArray.getEntry(i));
+				}
+				final double meanLength = new Mean().evaluate(
+					bpSubarray.toArray(), wSubarray.toArray());
 				final RealVector scaleFactor = areas.ebeMultiply(bpSubarray);
 				final double weighedMeanLength = new Mean().evaluate(bpSubarray
 					.toArray(), scaleFactor.toArray());
 				final double sdLength = FastMath.sqrt(new Variance().evaluate(bpSubarray
 					.toArray(), scaleFactor.toArray()));
 				statMatrix.setRow(lane - 1, new double[] { weighedMeanLength,
-					sdLength });
+					sdLength, meanLength });
 				final String info = String.format(
 					"Lane %1$d, Average length: %2$.2f(%3$.2f) %4$.2f", lane,
 					weighedMeanLength, sdLength, meanLength);
@@ -548,8 +553,9 @@ class Fitter {
 		output.add(fit);
 
 		// Print RMS to console
-		rms.setEntry(lane - 1, optimum.getRMS());
-		final String outStr = String.format("Lane " + lane + ", RMS: %1$.2f; ", rms
+		rms.setEntry(lane - 1, optimum.getRMS()/
+			(inputData.get(lane - 1).getMaxY() - inputData.get(lane - 1).getMinY()));
+		final String outStr = String.format("Lane " + lane + ", RMS: %1$.4f; ", rms
 			.getEntry(lane - 1));
 		log.info(outStr);
 		return output;
@@ -578,15 +584,16 @@ class Fitter {
 		for (final DataSeries d : inputData) {
 			final int l = d.getLane();
 			s += String.format("<tr><td>Lane %1$d;</td>", l);
-			s += String.format("    <td>RMS = %1$.2f</td>", rms.getEntry(l - 1));
+			s += String.format("    <td>RMS = %1$.4f</td>", rms.getEntry(l - 1));
 			if (fitMode == bandMode || l == ladderLane) s +=
 				"<td></td><td></td></tr>";
 			else { // (fitMode == continuumMode)
 				final double mean = statMatrix.getEntry(l - 1, 0);
 				final double standardDeviation = statMatrix.getEntry(l - 1, 1);
+				final double aciMean = statMatrix.getEntry(l - 1, 2);
 				s += String.format(
-					"<td>Average Fragment Size = %1$.2f</td> <td>(%2$.2f)</td></tr>",
-					mean, standardDeviation);
+					"<td>Average Fragment Size = %1$.0f</td> <td>± %2$.0f (%3$.0f)</td></tr>",
+					mean, standardDeviation, aciMean);
 			}
 		}
 		s += "</table>";
@@ -711,7 +718,7 @@ class Fitter {
 		this.selectedFragments = new ArrayList<>();
 		this.fittedDistributions = new ArrayList<>();
 		this.rms = new ArrayRealVector(inputData.size());
-		this.statMatrix = new Array2DRowRealMatrix(inputData.size(), 2);
+		this.statMatrix = new Array2DRowRealMatrix(inputData.size(), 3);
 		for (int i = 0; i < inputData.size(); i++) {
 			selectedFragments.add(new ArrayList<>());
 		}
