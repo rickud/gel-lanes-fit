@@ -8,3 +8,14 @@
 /bin/
 /savedrois.bak
 /gel-lanes-fit/
+*.DS_Store
+/.checksums
+/Contents/
+/ImageJ-win64.exe
+/WELCOME.md
+/db.xml.gz
+/images/
+/jars/
+/plugins/
+/scripts/
+/update/

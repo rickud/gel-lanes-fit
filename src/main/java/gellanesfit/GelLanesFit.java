@@ -6,14 +6,15 @@
  * http://www.utdallas.edu
  *
  * Feature: Fitting of multiple Gaussian functions to intensity profiles along the gel lanes
- * Gauss Fit is a tool for fitting gaussian profiles and estimating
+ * Gel Lanes Fit is a tool for fitting gaussian profiles and estimating
  * the profile parameters on selected lanes in gel electrophoresis images.
  *
- *    The GaussianArrayCurveFitter class is implemented using
- *    Abstract classes from Apache Commons project
+ * The GaussianArrayCurveFitter class is implemented using
+ * Abstract classes from Apache Commons project
  *
- *    The source code is maintained and made available on GitHub
- *    https://github.com/rickud/gauss-curve-fit
+ * The source code is maintained and made available on GitHub
+ * https://github.com/rickud/gauss-curve-fit
+ *
  */
 
 package gellanesfit;
@@ -40,15 +41,13 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.ImageWindow;
 import ij.io.Opener;
+import ij.process.LUT;
 
 @Plugin(type = Command.class, headless = true,
 	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
 @SuppressWarnings("ucd")
 public class GelLanesFit implements Command {
 
-	/**
-	 *
-	 */
 	@Parameter
 	private LogService log;
 	@Parameter
@@ -58,7 +57,6 @@ public class GelLanesFit implements Command {
 	@Parameter
 	private static Context context;
 
-
 	// TODO: private Thread mainWindowThread; // thread for the main window
 	private Thread plotThread; // thread for plotting
 
@@ -67,6 +65,7 @@ public class GelLanesFit implements Command {
 
 	private ImagePlus imp;
 	private String version;
+
 	/**
 	 * Initialization method
 	 */
@@ -78,14 +77,14 @@ public class GelLanesFit implements Command {
 
 		imp = IJ.getImage();
 
-		final String impName = imp.getTitle()
-				.substring(0, imp.getTitle().indexOf("."));
+		final String impName = imp.getTitle().substring(0, imp.getTitle().indexOf(
+			"."));
 		about();
 		final String title = "[" + version + "] Gel Lanes Fit - " + imp.getTitle();
 
 		final Fitter fitter = new Fitter(context, impName);
 		final Plotter plotter = new Plotter(context, imp);
-		final MainDialog md = new MainDialog(context, title, imp, prefs, plotter, fitter);
+		new MainDialog(context, title, imp, prefs, plotter, fitter);
 
 		imp.getCanvas().requestFocus();
 		final ImageWindow iwin = imp.getWindow();
@@ -102,23 +101,11 @@ public class GelLanesFit implements Command {
 		plotThread.start();
 	}
 
-	
 	@Override
 	public void run() {
 		if (setup) {
 			init();
 			setup = false;
-		}
-
-		synchronized (this) {
-			// if (doUpdate) {
-			// doUpdate = false; //and loop again
-			// } else {
-			// try {wait();} //notify wakes up the thread
-			// catch(InterruptedException e) { //interrupted tells the thread to exit
-			// return;
-			// }
-			// }
 		}
 	}
 
@@ -143,14 +130,12 @@ public class GelLanesFit implements Command {
 						version = a.getValue("Implementation-Version");
 						log.info(name + " " + version);
 					}
-				}
-				catch (final IOException e) {
-					// handle
+				} catch (final IOException e) {
+					log.info("Manifest not found");
 				}
 			}
-		}
-		catch (final IOException e) {
-
+		} catch (final IOException e) {
+			log.info("Manifest not found");
 		}
 	}
 
@@ -159,34 +144,41 @@ public class GelLanesFit implements Command {
 	 *
 	 * @param args
 	 * @throws Exception
+	 * 
 	 */
 	public static void main(final String... args) throws Exception {
 		// create the ImageJ application context with all available services
 		final ImageJ ij = new ImageJ();
 		ij.launch(args);
-		String sep = File.separator;
-		String folder = "src" + sep + "main" + sep + "resources"
-									+ sep +"sample" + sep +"Tagment-Test3" + sep 
-									+ "Other Camera" + sep;
-//		String file = "1_top_LM.tif";
-//		String file = "2_top_LM.tif";
-//		String file = "05_top_LM.tif";
+		final String sep = File.separator;
+		final String folder = "src" + sep + "main" + sep + "resources" + sep +
+			"sample" + sep + "Tagment-Test3" + sep
+//			+ "Gel Camera" + sep;
+//			+ "Massa's Phone" + sep;
+//			+ "Rick's Phone" + sep;
+//			+ "Other Camera" + sep;
+//			+ "ingelico" + sep;
+		+ "tapestation" + sep;
+		// List of files available for debugging purposes
+//		String file = "second_destain.tif";
+//		String file = "LM_1_top.tif";
+//		String file = "LM_1_bottom.tif";
+//		String file = "LM_1_wo_tray.tif";
+//		String file = "LM_1_wo_tray_2.tif";
 
-//		String file = "1_bottom_LM.tif";
-//		String file = "05_bottom_LM.tif";
+//		String file = "LM_2_top.tif";
 
-//		String file = "1_LM_wo_tray.tif";
-//		String file = "1_LM_wo_tray_2.tif";
+//		String file = "LM_5_bottom.tif";
+//		String file = "LM_5_top.tif";
+//		String file = "LM_5_wo_tray_2.tif";
 
-//		String file = "05_LM_wo_tray_2.tif";
+//		String file = "HM_1_1.tif";
+//		String file = "HM_1_2.tif";
+//		String file = "HM_1_3.tif";
+//		String file = "HM_5.tif";
 
-//		String file = "1_HM.tif";
-//		String file = "1_HM_2.tif";
-//		String file = "1_HM_3.tif";
-//		String file = "05_HM.tif";
-		
-//		String file = "longgel_1s.tif";
-//		String file = "longgel_1_5s.tif";
+//		String file = "Long_1s.tif";
+//		String file = "Long_5s.tif";
 
 //		Massa's phone
 //		String file = "IMG_20171122_100940.jpg";
@@ -197,24 +189,38 @@ public class GelLanesFit implements Command {
 //		String file = "IMG_20171122_101143.jpg";
 //		String file = "IMG_20171122_101151.jpg";
 //		String file = "IMG_20171122_101200.jpg";
-//		String file = "IMG_20171122_101520.jpg";
-//		String file = "IMG_20171122_101527.jpg";
-//		String file = "IMG_20171122_101537.jpg";
+//		String file = "HM_IMG_20171122_101520.jpg";
+//		String file = "HM_IMG_20171122_101527.jpg";
+//		String file = "HM_IMG_20171122_101537.jpg";
+
+//		Rick's phone
+//		String file = "HM_Immagine 2017-11-22_11-24-27-570_Crop.jpeg";
+//		String file = "IMG_20171122_100957.jpg";
 
 //		Other Camera
 //		String file = "LRG_DSC00419.JPEG";
 //		String file = "LRG_DSC00420.JPEG";
-		String file = "LRG_DSC00421.JPEG";
+//		String file = "HM_DSC00421_Crop.jpg";
 //		String file = "LRG_DSC00422.JPEG";
 //		String file = "LRG_DSC00423.JPEG";
 //		String file = "LRG_DSC00424.JPEG";
 //		String file = "LRG_DSC00425.JPEG";
 //		String file = "LRG_DSC00426.JPEG";
-//		String file = "LRG_DSC00427.JPEG";
-//		String file = "LRG_DSC00428.JPEG";
-//		String file = "LRG_DSC00429.JPEG";
+//		String file = "Long_DSC00427_Crop.JPEG";
+
+//		String file = "Dec17Pulldowns.tif";
+//		String file = "Dec22Pulldowns.tif";
+//		String file = "040518_ingelico_free.tif";
+//		String file = "2igelico_090418.tif";
+//		String file = "2igelico_0904183.tif";
+//		String file = "2018_4_18 old and new p428 2nd pic.tif";
+	String file = "Shimichi_042117_4.tif";
 		
 		final ImagePlus iPlus = new Opener().openImage(folder + file);
+		if (iPlus.getType() == ImagePlus.GRAY8 || iPlus.getType() == ImagePlus.GRAY16) {
+			final LUT[] lut = iPlus.getLuts();
+			iPlus.setLut(lut[0].createInvertedLut());
+		}
 		iPlus.show();
 		ij.command().run(GelLanesFit.class, true);
 	}
