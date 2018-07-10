@@ -152,13 +152,13 @@ public class GelLanesFit implements Command {
 		ij.launch(args);
 		final String sep = File.separator;
 		final String folder = "src" + sep + "main" + sep + "resources" + sep +
-			"sample" + sep + "Tagment-Test3" + sep
-//			+ "Gel Camera" + sep;
-//			+ "Massa's Phone" + sep;
-//			+ "Rick's Phone" + sep;
-//			+ "Other Camera" + sep;
-//			+ "ingelico" + sep;
-		+ "tapestation" + sep;
+			"sample" + sep + "Tagment-Test3"; 
+//		+ sep + "Gel Camera";
+//		+ sep + "Massa's Phone";
+//		+ sep + "Rick's Phone";
+//		+ sep + "Other Camera";
+//		+ sep + "ingelico";
+//		+ sep + "tapestation";
 		// List of files available for debugging purposes
 //		String file = "second_destain.tif";
 //		String file = "LM_1_top.tif";
@@ -209,14 +209,14 @@ public class GelLanesFit implements Command {
 //		String file = "Long_DSC00427_Crop.JPEG";
 
 //		String file = "Dec17Pulldowns.tif";
-//		String file = "Dec22Pulldowns.tif";
+		String file = "Dec22Pulldowns.tif";
 //		String file = "040518_ingelico_free.tif";
 //		String file = "2igelico_090418.tif";
 //		String file = "2igelico_0904183.tif";
 //		String file = "2018_4_18 old and new p428 2nd pic.tif";
-	String file = "Shimichi_042117_4.tif";
+//		String file = "Shimichi_042117_4.tif";
 		
-		final ImagePlus iPlus = new Opener().openImage(folder + file);
+		final ImagePlus iPlus = new Opener().openImage(folder + sep + file);
 		if (iPlus.getType() == ImagePlus.GRAY8 || iPlus.getType() == ImagePlus.GRAY16) {
 			final LUT[] lut = iPlus.getLuts();
 			iPlus.setLut(lut[0].createInvertedLut());
