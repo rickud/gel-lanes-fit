@@ -924,8 +924,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonResetCustomPeaks.setEnabled(false);
 		plotter.resetData();
 		plotter.setPlotMode(Plotter.regMode);
-		// rois.parallelStream().forEach((r) -> {
+
 		try {
+			// rois.parallelStream().forEach((r) -> {
 			for (final Roi r : rois) {
 				final int ln = Integer.parseInt(r.getName().substring(5));
 				final Rectangle rect = r.getBounds();
@@ -941,11 +942,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				}
 				// });
 			}
+			plotter.reloadTabs();
 		}
 		catch (final ConcurrentModificationException e) {
 			log.info(rois.size());
 		}
-		plotter.reloadTabs();
 	}
 
 	private double[][] readDistFile(final String filename) {
