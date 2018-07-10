@@ -156,8 +156,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	/** {@inheritDoc} */
 	@Override
 	protected LeastSquaresOptimizer getOptimizer() {
-		return new LevenbergMarquardtOptimizer().withCostRelativeTolerance(1e-12)
-			.withOrthoTolerance(1e-12).withParameterRelativeTolerance(1e-10);
+		return new LevenbergMarquardtOptimizer().withCostRelativeTolerance(1e-14)
+			.withOrthoTolerance(1e-13).withParameterRelativeTolerance(1e-14);
 	}
 
 	/**
@@ -537,7 +537,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			this.profile = new LinearInterpolator().interpolate(xtarget, ytarget);
 			double mds = 1.3;
 			if (fitMode == continuumMode) {
-				mds = 0.8;
+				mds = 0.1;
 			}
 			if (mean0.getDimension() > 1) {
 				maxMeanDiff = mean0.getSubVector(1, mean0.getDimension() - 1).subtract(
@@ -556,7 +556,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				norm0 = norm0.add(mean0.map(f).mapSubtract(minY)).mapMultiply(0.5);
 			}
 
-			minN = 0.0005; // proportion of the profile-bg difference
+			minN = 0.00005; // proportion of the profile-bg difference
 
 			minSD = 0.4; // proportion of sd0[i]
 			maxSD = 2.0;

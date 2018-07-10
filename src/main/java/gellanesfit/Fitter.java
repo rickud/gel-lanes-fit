@@ -289,7 +289,6 @@ class Fitter {
 	}
 
 	private double[] interpolateDisplacement(final double[] y) {
-		final WeightedObservedPoints obs = new WeightedObservedPoints();
 		final RealVector logs = new ArrayRealVector(new Array2DRowRealMatrix(
 			fragmentDistribution).getColumn(2)).map(new Log10());
 		RealVector yi = new ArrayRealVector();
@@ -348,6 +347,15 @@ class Fitter {
 				log.info("Missing ladder/distribution");
 				return null;
 			}
+			DataSeries in = inputData.stream()
+					.filter(d -> d.getLane() == lane)
+					.findFirst().orElse(null);
+			
+			final RealVector profile = in.getY().mapSubtractToSelf(in.getMinY());
+			final double meanProfile = new Mean().evaluate(profile.toArray());
+			PolynomialSplineFunction pr = new LinearInterpolator()
+					.interpolate(in.getX().toArray(), profile.toArray());
+			
 			// Use the stored distribution as a guess
 			// fragmentDistribution[:][0] = Frequency
 			// fragmentDistribution[:][1] = Length (bp)
@@ -364,27 +372,32 @@ class Fitter {
 			final double[] means = interpolateDisplacement(meanLadder);
 			final double[] sds = interpolateSD(meanLadder, sdLadder, means);
 			final RealVector scaledFrequency = distMatrix.getColumnVector(0);
+			for (int s = 0; s < scaledFrequency.getDimension(); s++) {
+				double pv = means[s] < in.getMinX() || means[s] > in.getMaxX() ?
+					meanProfile : pr.value(means[s]);
+				scaledFrequency.setEntry(s, scaledFrequency.getEntry(s) * pv);
+			}
 			final RealVector mwArray = distMatrix.getColumnVector(2);
+//			RealVector scale = scaledFrequency.ebeMultiply(mwArray);
+//			scale = scale.mapDivide(scale.getMaxValue());
+
 			RealVector scale = scaledFrequency.ebeMultiply(mwArray);
 			scale = scale.mapDivide(scale.getMaxValue());
-			for (final DataSeries d : inputData) {
-				if (d.getLane() == lane) {
-					selectedFragments.set(lane - 1, new ArrayList<>());
-					final RealVector profile = d.getY().mapSubtractToSelf(d.getMinY());
-					final double meanProfile = new Mean().evaluate(profile.toArray());
-					for (int i = 0; i < means.length; i++) {
-						// exclude peaks outside the profile domain
-						final double m = means[i];
-						if (m > d.getMinX() && m < d.getMaxX()) {
-							selectedFragments.get(lane - 1).add(i);
-							final double n = meanProfile * scale.getEntry(i);
-							final double s = sds[i];
-							peaks.add(new Peak(lane, n, m, s));
-						}
-					}
+
+			selectedFragments.set(lane - 1, new ArrayList<>());
+			
+			for (int i = 0; i < means.length; i++) {
+				// exclude peaks outside the profile domain
+				final double m = means[i];
+				if (m > in.getMinX() && m < in.getMaxX()) {
+					selectedFragments.get(lane - 1).add(i);
+					final double n = profile.getMaxValue() / means.length * scale.getEntry(i);
+					final double s = sds[i];
+					peaks.add(new Peak(lane, n, m, s));
 				}
 			}
 		}
+
 
 		// Check if custom peaks are needed
 		for (final Peak c : getCustomPeaks(lane)) {
