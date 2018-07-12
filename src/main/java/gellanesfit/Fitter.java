@@ -378,12 +378,8 @@ class Fitter {
 				scaledFrequency.setEntry(s, scaledFrequency.getEntry(s) * pv);
 			}
 			final RealVector mwArray = distMatrix.getColumnVector(2);
-//			RealVector scale = scaledFrequency.ebeMultiply(mwArray);
-//			scale = scale.mapDivide(scale.getMaxValue());
-
 			RealVector scale = scaledFrequency.ebeMultiply(mwArray);
 			scale = scale.mapDivide(scale.getMaxValue());
-
 			selectedFragments.set(lane - 1, new ArrayList<>());
 			
 			for (int i = 0; i < means.length; i++) {
@@ -391,7 +387,7 @@ class Fitter {
 				final double m = means[i];
 				if (m > in.getMinX() && m < in.getMaxX()) {
 					selectedFragments.get(lane - 1).add(i);
-					final double n = profile.getMaxValue() / means.length * scale.getEntry(i);
+					final double n = profile.getMaxValue() / Math.log(means.length) * scale.getEntry(i);
 					final double s = sds[i];
 					peaks.add(new Peak(lane, n, m, s));
 				}
@@ -510,12 +506,11 @@ class Fitter {
 			obs.toList(), degBG, tolpk);
 
 		final double[] firstGuess = doGuess(lane, pg).toArray();
-		final LeastSquaresProblem problem = GaussianArrayCurveFitter.create(fitMode,
-			degBG, polyDerivative, tolpk, areaDrift, sdDrift).withStartPoint(firstGuess)
-			.getProblem(obs.toList());
+		final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(fitMode,
+			degBG, polyDerivative, tolpk, areaDrift, sdDrift).withStartPoint(firstGuess);
+		final LeastSquaresProblem problem = cf.getProblem(obs.toList());
 
-		final LeastSquaresOptimizer.Optimum optimum =
-			new LevenbergMarquardtOptimizer().optimize(problem);
+		final LeastSquaresOptimizer.Optimum optimum = cf.getOptimizer().optimize(problem);
 
 		final RealVector fitted = new ArrayRealVector(optimum.getPoint());
 

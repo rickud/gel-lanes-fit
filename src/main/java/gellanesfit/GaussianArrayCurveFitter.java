@@ -28,6 +28,7 @@ import org.apache.commons.math3.analysis.function.Gaussian;
 import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
 import org.apache.commons.math3.analysis.polynomials.PolynomialFunction;
 import org.apache.commons.math3.analysis.polynomials.PolynomialSplineFunction;
+import org.apache.commons.math3.distribution.LogNormalDistribution;
 import org.apache.commons.math3.exception.DimensionMismatchException;
 import org.apache.commons.math3.exception.NotStrictlyPositiveException;
 import org.apache.commons.math3.exception.NullArgumentException;
@@ -45,6 +46,7 @@ import org.apache.commons.math3.linear.DiagonalMatrix;
 import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.stat.descriptive.moment.Mean;
 import org.apache.commons.math3.stat.descriptive.moment.StandardDeviation;
+import org.apache.commons.math3.stat.descriptive.moment.Variance;
 import org.apache.commons.math3.util.FastMath;
 
 class GaussianArrayCurveFitter extends AbstractCurveFitter {
@@ -156,8 +158,10 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	/** {@inheritDoc} */
 	@Override
 	protected LeastSquaresOptimizer getOptimizer() {
-		return new LevenbergMarquardtOptimizer().withCostRelativeTolerance(1e-14)
-			.withOrthoTolerance(1e-13).withParameterRelativeTolerance(1e-14);
+		return new LevenbergMarquardtOptimizer()
+			.withCostRelativeTolerance(1e-18)
+			.withOrthoTolerance(1e-18)
+			.withParameterRelativeTolerance(1e-15);
 	}
 
 	/**
@@ -556,7 +560,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				norm0 = norm0.add(mean0.map(f).mapSubtract(minY)).mapMultiply(0.5);
 			}
 
-			minN = 0.00005; // proportion of the profile-bg difference
+			minN = 0.001; // proportion of the profile-bg difference
 
 			minSD = 0.4; // proportion of sd0[i]
 			maxSD = 2.0;
@@ -603,7 +607,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				final double tolLow = 0.5 * tolHigh;
 				p = new PolynomialFunction(poly.toArray());
 				PolynomialFunction p1 = p.polynomialDerivative();
-				double d1bg = xtarget.map(p1).getMaxValue();
+				double d1bg = new Mean().evaluate(xtarget.map(p1).toArray());
 				final RealVector coeffs0 = poly.getSubVector(0, 1);
 				RealVector coeffs1end = poly.getSubVector(1, poly.getDimension() - 1);
 				RealVector bg = xtarget.map(p);
@@ -615,7 +619,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					poly = coeffs0.append(coeffs1end);
 					p = new PolynomialFunction(poly.toArray());
 					p1 = p.polynomialDerivative();
-					d1bg = xtarget.map(p1).getMaxValue();
+					d1bg = new Mean().evaluate(xtarget.map(p1).toArray());
 					bg = xtarget.map(p);
 					tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() - bg
 						.getMinValue() > tolHigh - tolLow;
@@ -679,8 +683,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 				final double minNi = FastMath.abs(profile.value(mi) - p.value(mi)) *
 					minN;
-				final double maxNi = FastMath.max(minN, profile.value(mi) - p.value(
-					mi));
+				final double maxNi = FastMath.max(minNi, 
+					1.5 * (profile.value(mi) - p.value(mi)));
 				if (ni < minNi) {
 					norm.setEntry(i, minNi);
 				}
@@ -694,23 +698,27 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 			// Maintain initial AREA proportions between peaks
 			if (fitMode == GaussianArrayCurveFitter.continuumMode) {
-				final StandardDeviation sdCalculator = new StandardDeviation();
+				final Variance varCalculator = new Variance();
 				final Mean meanCalculator = new Mean();
 				area = norm.ebeMultiply(sd).mapMultiply(FastMath.sqrt(2 * FastMath.PI));
 				final RealVector ratio = area.ebeDivide(area0);
-				final double sdRatio = sdCalculator.evaluate(ratio.toArray());
 				final double meanRatio = meanCalculator.evaluate(ratio.toArray());
+				final double varRatio = varCalculator.evaluate(ratio.toArray());
 
-				if (sdRatio > areaDrift) {
-					final Random r = new Random();
-					RealVector rand = new ArrayRealVector();
+				if (varRatio > areaDrift*areaDrift) {
+					// Use a log-normal distribution with parameters mu, sigma
+					double mu = Math.log(meanRatio /
+						Math.sqrt(1 + areaDrift*areaDrift/(meanRatio*meanRatio)));
+					double sigma = Math.sqrt(Math.log(areaDrift*areaDrift
+						/(meanRatio*meanRatio) + 1));
+					LogNormalDistribution logNormal = new LogNormalDistribution(mu, sigma);
+					RealVector norm1 = new ArrayRealVector();
 					for (int i = 0; i < area.getDimension(); i++) {
-						rand = rand.append((r.nextDouble() - 0.5) * areaDrift);
+						norm1 = norm1.append(logNormal.sample());
 					}
-					final RealVector scale = norm0.mapMultiply(meanRatio);
-					norm = scale.add(rand).map(new Abs());
+					norm = norm1;
 				}
-//				System.out.println(meanNormRatio + "; " + sdNormRatio
+//			System.out.println(meanNormRatio + "; " + sdNormRatio
 //					+ "; " + meanSDRatio+ "; " + sdSDRatio);
 			}
 
