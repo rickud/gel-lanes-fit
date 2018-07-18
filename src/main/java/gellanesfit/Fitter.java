@@ -130,13 +130,16 @@ class Fitter {
 			final List<Peak> guess = getGuessPeaks(lane);
 			final List<Peak> fitted = getFittedPeaks(lane);
 			RealVector areas = new ArrayRealVector();
-			if (guess.size() != fitted.size()) {
-				log.info("Size mismatch: " + guess.size() + ", " + fitted.size());
+			if (guess.size() != fitted.size() || 
+					guess.size() == 0 || fitted.size() == 0) {
+				log.info("Data Size " + lane + " : " + guess.size() + ", " + fitted.size());
 			}
 
 			int band = 1;
 			RealVector means = new ArrayRealVector();
-			for (int p = 0; p < guess.size(); p++) {
+			int listSize = (fitMode == continuumMode && lane != ladderLane) ? 
+				selectedFragments.get(lane - 1).size() : guess.size();
+			for (int p = 0; p < listSize; p++) {
 				final double n = fitted.get(p).getNorm();
 				final double m = fitted.get(p).getMean();
 				final double s = fitted.get(p).getSigma();
