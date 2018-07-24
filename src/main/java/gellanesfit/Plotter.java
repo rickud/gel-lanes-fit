@@ -105,7 +105,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 			5.0f, 5.0f, 5.0f }, 0.0f);
 
 	// Colors for DataSeries in plots
-	static final Color profileColor = Color.BLACK;
+	private static final Color profileColor = Color.BLACK;
 	static final Color gaussColor = Color.RED;
 	static final Color bgColor = Color.BLUE;
 	static final Color fittedColor = new Color(255, 153, 0);

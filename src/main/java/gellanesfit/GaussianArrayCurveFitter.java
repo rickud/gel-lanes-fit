@@ -180,13 +180,13 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * {@link GaussianArray.Parametric} based on the specified observed points.
 	 */
 	static class ParameterGuesser {
-		final int fitMode;
-		final List<WeightedObservedPoint> sorted;
-		final int deg;
-		final double peakTol, polyOffset;
-		final RealMatrix distMatrix;
-		final List<Peak> ladderPeaks;
-		final double[] ladderMW;
+		private final int fitMode;
+		private final List<WeightedObservedPoint> sorted;
+		private final int deg;
+		private final double peakTol, polyOffset;
+		private final RealMatrix distMatrix;
+		private final List<Peak> ladderPeaks;
+		private final double[] ladderMW;
 		
 		/**
 		 * Constructs instance with the specified observed points.
