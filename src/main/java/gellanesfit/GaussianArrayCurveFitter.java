@@ -461,7 +461,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					scaledFrequency.setEntry(s, scaledFrequency.getEntry(s) * pv);
 				}
 				final RealVector mwArray = distMatrix.getColumnVector(2);
-				RealVector scale = scaledFrequency.ebeMultiply(mwArray);
+				RealVector scale = scaledFrequency.ebeMultiply(mwArray.map(new Log()));
 				scale = scale.mapDivide(scale.getMaxValue());
 			
 				List<Integer> fragmentSubset = new ArrayList<>();
@@ -604,8 +604,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			}
 			List<Integer> out = new ArrayList<>(); 
 			final double[] means = interpolateDisplacement(meanLadder, ladderMW, distMatrix.getColumnVector(2));
-			double margin = (xrange[1] - xrange[0]) * 0.2;
-//			double margin = 0.0;
+//			double margin = (xrange[1] - xrange[0]) * 0.2;
+			double margin = 0.0;
 			for (int i = 0; i < means.length; i++) {
 				if (means[i] > xrange[0] - margin && means[i] < xrange[1] + margin) out.add(i);
 			}
@@ -666,9 +666,9 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			maxD1 = polyDerivative;
 			minD1 = -polyDerivative;
 			this.profile = new LinearInterpolator().interpolate(xtarget, ytarget);
-			double mds = 1.3;
+			double mds = 0.8; // Distance from guess peak mean, as fraction of initial inter-peak distance
 			if (fitMode == continuumMode) {
-				mds = 0.6;
+				mds = 0.1;
 			}
 			if (iniSP.getMean().getDimension() > 1) {
 				maxMeanDiff = iniSP.getMean().getSubVector(1, iniSP.getMean().getDimension() - 1).subtract(
@@ -827,13 +827,19 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				double varRatio = varCalculator.evaluate(ratio.toArray());
 				double lowNorm = meanCalculator.evaluate(
 					ytarget.mapSubtract(ytarget.getMinValue()*polyOffset).toArray())*minN;
-
-				if (varRatio > areaDrift*areaDrift) {
+				double sigma = FastMath.sqrt(FastMath.log(varRatio
+									/(meanRatio*meanRatio) + 1));
+				if (sigma > areaDrift) {
 					// Use a log-normal distribution with parameters mu, sigma
 					double mu = FastMath.log(meanRatio /
-						FastMath.sqrt(1 + areaDrift*areaDrift/(meanRatio*meanRatio)));
-					double sigma = FastMath.max(FastMath.sqrt(FastMath.log(areaDrift*areaDrift
-						/(meanRatio*meanRatio) + 1)), 1e-12);
+						FastMath.sqrt(1 + varRatio/(meanRatio*meanRatio)));
+					final String outStr = String.format("%1$.4f; %2$.4f; %3$.4f; %4$.4f; %5$.4f; %6$.4f",
+						mu, sigma,
+						meanRatio, FastMath.exp(mu + 0.5*sigma*sigma), 
+						varRatio, (FastMath.exp(sigma*sigma)-1)*FastMath.exp(2*mu+sigma*sigma));
+					System.out.println(outStr);
+//					double mu = meanRatio;
+					sigma = areaDrift;
 					LogNormalDistribution logNormal = new LogNormalDistribution(mu, sigma);
 					norm = new ArrayRealVector();
 					for (int i = 0; i < area.getDimension(); i++) {
@@ -843,9 +849,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				}
 				double normMin = norm.getMinValue();
 				if (normMin < lowNorm) 
-					norm.mapAdd(lowNorm - normMin);
-//			System.out.println(meanNormRatio + "; " + sdNormRatio
-//					+ "; " + meanSDRatio+ "; " + sdSDRatio);
+					norm.mapMultiply(lowNorm/normMin);
+
 			}
 
 			// Repackage parameter array

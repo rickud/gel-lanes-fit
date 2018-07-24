@@ -152,41 +152,43 @@ class Fitter {
 				areas = areas.append(a);
 
 				// Add values to Results Table
-				rt.incrementCounter();
-				if (band == 1) {
-					rt.addValue(headers[0], "" + lane);
-				}
-				else {
-					rt.addValue(headers[0], "");
-				}
-				rt.addValue(headers[1], band);
-				rt.addValue(headers[2], String.format("%1$.1f", m));
-				rt.addValue(headers[3], String.format("%1$.1f", m0));
-				rt.addValue(headers[4], String.format("%1$.1f", n));
-				rt.addValue(headers[5], String.format("%1$.1f", n0));
-				rt.addValue(headers[6], String.format("%1$.2f", s * sd2FWHM));
-				rt.addValue(headers[7], String.format("%1$.2f", s0 * sd2FWHM));
-				rt.addValue(headers[8], String.format("%1$.1f", a));
-
-				if (fitMode == continuumMode) {
-					if (lane == ladderLane) {
-						rt.addValue(headers[9], " - ");
-						rt.addValue(headers[10], " - ");
-						rt.addValue(headers[11], " - ");
+				if (m>d.getMinX() && m< d.getMaxX()) {
+					rt.incrementCounter();
+					if (band == 1) {
+						rt.addValue(headers[0], "" + lane);
 					}
 					else {
-						final double freq = fragmentDistribution[selectedFragments.get(
-							lane - 1).get(p)][0];
-						final double bp = fragmentDistribution[selectedFragments.get(lane -
-							1).get(p)][1];
-						final double mw = fragmentDistribution[selectedFragments.get(lane -
-							1).get(p)][2];
-						rt.addValue(headers[9], String.format("%1$.3f", freq));
-						rt.addValue(headers[10], String.format("%1$.0f", bp));
-						rt.addValue(headers[11], String.format("%1$.3f", mw));
+						rt.addValue(headers[0], "");
 					}
+					rt.addValue(headers[1], band);
+					rt.addValue(headers[2], String.format("%1$.1f", m));
+					rt.addValue(headers[3], String.format("%1$.1f", m0));
+					rt.addValue(headers[4], String.format("%1$.1f", n));
+					rt.addValue(headers[5], String.format("%1$.1f", n0));
+					rt.addValue(headers[6], String.format("%1$.2f", s * sd2FWHM));
+					rt.addValue(headers[7], String.format("%1$.2f", s0 * sd2FWHM));
+					rt.addValue(headers[8], String.format("%1$.1f", a));
+	
+					if (fitMode == continuumMode) {
+						if (lane == ladderLane) {
+							rt.addValue(headers[9], " - ");
+							rt.addValue(headers[10], " - ");
+							rt.addValue(headers[11], " - ");
+						}
+						else {
+							final double freq = fragmentDistribution[selectedFragments.get(
+								lane - 1).get(p)][0];
+							final double bp = fragmentDistribution[selectedFragments.get(lane -
+								1).get(p)][1];
+							final double mw = fragmentDistribution[selectedFragments.get(lane -
+								1).get(p)][2];
+							rt.addValue(headers[9], String.format("%1$.3f", freq));
+							rt.addValue(headers[10], String.format("%1$.0f", bp));
+							rt.addValue(headers[11], String.format("%1$.3f", mw));
+						}
+					}
+					band++;
 				}
-				band++;
 			}
 
 			if (fitMode == continuumMode && lane != ladderLane) {
