@@ -151,14 +151,14 @@ public class GelLanesFit implements Command {
 		final ImageJ ij = new ImageJ();
 		ij.launch(args);
 		final String sep = File.separator;
-		final String folder = "src" + sep + "main" + sep + "resources" + sep +
-			"sample" + sep + "CM" 
-//		+ "Tagment-Test3" + sep + "Gel Camera";
-//		+ "Tagment-Test3" + sep + "Massa's Phone";
-//		+ "Tagment-Test3" + sep + "Rick's Phone";
-//		+ "Tagment-Test3" + sep + "Other Camera";
-//		+ "Tagment-Test3" + sep + "ingelico";
-		+ "Tagment-Test3" + sep + "tapestation";
+		final String folder = "src" + sep + "main" + sep + "resources" + sep
+//			"+ sample" + sep + "CM"; 
+//		+ "sample" + sep+ "Tagment-Test3" + sep + "Gel Camera";
+//		+ "sample" + sep+ "Tagment-Test3" + sep + "Massa's Phone";
+//		+ "sample" + sep+ "Tagment-Test3" + sep + "Rick's Phone";
+//		+ "sample" + sep+ "Tagment-Test3" + sep + "Other Camera";
+//		+ "sample" + sep+ "Tagment-Test3" + sep + "ingelico";
+		+ "sample" + sep+ "Tagment-Test3" + sep + "tapestation";
 		// List of files available for debugging purposes
 //		String file = "second_destain.tif";
 //		String file = "LM_1_top.tif";
@@ -214,12 +214,12 @@ public class GelLanesFit implements Command {
 //		String file = "2igelico_090418.tif";
 //		String file = "2igelico_0904183.tif";
 //		String file = "2018_4_18 old and new p428 2nd pic.tif";
-//		String file = "Shimichi_042117_2.tif";
+		String file = "Shimichi_042117_2.tif";
 		
 //	String file = "cm_ips_262773.tif";
 //	String file = "1cm_ips_262773.tif";
 //	String file = "2cm_ips_262773.tif";
-		String file = "3cm_ips_262773.tif";
+//		String file = "3cm_ips_262773.tif";
 		
 		final ImagePlus iPlus = new Opener().openImage(folder + sep + file);
 		if (iPlus.getType() == ImagePlus.GRAY8 || iPlus.getType() == ImagePlus.GRAY16) {
