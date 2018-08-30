@@ -4,6 +4,7 @@
 /target/
 /out/
 /src/main/resources/*.java
+/src/main/resources/sample/
 /.settings/
 /bin/
 /savedrois.bak
