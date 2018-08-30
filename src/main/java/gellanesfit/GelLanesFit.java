@@ -153,12 +153,12 @@ public class GelLanesFit implements Command {
 		final String sep = File.separator;
 		final String folder = "src" + sep + "main" + sep + "resources" + sep
 //			"+ sample" + sep + "CM"; 
-//		+ "sample" + sep+ "Tagment-Test3" + sep + "Gel Camera";
+		+ "sample" + sep+ "Tagment-Test3" + sep + "Gel Camera";
 //		+ "sample" + sep+ "Tagment-Test3" + sep + "Massa's Phone";
 //		+ "sample" + sep+ "Tagment-Test3" + sep + "Rick's Phone";
 //		+ "sample" + sep+ "Tagment-Test3" + sep + "Other Camera";
 //		+ "sample" + sep+ "Tagment-Test3" + sep + "ingelico";
-		+ "sample" + sep+ "Tagment-Test3" + sep + "tapestation";
+//		+ "sample" + sep+ "Tagment-Test3" + sep + "tapestation";
 		// List of files available for debugging purposes
 //		String file = "second_destain.tif";
 //		String file = "LM_1_top.tif";
@@ -177,7 +177,7 @@ public class GelLanesFit implements Command {
 //		String file = "HM_1_3.tif";
 //		String file = "HM_5.tif";
 
-//		String file = "Long_1s.tif";
+		String file = "Long_1sA.tif";
 //		String file = "Long_5s.tif";
 
 //		Massa's phone
@@ -214,7 +214,7 @@ public class GelLanesFit implements Command {
 //		String file = "2igelico_090418.tif";
 //		String file = "2igelico_0904183.tif";
 //		String file = "2018_4_18 old and new p428 2nd pic.tif";
-		String file = "Shimichi_042117_2.tif";
+//		String file = "Shimichi_042117_2.tif";
 		
 //	String file = "cm_ips_262773.tif";
 //	String file = "1cm_ips_262773.tif";
