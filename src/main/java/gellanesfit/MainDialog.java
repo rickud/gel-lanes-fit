@@ -421,36 +421,48 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		settingsPanel.setLayout(new GridBagLayout());
 		settingsPanel.setBorder(new EmptyBorder(2, 2, 2, 2));
 		final GridBagConstraints c2 = new GridBagConstraints();
-
+		
+		// JSpinners
 		labelDegBG = new JLabel("Polynomial Degree");
 		labelPolyDerivative = new JLabel(
 			"Max Polynomial Derivative (grayvalue/px)");
 		labelTolPK = new JLabel("Peak Tolerance (%)");
-
 		labelAreaDrift = new JLabel("Area Drift ");
 		labelSDDrift = new JLabel("SD Drift ");
-		
-		textDegBG = new JSpinner(new SpinnerNumberModel(degBG, -1, 15, 1));
+
+		int minDegBG = -1; int maxDegBG = 15;
+		degBG = degBG < minDegBG ? minDegBG : degBG;
+		degBG = degBG > maxDegBG ? maxDegBG : degBG;
+		textDegBG = new JSpinner(new SpinnerNumberModel(degBG, minDegBG, maxDegBG, 1));
 		textDegBG.setBorder(BorderFactory.createCompoundBorder(textDegBG
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textDegBG.getEditor()).getTextField().setColumns(
 			textWidth);
 
+		double minPolyDerivative = 0.00; double maxPolyDerivative = 10.0;
+		polyDerivative = polyDerivative < minPolyDerivative ? minPolyDerivative : polyDerivative;
+		polyDerivative = polyDerivative > maxPolyDerivative ? maxPolyDerivative : polyDerivative;
 		textPolyDerivative = new JSpinner(new SpinnerNumberModel(polyDerivative,
-			0.00, 10.0, 0.01));
+			minPolyDerivative, maxPolyDerivative, 0.01));
 		textPolyDerivative.setBorder(BorderFactory.createCompoundBorder(
 			textPolyDerivative.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0,
 				2)));
 		((JSpinner.DefaultEditor) textPolyDerivative.getEditor()).getTextField()
 			.setColumns(textWidth);
-
-		textTolPK = new JSpinner(new SpinnerNumberModel(tolPK, 0.01, 1.00, 0.005));
+		
+		double minTolPK = 0.01; double maxTolPK = 1.00;
+		tolPK = tolPK < minTolPK ? minTolPK : tolPK;
+		tolPK = tolPK > maxTolPK ? maxTolPK : tolPK;
+		textTolPK = new JSpinner(new SpinnerNumberModel(tolPK, minTolPK, maxTolPK, 0.005));
 		textTolPK.setBorder(BorderFactory.createCompoundBorder(textTolPK
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textTolPK.getEditor()).getTextField().setColumns(
 			textWidth);
-
-		textAreaDrift = new JSpinner(new SpinnerNumberModel(areaDrift, 0.001, 2.0,
+		
+		double minAreaDrift = 0.001; double maxAreaDrift = 1.00;
+		areaDrift = areaDrift < minAreaDrift ? minAreaDrift : areaDrift;
+		areaDrift = areaDrift > maxAreaDrift ? maxAreaDrift : areaDrift;
+		textAreaDrift = new JSpinner(new SpinnerNumberModel(areaDrift, minAreaDrift, maxAreaDrift,
 			0.001));
 		textAreaDrift.setEditor(new JSpinner.NumberEditor(textAreaDrift, "###.###"));
 		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(textAreaDrift
