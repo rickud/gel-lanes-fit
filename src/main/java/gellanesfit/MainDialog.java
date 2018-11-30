@@ -449,8 +449,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textTolPK.getEditor()).getTextField().setColumns(
 			textWidth);
-
-		textAreaDrift = new JSpinner(new SpinnerNumberModel(areaDrift, 0.001, 2.0,
+		double maxAreaDrift = 2.0; 
+		textAreaDrift = new JSpinner(new SpinnerNumberModel(areaDrift < maxAreaDrift ? areaDrift : maxAreaDrift, 0.001, maxAreaDrift,
 			0.001));
 		textAreaDrift.setEditor(new JSpinner.NumberEditor(textAreaDrift, "###.###"));
 		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(textAreaDrift
