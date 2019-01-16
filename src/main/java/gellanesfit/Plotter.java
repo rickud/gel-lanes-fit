@@ -105,7 +105,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 			5.0f, 5.0f, 5.0f }, 0.0f);
 
 	// Colors for DataSeries in plots
-	static final Color profileColor = Color.BLACK;
+	private static final Color profileColor = Color.BLACK;
 	static final Color gaussColor = Color.RED;
 	static final Color bgColor = Color.BLUE;
 	static final Color fittedColor = new Color(255, 153, 0);
@@ -535,10 +535,13 @@ class Plotter extends JFrame implements ChartMouseListener {
 			chartTabs.get(chartTabs.size() - 1).add(new JPanel());
 			i++;
 		}
-		if (t <  chartsTabbedPane.getTabCount())
-			chartsTabbedPane.setSelectedIndex(t);
-		else
-			chartsTabbedPane.setSelectedIndex(chartsTabbedPane.getTabCount() -1);
+		int tabCount = chartsTabbedPane.getTabCount();
+		if (t != -1 && tabCount != 0) {
+			if (t < tabCount) chartsTabbedPane.setSelectedIndex(t);
+			else chartsTabbedPane.setSelectedIndex(tabCount - 1);
+		}
+		else if (tabCount > 0) chartsTabbedPane.setSelectedIndex(0);
+
 	}
 
 	public void resetData() {
@@ -746,9 +749,9 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 	// Possible Types
 	final static int PROFILE = 0;
 	final static int GAUSS_BG = 2;
-	final static int BACKGROUND = 400;
-	final static int FITTED = 401;
-	final static int CUSTOMPEAKS = 402;
+	final static int BACKGROUND = 2000;
+	final static int FITTED = 2001;
+	final static int CUSTOMPEAKS = 2002;
 
 	public DataSeries(final String name, final int lane, final int type,
 		final RealVector x, final RealVector y, final Color color)

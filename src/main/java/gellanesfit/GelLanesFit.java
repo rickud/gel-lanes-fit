@@ -44,7 +44,7 @@ import ij.io.Opener;
 import ij.process.LUT;
 
 @Plugin(type = Command.class, headless = true,
-	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
+	menuPath = "Plugins>Gel Tools>DoNALD")
 @SuppressWarnings("ucd")
 public class GelLanesFit implements Command {
 
@@ -158,7 +158,8 @@ public class GelLanesFit implements Command {
 //			+ "Rick's Phone" + sep;
 //			+ "Other Camera" + sep;
 //			+ "ingelico" + sep;
-//		+ "tapestation" + sep;
+//		  + "tapestation" + sep;
+
 		// List of files available for debugging purposes
 //		String file = "second_destain.tif";
 //		String file = "LM_1_top.tif";
@@ -214,9 +215,15 @@ public class GelLanesFit implements Command {
 //		String file = "2igelico_090418.tif";
 //		String file = "2igelico_0904183.tif";
 //		String file = "2018_4_18 old and new p428 2nd pic.tif";
-//	String file = "Shimichi_042117_4.tif";
+
+//		String file = "Shimichi_042117_4.tif";
+
+//		String file = "cm_ips_262773.tif";
+//		String file = "1cm_ips_262773.tif";
+//		String file = "2cm_ips_262773.tif";
+//		String file = "3cm_ips_262773.tif";
 		
-		final ImagePlus iPlus = new Opener().openImage(folder + file);
+		final ImagePlus iPlus = new Opener().openImage(folder + sep + file);
 		if (iPlus.getType() == ImagePlus.GRAY8 || iPlus.getType() == ImagePlus.GRAY16) {
 			final LUT[] lut = iPlus.getLuts();
 			iPlus.setLut(lut[0].createInvertedLut());

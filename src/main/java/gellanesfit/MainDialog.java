@@ -128,7 +128,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private static final String TOLPK = "tolPK";
 	private static final String AREADRIFT = "areaDrift";
 	private static final String SDDRIFT = "sdSDrift";
-
+	private static final String DLO = "dlo"; // Uniform distribution range
+	private static final String DHI = "dhi";
+	private static final String EVERY = "every";
+	
 	private static final String NLANES = "nLanes";
 	private static final String LADDERLANEINT = "ladderLaneInt";
 	private static final String LW = "lw";
@@ -178,8 +181,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private final ImagePlus imp;
 	private ArrayList<Roi> rois;
 
-	private int iw, ih, lw, lh, lsp, lhoff, lvoff;
-
+	private int iw, ih, lw, lh, lsp, lhoff, lvoff, dlo, dhi, every;
 	private int nLanes;
 	private int degBG; // Order of Background Polynomial
 	private double polyDerivative;
@@ -276,6 +278,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			lsp = prefs.getInt(LSP, Math.round((iw - lw * nLanes) / (nLanes + 1)));
 			lhoff = prefs.getInt(LHOFF, lsp / 2);
 			lvoff = prefs.getInt(LVOFF, (ih - lh) / 2);
+			dlo = prefs.getInt(DLO, 100);
+			dhi = prefs.getInt(DHI, 500);
+			every = prefs.getInt(EVERY, 1);
 		}
 		else {
 			auto = true;
@@ -287,7 +292,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			lsp = Math.round((iw - lw * nLanes) / (nLanes + 1));
 			lhoff = lsp / 2;
 			lvoff = (ih - lh) / 2;
-
+			dlo = 100;
+			dhi = 500;
+			every = 1;
+			
 			// Create/Update prefs node keys
 			prefs.putBoolean(AUTO, auto);
 			prefs.putInt(NLANES, nLanes);
@@ -298,6 +306,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			prefs.putInt(LSP, lsp);
 			prefs.putInt(LHOFF, lhoff);
 			prefs.putInt(LVOFF, lvoff);
+			prefs.putInt(DLO, dlo);
+			prefs.putInt(DHI, dhi);
+			prefs.putInt(EVERY, every);
 		}
 
 		ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
@@ -410,38 +421,50 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		settingsPanel.setLayout(new GridBagLayout());
 		settingsPanel.setBorder(new EmptyBorder(2, 2, 2, 2));
 		final GridBagConstraints c2 = new GridBagConstraints();
-
+		
+		// JSpinners
 		labelDegBG = new JLabel("Polynomial Degree");
 		labelPolyDerivative = new JLabel(
 			"Max Polynomial Derivative (grayvalue/px)");
 		labelTolPK = new JLabel("Peak Tolerance (%)");
-
 		labelAreaDrift = new JLabel("Area Drift ");
 		labelSDDrift = new JLabel("SD Drift ");
-		
-		textDegBG = new JSpinner(new SpinnerNumberModel(degBG, -1, 15, 1));
+
+		int minDegBG = -1; int maxDegBG = 15;
+		degBG = degBG < minDegBG ? minDegBG : degBG;
+		degBG = degBG > maxDegBG ? maxDegBG : degBG;
+		textDegBG = new JSpinner(new SpinnerNumberModel(degBG, minDegBG, maxDegBG, 1));
 		textDegBG.setBorder(BorderFactory.createCompoundBorder(textDegBG
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textDegBG.getEditor()).getTextField().setColumns(
 			textWidth);
 
+		double minPolyDerivative = 0.00; double maxPolyDerivative = 10.0;
+		polyDerivative = polyDerivative < minPolyDerivative ? minPolyDerivative : polyDerivative;
+		polyDerivative = polyDerivative > maxPolyDerivative ? maxPolyDerivative : polyDerivative;
 		textPolyDerivative = new JSpinner(new SpinnerNumberModel(polyDerivative,
-			0.00, 10.0, 0.01));
+			minPolyDerivative, maxPolyDerivative, 0.01));
 		textPolyDerivative.setBorder(BorderFactory.createCompoundBorder(
 			textPolyDerivative.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0,
 				2)));
 		((JSpinner.DefaultEditor) textPolyDerivative.getEditor()).getTextField()
 			.setColumns(textWidth);
-
-		textTolPK = new JSpinner(new SpinnerNumberModel(tolPK, 0.01, 1.00, 0.005));
+		
+		double minTolPK = 0.01; double maxTolPK = 1.00;
+		tolPK = tolPK < minTolPK ? minTolPK : tolPK;
+		tolPK = tolPK > maxTolPK ? maxTolPK : tolPK;
+		textTolPK = new JSpinner(new SpinnerNumberModel(tolPK, minTolPK, maxTolPK, 0.005));
 		textTolPK.setBorder(BorderFactory.createCompoundBorder(textTolPK
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textTolPK.getEditor()).getTextField().setColumns(
 			textWidth);
 
-		textAreaDrift = new JSpinner(new SpinnerNumberModel(areaDrift, 0.0, 20.0,
-			0.1));
-		textAreaDrift.setEditor(new JSpinner.NumberEditor(textAreaDrift, "###.#"));
+		double minAreaDrift = 0.001; double maxAreaDrift = 1.00;
+		areaDrift = areaDrift < minAreaDrift ? minAreaDrift : areaDrift;
+		areaDrift = areaDrift > maxAreaDrift ? maxAreaDrift : areaDrift;
+		textAreaDrift = new JSpinner(
+				new SpinnerNumberModel(areaDrift, minAreaDrift, maxAreaDrift, 0.001));
+		textAreaDrift.setEditor(new JSpinner.NumberEditor(textAreaDrift, "###.###"));
 		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(textAreaDrift
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField()
@@ -618,9 +641,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				cleanupAndClose();
 			}
 		});
-
 		reDrawROIs(imp, "none");
 		imp.killRoi();
+		redoProfilePlots();
 	}
 
 	private boolean askUser(final String question) {
@@ -913,8 +936,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonResetCustomPeaks.setEnabled(false);
 		plotter.resetData();
 		plotter.setPlotMode(Plotter.regMode);
-		// rois.parallelStream().forEach((r) -> {
+
 		try {
+			// rois.parallelStream().forEach((r) -> {
 			for (final Roi r : rois) {
 				final int ln = Integer.parseInt(r.getName().substring(5));
 				final Rectangle rect = r.getBounds();
@@ -930,11 +954,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				}
 				// });
 			}
+			plotter.reloadTabs();
 		}
 		catch (final ConcurrentModificationException e) {
 			log.info(rois.size());
 		}
-		plotter.reloadTabs();
 	}
 
 	private double[][] readDistFile(final String filename) {
@@ -1581,9 +1605,36 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		if (e.getSource().equals(cmbBoxDist)) {
 			if (cmbBoxDist.getSelectedIndex() == 0) return;
-			final String filename = "data/" + cmbBoxDist.getSelectedItem() + ".txt";
-			final double[][] dist = readDistFile(filename);
-			fitter.setFragmentDistribution(dist);
+			else if (cmbBoxDist.getSelectedItem().equals("Uniform")) {
+				final String title = "DISTRIBUTION RANGE";
+				final String message = "Enter the basepair-length range for the distribution.";
+				final GenericDialog gd = new GenericDialog(title);
+				gd.addMessage(message);
+				gd.addNumericField("Lower", dlo , 0, 5, "bp");
+				gd.addNumericField("Upper", dhi, 0, 5, "bp");
+				gd.addNumericField("Every", every, 0, 5, "bp");
+				gd.showDialog();
+				if (gd.wasOKed()) {
+					dlo = (int) gd.getNextNumber();
+					dhi = (int) gd.getNextNumber();
+					every = (int) gd.getNextNumber();
+					prefs.putInt(DLO, dlo);
+					prefs.putInt(DHI, dhi);
+					prefs.putInt(EVERY, every);
+					final double[][] dist = new double[(dhi - dlo) / every + 1][3];
+					double f = 1.0/(dhi - dlo + 1);
+					
+					for (int i = 0; i < dist.length; i++) {
+						dist[i][0] = f;
+						dist[i][1] = dhi - i * every;
+						dist[i][2] = dist[i][1] * 607.4 + 157.9; // MW;
+					}
+					fitter.setFragmentDistribution(dist);
+				}
+			} else {
+				final String filename = "data/" + cmbBoxDist.getSelectedItem() + ".txt";
+				fitter.setFragmentDistribution(readDistFile(filename));
+			}
 		}
 	}
 
