@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>19.0.0</version>
+		<version>30.0.0</version>
 	</parent>
 
 	<groupId>imagej-plugins</groupId>
@@ -31,7 +31,7 @@
 
 	<properties>
 		<main-class>GelLanesFit</main-class>
-		<scijava.jvm.version>1.8</scijava.jvm.version>
+<!-- 		<scijava.jvm.version>1.8</scijava.jvm.version> -->
 		<license.licenseName>bsd_2</license.licenseName>
 		<license.copyrightOwners>The University of Texas at Dallas </license.copyrightOwners>
 	</properties>
@@ -143,7 +143,6 @@
 		<dependency>
 			<groupId>org.jfree</groupId>
 			<artifactId>jfreesvg</artifactId>
-			<version>3.3</version>
 		</dependency>
 	</dependencies>
 </project>

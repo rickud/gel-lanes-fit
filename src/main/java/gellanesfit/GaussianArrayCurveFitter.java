@@ -28,8 +28,6 @@ import org.apache.commons.math3.analysis.function.Abs;
 import org.apache.commons.math3.analysis.function.Gaussian;
 import org.apache.commons.math3.analysis.function.Log;
 import org.apache.commons.math3.analysis.function.Log10;
-import org.apache.commons.math3.analysis.function.Power;
-import org.apache.commons.math3.analysis.function.Sqrt;
 import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
 import org.apache.commons.math3.analysis.polynomials.PolynomialFunction;
 import org.apache.commons.math3.analysis.polynomials.PolynomialSplineFunction;
@@ -55,7 +53,6 @@ import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.stat.descriptive.moment.Mean;
 import org.apache.commons.math3.stat.descriptive.moment.Variance;
 import org.apache.commons.math3.util.FastMath;
-import org.python.modules.math;
 
 class GaussianArrayCurveFitter extends AbstractCurveFitter {
 

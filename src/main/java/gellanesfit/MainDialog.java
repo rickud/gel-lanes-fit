@@ -166,7 +166,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private String roiPreviouslySelected = "none";
 	private String ladderLaneStr = "none";
 	private int ladderLaneInt = noLadderLane;
-	private final String[] ladderStr = { "Select Ladder Type", "Hi-Lo", "100bp" };
+	private final String[] ladderStr = { "Select Ladder Type", "Hi-Lo", "100bp", "Quick-Load" };
 	private final String[] distStr = { "Select Fragment Distribution",
 		"AciI-Lambda", "AciI-Lambda4", "AciI-Lambda3", "AciI-Lambda2",
 		"Uniform", "Ladder" };
@@ -1818,28 +1818,37 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 class Ladder implements Serializable {
 
-	private static final String[] hilo = { "10 kbp", "8 kbp", "6 kbp", "4 kbp",
+	private static final String[] hilo      = { "10 kbp", "8 kbp", "6 kbp", "4 kbp",
 		"3 kbp", "2 kbp", "1.55 kbp", "1.4 kbp", "1 kbp", "750 bp", "500 bp",
 		"400 bp", "300 bp", "200 bp", "100 bp", "50 bp" };
-	private static final String[] bp100 = { "1.5 kbp", "1.2 kbp", "1 kbp",
+	private static final String[] bp100     = { "1.5 kbp", "1.2 kbp", "1 kbp",
 		"900 bp", "800 bp", "700 bp", "600 bp", "500 bp", "400 bp", "300 bp",
 		"200 bp", "100 bp" };
+	private static final String[] quickload = { "48.5 kbp", "20 kbp", "15 kbp",
+			"10 kbp", "8 kbp", "6 kbp", "5 kbp", "4 kbp", "3 kbp", "2 kbp", 
+			"1.5 kbp",  "1 kbp",  "500 bp" };
+	
 	private static final RealVector hilo_bp = new ArrayRealVector(new double[] {
 		10000, 8000, 6000, 4000, 3000, 2000, 1550, 1400, 1000, 750, 500, 400, 300,
 		200, 100, 50 });
 	private static final RealVector bp100_bp = new ArrayRealVector(new double[] {
 		1517, 1200, 1000, 900, 800, 700, 600, 500, 400, 300, 200, 100 });
-	private static final int HILO = 1;
-	private static final int BP100 = 2;
+	private static final RealVector quickload_bp = new ArrayRealVector(new double[] {
+		48500, 20000, 15000, 10000, 8000, 6000, 5000, 4000, 3000, 2000, 1500, 1000, 500 });
 
+	private static final int HILO      = 1;
+	private static final int BP100     = 2;
+	private static final int QUICKLOAD = 3;
+	
 	private int type;
 	private int[] ladderRange;
 	private String[] ladderStrings;
 
 	public Ladder(final int type) {
 		this.type = type;
-		if (type == HILO) ladderStrings = hilo;
-		else if (type == BP100) ladderStrings = bp100;
+		if (type == HILO)           ladderStrings = hilo;
+		else if (type == BP100)     ladderStrings = bp100;
+		else if (type == QUICKLOAD) ladderStrings = quickload;
 		this.ladderRange = new int[] { 0, ladderStrings.length - 1 };
 	}
 
@@ -1875,6 +1884,7 @@ class Ladder implements Serializable {
 	public void setType(final int type) {
 		this.type = type;
 		if (type == HILO) ladderStrings = hilo;
+		else if (type == BP100) ladderStrings = bp100;
 		else if (type == BP100) ladderStrings = bp100;
 		ladderRange = new int[] { 0, ladderStrings.length - 1 };
 	}
