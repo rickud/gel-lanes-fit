@@ -44,7 +44,7 @@ import ij.io.Opener;
 import ij.process.LUT;
 
 @Plugin(type = Command.class, headless = true,
-	menuPath = "Plugins>Gel Tools>DoNALD")
+	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
 @SuppressWarnings("ucd")
 public class GelLanesFit implements Command {
 
