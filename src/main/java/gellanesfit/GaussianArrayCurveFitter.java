@@ -712,26 +712,31 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			if (poly.getDimension() > 0) {
 				final double tolHigh = ytarget.getMinValue() * polyOffset;
 				final double tolLow = 0.4 * tolHigh;
+
 				p = new PolynomialFunction(poly.toArray());
 				PolynomialFunction p1 = p.polynomialDerivative();
 				double d1bg = new Mean().evaluate(xtarget.map(p1).toArray());
 				final RealVector coeffs0 = poly.getSubVector(0, 1);
 				RealVector coeffs1end = poly.getSubVector(1, poly.getDimension() - 1);
 				RealVector bg = xtarget.map(p);
-
-				boolean tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() -
-					bg.getMinValue() > tolHigh - tolLow;
-				while (tooSteep) {
-					coeffs1end = coeffs1end.mapMultiplyToSelf(0.9);
-					poly = coeffs0.append(coeffs1end);
-					p = new PolynomialFunction(poly.toArray());
-					p1 = p.polynomialDerivative();
-					d1bg = new Mean().evaluate(xtarget.map(p1).toArray());
-					bg = xtarget.map(p);
-					tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() - bg
-						.getMinValue() > tolHigh - tolLow;
+				
+				if (tolHigh - tolLow > 0.1) {
+					boolean tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() -
+						bg.getMinValue() > tolHigh - tolLow;
+					while (tooSteep) {
+						coeffs1end = coeffs1end.mapMultiplyToSelf(0.9);
+						poly = coeffs0.append(coeffs1end);
+						p = new PolynomialFunction(poly.toArray());
+						p1 = p.polynomialDerivative();
+						d1bg = new Mean().evaluate(xtarget.map(p1).toArray());
+						bg = xtarget.map(p);
+						tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() - bg
+							.getMinValue() > tolHigh - tolLow;
+					}
+				} else {
+					poly = coeffs0.append(new ArrayRealVector(deg));
 				}
-
+				
 				final boolean tooHigh = bg.getMaxValue() > tolHigh;
 				if (tooHigh) {
 					final double marginUpper = bg.getMaxValue() - tolHigh;
@@ -747,6 +752,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 						? 1e-3 : marginLower));
 					poly = coeffs0.append(coeffs1end);
 				}
+
 			}
 
 			// Gaussian Parameters
