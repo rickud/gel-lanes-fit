@@ -27,8 +27,6 @@ import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.prefs.Preferences;
 
-import net.imagej.ImageJ;
-
 import org.scijava.Context;
 import org.scijava.app.StatusService;
 import org.scijava.command.Command;
@@ -41,7 +39,9 @@ import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.ImageWindow;
 import ij.io.Opener;
+import ij.process.ImageConverter;
 import ij.process.LUT;
+import net.imagej.ImageJ;
 
 @Plugin(type = Command.class, headless = true,
 	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
@@ -152,8 +152,8 @@ public class GelLanesFit implements Command {
 		ij.launch(args);
 		final String sep = File.separator;
 		final String folder = "src" + sep + "main" + sep + "resources" + sep +
-			"sample" + sep + "Tagment-Test3" + sep
-			+ "Gel Camera" + sep;
+			"sample" + sep + "tape" + sep;
+//			+ "Gel Camera" + sep;
 //			+ "Massa's Phone" + sep;
 //			+ "Rick's Phone" + sep;
 //			+ "Other Camera" + sep;
@@ -178,7 +178,7 @@ public class GelLanesFit implements Command {
 //		String file = "HM_1_3.tif";
 //		String file = "HM_5.tif";
 
-		String file = "Long_1sA.tif";
+//		String file = "Long_1sA.tif";
 //		String file = "Long_5s.tif";
 
 //		Massa's phone
@@ -223,11 +223,27 @@ public class GelLanesFit implements Command {
 //		String file = "2cm_ips_262773.tif";
 //		String file = "3cm_ips_262773.tif";
 		
+
+//		String file = "2021-02-01_17-29-19_analyzed.tif";
+		String file = "2021-02-01_17-29-19.tif";
+//		String file = "2021-02-01_18-01-23_analyzed.tif";
+//		String file = "2021-02-01_18-01-23.tif";
+//		String file = "2021-02-09_14-25-57_analyzed.tif";
+//		String file = "2021-02-09_14-25-57.tif";
+//		String file = "2021-03-11_16-19-09_analyzed.tif";
+//		String file = "2021-03-11_16-19-09.tif";
+//		String file = "2021-03-11_17-02-35_analyzed.tif";
+//		String file = "2021-03-11_17-02-35.tif";
+		
 		final ImagePlus iPlus = new Opener().openImage(folder + sep + file);
-		if (iPlus.getType() == ImagePlus.GRAY8 || iPlus.getType() == ImagePlus.GRAY16) {
-			final LUT[] lut = iPlus.getLuts();
-			iPlus.setLut(lut[0].createInvertedLut());
+		if (iPlus.getType() != ImagePlus.GRAY8 && iPlus.getType() != ImagePlus.GRAY16) {
+			ImageConverter ic = new ImageConverter(iPlus);
+			ic.convertToGray8();
+			iPlus.getProcessor().invert();
+			//iPlus.updateAndDraw();
 		}
+		final LUT[] lut = iPlus.getLuts();
+		iPlus.setLut(lut[0].createInvertedLut());
 		iPlus.show();
 		ij.command().run(GelLanesFit.class, true);
 	}
