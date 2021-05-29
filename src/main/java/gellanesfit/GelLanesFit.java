@@ -208,7 +208,7 @@ public class GelLanesFit implements Command {
 //		String file = "LRG_DSC00425.JPEG";
 //		String file = "LRG_DSC00426.JPEG";
 //		String file = "Long_DSC00427_Crop.JPEG";
-
+//
 //		String file = "Dec17Pulldowns.tif";
 //		String file = "Dec22Pulldowns.tif";
 //		String file = "040518_ingelico_free.tif";
@@ -225,7 +225,7 @@ public class GelLanesFit implements Command {
 		
 
 //		String file = "2021-02-01_17-29-19_analyzed.tif";
-		String file = "2021-02-01_17-29-19.tif";
+//		String file = "2021-02-01_17-29-19.tif";
 //		String file = "2021-02-01_18-01-23_analyzed.tif";
 //		String file = "2021-02-01_18-01-23.tif";
 //		String file = "2021-02-09_14-25-57_analyzed.tif";
@@ -234,6 +234,9 @@ public class GelLanesFit implements Command {
 //		String file = "2021-03-11_16-19-09.tif";
 //		String file = "2021-03-11_17-02-35_analyzed.tif";
 //		String file = "2021-03-11_17-02-35.tif";
+//		String file = "042021_15-33-07_unanalyzed.tif";
+//		String file = "042021_15-39-18_unanalyzed.tif";
+		String file = "042021_16-02-23_unanalyzed.tif";
 		
 		final ImagePlus iPlus = new Opener().openImage(folder + sep + file);
 		if (iPlus.getType() != ImagePlus.GRAY8 && iPlus.getType() != ImagePlus.GRAY16) {
