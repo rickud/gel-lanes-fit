@@ -12,7 +12,7 @@
 
 	<groupId>imagej-plugins</groupId>
 	<artifactId>gel-lanes-fit</artifactId>
-	<version>1.0.7-snapshot</version>
+	<version>1.0.7</version>
 
 	<name>Gel Lanes Fit</name>
 	<description>This plugin fits Gaussians peaks at local maxima of a 1D gel electrophoreses linear lane profile.</description>
