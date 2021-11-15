@@ -77,6 +77,9 @@ import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
+import org.apache.commons.math3.analysis.BivariateFunction;
+import org.apache.commons.math3.analysis.interpolation.BicubicInterpolator;
+import org.apache.commons.math3.analysis.interpolation.BivariateGridInterpolator;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.util.FastMath;
@@ -107,6 +110,8 @@ import ij.gui.Overlay;
 import ij.gui.Roi;
 import ij.gui.TextRoi;
 import ij.io.FileSaver;
+import ij.process.ImageProcessor;
+import ij.process.ShortProcessor;
 
 class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	SeriesChangeListener, MouseMotionListener, MouseListener, MouseWheelListener,
@@ -233,6 +238,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private JComboBox<String> cmbBoxDist;
 	private JToggleButton buttonEditPeaks;
 	private JButton buttonResetCustomPeaks;
+	private JButton buttonBackgroundImage;
 
 	private JPanel topButtonsPanel;
 	private JPanel dialogPanel;
@@ -490,6 +496,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		buttonEditPeaks = new JToggleButton("Edit Custom Peaks");
 		buttonResetCustomPeaks = new JButton("Reset Custom Peaks");
+		buttonBackgroundImage = new JButton("Background Image");
 
 		c2.fill = GridBagConstraints.HORIZONTAL;
 		c2.ipadx = 2; c2.ipady = 2;
@@ -547,8 +554,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		c2.gridx = 0; c2.gridy = 10;
 		settingsPanel.add(buttonResetCustomPeaks, c2);
-
+		
 		c2.gridx = 0; c2.gridy = 11;
+		settingsPanel.add(buttonBackgroundImage, c2);
+		
+		
+		c2.gridx = 0; c2.gridy = 12;
 		c2.gridwidth = GridBagConstraints.REMAINDER;
 		c2.gridheight = 1;
 		c2.weighty = 1.0;
@@ -593,6 +604,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		buttonEditPeaks.setEnabled(false);
 		buttonResetCustomPeaks.setEnabled(false);
+		buttonBackgroundImage.setEnabled(true);
 
 		fitter.setDegBG(degBG);
 		fitter.setPolyDerivative(polyDerivative);
@@ -625,6 +637,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		buttonEditPeaks.addActionListener(this);
 		buttonResetCustomPeaks.addActionListener(this);
+		buttonBackgroundImage.addActionListener(this);
 		buttonFit.addActionListener(this);
 		buttonClose.addActionListener(this);
 
@@ -1559,7 +1572,57 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			}
 			reDrawROIs(imp, "none");
 		}
+		
+		if (e.getSource().equals(buttonBackgroundImage)) {
+			//TODO: for each ROI, interolate bicubic frame around edge 
+			//Collect all image points outside ROI
+			//Count points
+			int[] size = imp.getDimensions();
+			
+			
+			double[] yValues = new double[12];
+			for (int y=0; y<yValues.length; y++) {yValues[y]=y * (size[1]/10);}
+			yValues[11] = size[1] - 1;
+			
+			double[] xValues = new double[rois.size()+2];
+			xValues[0] = 0;
+			int xIdx = 1;
+			for (Roi r : rois) {
+				Rectangle rect = r.getBounds();
+				xValues[xIdx]   = rect.x - 2.0;
+				xIdx += 1;
+			}
+			xValues[xIdx] = size[0] - 1;
+			
+		    final double[][] fValues = new double[xValues.length][yValues.length];		    
+		    for (int v=0; v<xValues.length; v++) {
+		    	for (int w=0; w<yValues.length; w++) {
+		    		fValues[v][w] = imp.getPixel((int) xValues[v], (int) yValues[w])[0];
+		    	}
+		    }
 
+
+	        final BivariateGridInterpolator interpolator = new BicubicInterpolator();
+	        final BivariateFunction function = interpolator.interpolate(xValues, yValues,fValues);
+
+	        ImagePlus bgImage = new ImagePlus();
+	        ImageProcessor ip_bg = new ShortProcessor(size[0], size[1]);
+	        for (int y=0;y<size[1];y++) {
+			    for (int x=0;x<size[0];x++) {
+//			    	boolean inRoi = false;
+//			    	for (Roi r : rois) {
+//			    		if (r.containsPoint(x, y)) {
+//			    			inRoi =true;
+//			    			break;
+//			    		}
+//			    	}
+			    	ip_bg.putPixel(x, y, (int) function.value(x,  y));
+			    }
+			}
+	        bgImage.setProcessor("Background", ip_bg);
+	        bgImage.show();
+		}
+		
 		if (e.getSource().equals(buttonClose)) {
 			if (askUser("Would you like to quit Gel Lanes Fit?")) {
 				frame.dispatchEvent(new WindowEvent(frame, WindowEvent.WINDOW_CLOSING));
