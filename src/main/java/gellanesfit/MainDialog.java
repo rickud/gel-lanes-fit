@@ -44,6 +44,7 @@ import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -61,6 +62,7 @@ import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -166,7 +168,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private String roiPreviouslySelected = "none";
 	private String ladderLaneStr = "none";
 	private int ladderLaneInt = noLadderLane;
-	private final String[] ladderStr = { "Select Ladder Type", "Hi-Lo", "100bp", "Quick-Load", "Tapestation" };
+	private final String[] ladderStr = { "Select Ladder Type", "Hi-Lo", "100bp", "Quick-Load", "Tapestation","Custom Ladder" };
 	private final String[] distStr = { "Select Fragment Distribution",
 		"AciI-Lambda", "AciI-Lambda4", "AciI-Lambda3", "AciI-Lambda2",
 		"Uniform", "Ladder" };
@@ -1164,7 +1166,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		cmbBoxLadderType.removeAllItems();
 		for (int i = 0; i < ladderStr.length; i++) {
 			String s = "";
-			if (i == ladder.getType()) {
+			if (i == ladder.getType() && i != Ladder.CUSTOM) {
 				s = ladderStr[i] + " [" + ladder.getStrings()[ladder.getRange()[0]] +
 					" - " + ladder.getStrings()[ladder.getRange()[1]] + "]";
 			}
@@ -1827,8 +1829,8 @@ class Ladder implements Serializable {
 	private static final String[] quickload = { "48.5 kbp", "20 kbp", "15 kbp",
 			"10 kbp", "8 kbp", "6 kbp", "5 kbp", "4 kbp", "3 kbp", "2 kbp", 
 			"1.5 kbp",  "1 kbp",  "500 bp" };
-	private static final String[] tape = { "5 kbp", "4 kbp", "2 kbp", "1 kbp",
-			"500 bp", "200 bp","25 bp" };
+	private static final String[] tapestation = { "1.5 kbp", "1 kbp", "700 bp",
+			"500 bp", "400 bp", "300 bp", "200 bp", "100 bp",  "50 bp",  "25 bp" };
 	
 	private static final RealVector hilo_bp = new ArrayRealVector(new double[] {
 		10000, 8000, 6000, 4000, 3000, 2000, 1550, 1400, 1000, 750, 500, 400, 300,
@@ -1837,12 +1839,15 @@ class Ladder implements Serializable {
 		1517, 1200, 1000, 900, 800, 700, 600, 500, 400, 300, 200, 100 });
 	private static final RealVector quickload_bp = new ArrayRealVector(new double[] {
 		48500, 20000, 15000, 10000, 8000, 6000, 5000, 4000, 3000, 2000, 1500, 1000, 500 });
-	private static final RealVector tape_bp = new ArrayRealVector(new double[] {
-			5000, 4000, 2000, 1000, 500, 200, 25 });
-	private static final int HILO      = 1;
-	private static final int BP100     = 2;
-	private static final int QUICKLOAD = 3;
-	private static final int TAPE      = 4;
+	private static final RealVector tapestation_bp = new ArrayRealVector(new double[] {
+			1500, 1000, 700, 500, 400, 300, 200, 100, 50, 25 });
+	private RealVector custom_bp = new ArrayRealVector();
+	
+	static final int HILO        = 1;
+	static final int BP100       = 2;
+	static final int QUICKLOAD   = 3;
+	static final int TAPESTATION = 4;
+	static final int CUSTOM      = 5;
 	
 	private int type;
 	private int[] ladderRange;
@@ -1850,13 +1855,54 @@ class Ladder implements Serializable {
 
 	public Ladder(final int type) {
 		this.type = type;
-		if (type == HILO)           ladderStrings = hilo;
-		else if (type == BP100)     ladderStrings = bp100;
-		else if (type == QUICKLOAD) ladderStrings = quickload;
-		else if (type == TAPE)      ladderStrings = tape;
+		if (type == HILO)             ladderStrings = hilo;
+		else if (type == BP100)       ladderStrings = bp100;
+		else if (type == QUICKLOAD)   ladderStrings = quickload;
+		else if (type == TAPESTATION) ladderStrings = tapestation;
+		else if (type == CUSTOM)      { askLadderFile(); }
 		this.ladderRange = new int[] { 0, ladderStrings.length - 1 };
 	}
 
+	private void askLadderFile() {
+		JFileChooser fc = new JFileChooser();
+		fc.showOpenDialog(fc);
+		String filename = fc.getSelectedFile().getAbsolutePath() ;
+		URL url = null;
+		try {
+			url = new File(filename).toURI().toURL();
+		} catch (MalformedURLException e2) {
+			// TODO Auto-generated catch block
+			e2.printStackTrace();
+		}
+		try (BufferedReader buffer = new BufferedReader(new InputStreamReader(url.openStream()))) {	
+			String line = null;
+			custom_bp = new ArrayRealVector();
+			while (true) {
+				line = buffer.readLine();
+				if (line == null) break;
+				try {
+					custom_bp = custom_bp.append(Integer.parseInt(line.trim()));
+				}
+				catch (final NumberFormatException e1) {
+					e1.printStackTrace();
+				}
+			}
+			buffer.close();
+		}
+		catch (final Exception e) {
+			e.printStackTrace();
+		}
+		ladderStrings = new String[custom_bp.getDimension()];
+		for (int w=0; w <custom_bp.getDimension(); w++) {
+			double bases = custom_bp.getEntry(w);
+			if ( bases < 1000) {
+				ladderStrings[w] = (int) bases  + " bp";
+			} else {
+				ladderStrings[w] = bases/1000  + " kbp";
+			}
+		}
+	}
+	
 	public RealVector getMolecularWeights() {
 		RealVector bp = new ArrayRealVector();
 		final int nel = ladderRange[1] - ladderRange[0] + 1;
@@ -1869,8 +1915,10 @@ class Ladder implements Serializable {
 		else if (this.type == QUICKLOAD) {
 			bp = quickload_bp.getSubVector(ladderRange[0], nel);
 		}
-		else if (this.type == TAPE) {
-			bp = tape_bp.getSubVector(ladderRange[0], nel);
+		else if (this.type == TAPESTATION) {
+			bp = tapestation_bp.getSubVector(ladderRange[0], nel);
+		}
+		else if (this.type == CUSTOM) {
 		}
 		final RealVector mw = bp.mapMultiply(607.4).mapAdd(157.9);
 		return mw;
@@ -1894,10 +1942,15 @@ class Ladder implements Serializable {
 
 	public void setType(final int type) {
 		this.type = type;
-		if      (type == HILO)      ladderStrings = hilo;
-		else if (type == BP100)     ladderStrings = bp100;
+
+		if (type == HILO) ladderStrings = hilo;
+		else if (type == BP100) ladderStrings = bp100;
 		else if (type == QUICKLOAD) ladderStrings = quickload;
-		else if (type == TAPE)      ladderStrings = tape;
+		else if (type == TAPESTATION) ladderStrings = tapestation;
+		else if (type == CUSTOM) {
+			askLadderFile();
+		}
+
 		ladderRange = new int[] { 0, ladderStrings.length - 1 };
 	}
 }
