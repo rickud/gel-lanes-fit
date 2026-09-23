@@ -7,7 +7,7 @@
 	<parent>
 		<groupId>org.scijava</groupId>
 		<artifactId>pom-scijava</artifactId>
-		<version>33.0.0</version>
+		<version>45.1.0</version>
 	</parent>
 
 	<groupId>imagej-plugins</groupId>
@@ -30,7 +30,7 @@
 	</licenses>
 
 	<properties>
-		<main-class>GelLanesFit</main-class>
+		<main-class>gellanesfit.GelLanesFit</main-class>
 <!-- 		<scijava.jvm.version>1.8</scijava.jvm.version> -->
 		<license.licenseName>bsd_2</license.licenseName>
 		<license.copyrightOwners>The University of Texas at Dallas </license.copyrightOwners>
@@ -86,8 +86,8 @@
 
 	<repositories>
 		<repository>
-			<id>imagej.public</id>
-			<url>http://maven.imagej.net/content/groups/public</url>
+			<id>scijava.public</id>
+			<url>https://maven.scijava.org/content/groups/public</url>
 		</repository>
 <!-- 		<repository> -->
 <!-- 			<id>gel-lanes-fit</id> -->

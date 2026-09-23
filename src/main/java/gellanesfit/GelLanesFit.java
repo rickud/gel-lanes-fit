@@ -153,8 +153,8 @@ public class GelLanesFit implements Command {
 		ij.launch(args);
 		final String sep = File.separator;
 		final String folder = "src" + sep + "main" + sep + "resources" + sep +
-			"sample" + sep + "tape" + sep;
-		String file = "042021_16-02-23_unanalyzed.tif";
+			"sample-images" + sep;
+		String file = "tagment-test" + sep + "gel-camera-1" + sep + "Long_5s.tif";
 		
 		final ImagePlus iPlus = new Opener().openImage(folder + sep + file);
 		if (iPlus.getType() != ImagePlus.GRAY8 && iPlus.getType() != ImagePlus.GRAY16) {
