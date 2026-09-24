@@ -356,7 +356,9 @@ class Fitter {
 		sw.start();
 		try {
 			AtomicInteger progress = new AtomicInteger();
-			in.parallelStream().forEach((d) -> {
+			// Sequential: each lane's fit updates shared lists (allFittedList,
+			// fittedDistributions, ...), and the fits take well under a second
+			in.stream().forEach((d) -> {
 				out.addAll(doFit(d.getLane()));
 				statusServ.showProgress(progress.incrementAndGet(), in.size());
 			});
@@ -455,10 +457,10 @@ class Fitter {
 		final DataSeries fit = new DataSeries("Fit", lane, DataSeries.FITTED, xvals,
 			fittedCurve, Plotter.fittedColor);
 		boolean contains = false;
-		for (DataSeries d : fittedDistributions) {
-			if (d.getLane() == lane) {
+		for (int i = 0; i < fittedDistributions.size(); i++) {
+			if (fittedDistributions.get(i).getLane() == lane) {
 				contains = true;
-				d = fit;
+				fittedDistributions.set(i, fit);
 			}
 		}
 		if (!contains) fittedDistributions.add(fit);
@@ -603,8 +605,14 @@ class Fitter {
 		return f;
 	}
 
+	/**
+	 * @return the fitted distribution of lane l, or null if it was not fitted
+	 */
 	public DataSeries getFittedDistribution(final int l) {
-		return fittedDistributions.get(l - 1);
+		for (final DataSeries d : fittedDistributions) {
+			if (d.getLane() == l) return d;
+		}
+		return null;
 	}
 
 	public void setDegBG(final int degBG) {
