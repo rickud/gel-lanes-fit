@@ -630,7 +630,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonFit.addActionListener(this);
 		buttonClose.addActionListener(this);
 
-		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.getContentPane().add(dialogPanel);
 		frame.setResizable(true);
 		frame.validate();
