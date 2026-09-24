@@ -1925,6 +1925,7 @@ class Ladder implements Serializable {
 			bp = tapestation_bp.getSubVector(ladderRange[0], nel);
 		}
 		else if (this.type == CUSTOM) {
+			bp = custom_bp.getSubVector(ladderRange[0], nel);
 		}
 		final RealVector mw = bp.mapMultiply(607.4).mapAdd(157.9);
 		return mw;
