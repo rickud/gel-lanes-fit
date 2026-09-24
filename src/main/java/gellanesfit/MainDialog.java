@@ -44,7 +44,6 @@ import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1604,10 +1603,22 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		if (e.getSource().equals(cmbBoxLadderType)) {
 			final int type = cmbBoxLadderType.getSelectedIndex();
 			if (type != 0) {
-				if (ladder == null) ladder = new Ladder(type);
-				if (ladder.getType() != type) ladder.setType(type);
-				ladder.setRange(askLadderRange());
-				updateLadderType();
+				final boolean loaded;
+				if (ladder == null) {
+					ladder = Ladder.create(type);
+					loaded = ladder != null;
+				}
+				else loaded = ladder.getType() == type || ladder.setType(type);
+
+				if (loaded) {
+					ladder.setRange(askLadderRange());
+					updateLadderType();
+				}
+				else {
+					// No custom ladder file loaded: go back to the previous selection
+					cmbBoxLadderType.setSelectedIndex(ladder == null ? 0 : ladder
+						.getType());
+				}
 			}
 		}
 
@@ -1826,6 +1837,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 class Ladder implements Serializable {
 
+	// Pinned to the value computed before Ladder changed, so saved states still load
+	private static final long serialVersionUID = -3262235272790955773L;
+
 	private static final String[] hilo      = { "10 kbp", "8 kbp", "6 kbp", "4 kbp",
 		"3 kbp", "2 kbp", "1.55 kbp", "1.4 kbp", "1 kbp", "750 bp", "500 bp",
 		"400 bp", "300 bp", "200 bp", "100 bp", "50 bp" };
@@ -1859,54 +1873,61 @@ class Ladder implements Serializable {
 	private int[] ladderRange;
 	private String[] ladderStrings;
 
-	public Ladder(final int type) {
-		this.type = type;
-		if (type == HILO)             ladderStrings = hilo;
-		else if (type == BP100)       ladderStrings = bp100;
-		else if (type == QUICKLOAD)   ladderStrings = quickload;
-		else if (type == TAPESTATION) ladderStrings = tapestation;
-		else if (type == CUSTOM)      { askLadderFile(); }
-		this.ladderRange = new int[] { 0, ladderStrings.length - 1 };
+	/**
+	 * Returns null if the type is CUSTOM and no ladder file could be loaded.
+	 */
+	static Ladder create(final int type) {
+		final Ladder ladder = new Ladder();
+		return ladder.setType(type) ? ladder : null;
 	}
 
-	private void askLadderFile() {
-		JFileChooser fc = new JFileChooser();
-		fc.showOpenDialog(fc);
-		String filename = fc.getSelectedFile().getAbsolutePath() ;
-		URL url = null;
-		try {
-			url = new File(filename).toURI().toURL();
-		} catch (MalformedURLException e2) {
-			// TODO Auto-generated catch block
-			e2.printStackTrace();
-		}
-		try (BufferedReader buffer = new BufferedReader(new InputStreamReader(url.openStream()))) {	
-			String line = null;
-			custom_bp = new ArrayRealVector();
-			while (true) {
-				line = buffer.readLine();
-				if (line == null) break;
+	/**
+	 * Asks for a text file listing one band size (bp) per line. Returns false,
+	 * leaving the ladder unchanged, if the user cancels or no sizes are found.
+	 */
+	private boolean askLadderFile() {
+		final JFileChooser fc = new JFileChooser();
+		if (fc.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return false;
+		final File file = fc.getSelectedFile();
+		RealVector bp = new ArrayRealVector();
+		try (BufferedReader buffer = new BufferedReader(new InputStreamReader(
+			new FileInputStream(file))))
+		{
+			String line;
+			while ((line = buffer.readLine()) != null) {
+				line = line.trim();
+				if (line.isEmpty()) continue;
 				try {
-					custom_bp = custom_bp.append(Integer.parseInt(line.trim()));
+					bp = bp.append(Integer.parseInt(line));
 				}
 				catch (final NumberFormatException e1) {
 					e1.printStackTrace();
 				}
 			}
-			buffer.close();
 		}
-		catch (final Exception e) {
-			e.printStackTrace();
+		catch (final IOException e) {
+			IJ.error("Custom Ladder", "Could not read " + file.getName() + ":\n" +
+				e.getMessage());
+			return false;
 		}
+		if (bp.getDimension() == 0) {
+			IJ.error("Custom Ladder", "No band sizes found in " + file.getName() +
+				".\nThe file should list one whole number of base pairs per line.");
+			return false;
+		}
+
+		custom_bp = bp;
 		ladderStrings = new String[custom_bp.getDimension()];
-		for (int w=0; w <custom_bp.getDimension(); w++) {
-			double bases = custom_bp.getEntry(w);
-			if ( bases < 1000) {
-				ladderStrings[w] = (int) bases  + " bp";
-			} else {
-				ladderStrings[w] = bases/1000  + " kbp";
+		for (int w = 0; w < custom_bp.getDimension(); w++) {
+			final double bases = custom_bp.getEntry(w);
+			if (bases < 1000) {
+				ladderStrings[w] = (int) bases + " bp";
+			}
+			else {
+				ladderStrings[w] = bases / 1000 + " kbp";
 			}
 		}
+		return true;
 	}
 	
 	public RealVector getMolecularWeights() {
@@ -1947,17 +1968,20 @@ class Ladder implements Serializable {
 		return this.type;
 	}
 
-	public void setType(final int type) {
+	/**
+	 * Returns false, leaving the ladder unchanged, if the type is CUSTOM and no
+	 * ladder file could be loaded.
+	 */
+	public boolean setType(final int type) {
+		if (type == CUSTOM && !askLadderFile()) return false;
 		this.type = type;
 
 		if (type == HILO) ladderStrings = hilo;
 		else if (type == BP100) ladderStrings = bp100;
 		else if (type == QUICKLOAD) ladderStrings = quickload;
 		else if (type == TAPESTATION) ladderStrings = tapestation;
-		else if (type == CUSTOM) {
-			askLadderFile();
-		}
 
 		ladderRange = new int[] { 0, ladderStrings.length - 1 };
+		return true;
 	}
 }
