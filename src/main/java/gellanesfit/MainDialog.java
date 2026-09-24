@@ -750,6 +750,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				for (int j = 0; j < ladderBands.length; j++) {
 					if (bands[i].equals(ladderBands[j])) range[i] = j;
 				}
+			// Bands can be picked in either order
+			if (range[0] > range[1]) {
+				final int tmp = range[0];
+				range[0] = range[1];
+				range[1] = tmp;
+			}
 			return range;
 		}
 		return ladder.getRange();
