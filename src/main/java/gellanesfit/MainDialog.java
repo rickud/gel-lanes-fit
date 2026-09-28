@@ -17,6 +17,7 @@ import java.awt.BorderLayout;
 import java.awt.Checkbox;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -219,6 +220,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	private JPanel buttonPanel;
 	private JButton buttonFit;
+	private JButton buttonOpenFolder;
 	private JButton buttonClose;
 
 	private JPanel settingsPanel;
@@ -264,9 +266,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final FileInfo fi = imp.getOriginalFileInfo();
 		final String imageDir = fi != null && fi.directory != null && !fi.directory
 			.isEmpty() ? fi.directory : IJ.getDirectory("imagej");
-		savePath = new File(new File(imageDir, "gel-lanes-fit"), imp
-			.getShortTitle()).getAbsolutePath() + sep;
-		if (!new File(savePath).isDirectory() && !new File(savePath).mkdirs())
+		final String title = imp.getTitle();
+		final String imageName = title.lastIndexOf('.') > 0 ? title.substring(0,
+			title.lastIndexOf('.')) : title;
+		final File dataDir = new File(imageDir, imageName + " - Gel Lanes Fit");
+		moveOldDataFolder(new File(new File(imageDir, "gel-lanes-fit"), imp
+			.getShortTitle()), dataDir);
+		savePath = dataDir.getAbsolutePath() + sep;
+		if (!dataDir.isDirectory() && !dataDir.mkdirs())
 			log.error("Cannot create the data folder " + savePath);
 		log.info("Data folder: " + savePath);
 		frame = new JFrame(string);
@@ -274,6 +281,21 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		ladder = null;
 		setupMainDialog();
 		frame.setLocation((int) SW / 16, (int) SH / 8);
+	}
+
+	/**
+	 * Data used to go to gel-lanes-fit/(short title)/ next to the image;
+	 * moves it to the new folder so the saved state is found again
+	 */
+	private void moveOldDataFolder(final File oldDir, final File newDir) {
+		if (!oldDir.isDirectory() || newDir.exists()) return;
+		if (oldDir.renameTo(newDir)) {
+			log.info("Moved " + oldDir + " to " + newDir);
+			final File parent = oldDir.getParentFile();
+			final String[] left = parent.list();
+			if (left != null && left.length == 0) parent.delete();
+		}
+		else log.error("Could not move " + oldDir + " to " + newDir);
 	}
 
 	private void setupMainDialog() {
@@ -454,6 +476,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonFit = new JButton("Fit");
 
 		buttonPanel.add(buttonFit);
+		buttonOpenFolder = new JButton("Open Data Folder");
+		buttonOpenFolder.setToolTipText(savePath);
+		buttonPanel.add(buttonOpenFolder);
 		buttonClose = new JButton("Close");
 		buttonPanel.add(buttonClose);
 
@@ -672,6 +697,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonEditPeaks.addActionListener(this);
 		buttonResetCustomPeaks.addActionListener(this);
 		buttonFit.addActionListener(this);
+		buttonOpenFolder.addActionListener(this);
 		buttonClose.addActionListener(this);
 
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -1159,8 +1185,24 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		d.addChangeListener(this);
 	}
 
+	/** Shows the folder with the saved state, results and plots */
+	private void openDataFolder() {
+		final File dir = new File(savePath);
+		dir.mkdirs();
+		try {
+			if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(
+				Desktop.Action.OPEN)) throw new IOException("not supported");
+			Desktop.getDesktop().open(dir);
+		}
+		catch (final IOException | RuntimeException e) {
+			new MessageDialog(frame, "Data Folder", "The data is saved in\n" +
+				savePath);
+		}
+	}
+
 	private void displayLog() {
-		final String logOutput = fitter.getSummary();
+		final String logOutput = fitter.getSummary() + "<p>Data folder: " + savePath
+			.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + "</p>";
 		final HTMLDialog logWindow = new HTMLDialog("LOG", logOutput, false);
 
 		if (buttonContinuum.isSelected()) {
@@ -1741,6 +1783,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			}
 			saveState();
 			reDrawROIs(imp, "none");
+		}
+
+		if (e.getSource().equals(buttonOpenFolder)) {
+			openDataFolder();
 		}
 
 		if (e.getSource().equals(buttonClose)) {
