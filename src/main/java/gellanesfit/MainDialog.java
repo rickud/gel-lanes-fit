@@ -17,6 +17,7 @@ import java.awt.BorderLayout;
 import java.awt.Checkbox;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Desktop;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
@@ -219,6 +220,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	private JPanel buttonPanel;
 	private JButton buttonFit;
+	private JButton buttonOpenFolder;
 	private JButton buttonClose;
 
 	private JPanel settingsPanel;
@@ -474,6 +476,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonFit = new JButton("Fit");
 
 		buttonPanel.add(buttonFit);
+		buttonOpenFolder = new JButton("Open Data Folder");
+		buttonOpenFolder.setToolTipText(savePath);
+		buttonPanel.add(buttonOpenFolder);
 		buttonClose = new JButton("Close");
 		buttonPanel.add(buttonClose);
 
@@ -692,6 +697,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonEditPeaks.addActionListener(this);
 		buttonResetCustomPeaks.addActionListener(this);
 		buttonFit.addActionListener(this);
+		buttonOpenFolder.addActionListener(this);
 		buttonClose.addActionListener(this);
 
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
@@ -1179,8 +1185,24 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		d.addChangeListener(this);
 	}
 
+	/** Shows the folder with the saved state, results and plots */
+	private void openDataFolder() {
+		final File dir = new File(savePath);
+		dir.mkdirs();
+		try {
+			if (!Desktop.isDesktopSupported() || !Desktop.getDesktop().isSupported(
+				Desktop.Action.OPEN)) throw new IOException("not supported");
+			Desktop.getDesktop().open(dir);
+		}
+		catch (final IOException | RuntimeException e) {
+			new MessageDialog(frame, "Data Folder", "The data is saved in\n" +
+				savePath);
+		}
+	}
+
 	private void displayLog() {
-		final String logOutput = fitter.getSummary();
+		final String logOutput = fitter.getSummary() + "<p>Data folder: " + savePath
+			.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;") + "</p>";
 		final HTMLDialog logWindow = new HTMLDialog("LOG", logOutput, false);
 
 		if (buttonContinuum.isSelected()) {
@@ -1761,6 +1783,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			}
 			saveState();
 			reDrawROIs(imp, "none");
+		}
+
+		if (e.getSource().equals(buttonOpenFolder)) {
+			openDataFolder();
 		}
 
 		if (e.getSource().equals(buttonClose)) {
