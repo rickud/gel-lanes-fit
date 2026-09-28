@@ -79,6 +79,8 @@ import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
 import javax.swing.event.ChangeListener;
 
+import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
+import org.apache.commons.math3.analysis.polynomials.PolynomialSplineFunction;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 import org.apache.commons.math3.util.FastMath;
@@ -949,6 +951,32 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/**
+	 * Custom peaks keep their position on the gel when a lane changes: those
+	 * now outside the lane are removed, the others take the new profile height
+	 */
+	private List<Peak> snapCustomPeaks(final int ln) {
+		DataSeries profile = null;
+		for (final DataSeries d : plotter.getProfiles()) {
+			if (d.getLane() == ln) profile = d;
+		}
+		if (profile == null) return fitter.getCustomPeaks(ln);
+		final PolynomialSplineFunction f = new LinearInterpolator().interpolate(
+			profile.getX().toArray(), profile.getY().toArray());
+
+		final List<Peak> peaks = fitter.getCustomPeaks(ln);
+		final Iterator<Peak> it = peaks.iterator();
+		while (it.hasNext()) {
+			final Peak p = it.next();
+			if (f.isValidPoint(p.getMean())) p.setNorm(f.value(p.getMean()));
+			else {
+				fitter.removeCustomPeak(p);
+				it.remove();
+			}
+		}
+		return peaks;
+	}
+
 	private void redoProfilePlots() {
 		fitDone = false;
 		chkBoxBands.setSelected(false);
@@ -966,6 +994,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 					final RealVector empty = new ArrayRealVector();
 					final DataSeries d = new DataSeries("Custom Points", ln,
 						DataSeries.CUSTOMPEAKS, empty, empty, Plotter.vMarkerEditPeakColor);
+					for (final Peak p : snapCustomPeaks(ln)) {
+						d.addOrUpdate(p.getMean(), p.getNorm());
+					}
 					d.addChangeListener(this);
 					plotter.addDataSeries(d);
 					plotter.updatePlot(r);
