@@ -21,11 +21,14 @@ package gellanesfit;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.util.Enumeration;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
 import java.util.prefs.Preferences;
+
+import javax.swing.SwingUtilities;
 
 import org.scijava.Context;
 import org.scijava.app.StatusService;
@@ -57,11 +60,7 @@ public class GelLanesFit implements Command {
 	@Parameter
 	private static Context context;
 
-	// TODO: private Thread mainWindowThread; // thread for the main window
-	private Thread plotThread; // thread for plotting
-
 	private boolean setup = true;
-	// TODO: private boolean doPlot; // tells the background thread to update
 
 	private ImagePlus imp;
 	private String version;
@@ -93,19 +92,23 @@ public class GelLanesFit implements Command {
 		iwin.setLocation(0, (int) SH / 2);
 		iwin.setSize((int) SW / 2, (int) SH / 2);
 		iwin.getCanvas().requestFocus();
-
-		// thread for plotting in the background
-		plotThread = new Thread(this, "Dynamic Plots");
-		plotThread.setPriority(Math.max(plotThread.getPriority() - 3,
-			Thread.MIN_PRIORITY));
-		plotThread.start();
 	}
 
 	@Override
 	public void run() {
-		if (setup) {
-			init();
-			setup = false;
+		if (!setup) return;
+		setup = false;
+		// Swing is not thread safe: build and show the windows on the event
+		// thread, not on the thread SciJava runs the command on
+		try {
+			if (SwingUtilities.isEventDispatchThread()) init();
+			else SwingUtilities.invokeAndWait(this::init);
+		}
+		catch (final InterruptedException e) {
+			Thread.currentThread().interrupt();
+		}
+		catch (final InvocationTargetException e) {
+			log.error("Gel Lanes Fit could not start", e.getCause());
 		}
 	}
 
