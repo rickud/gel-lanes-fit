@@ -27,20 +27,26 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import java.awt.GridLayout;
 import java.awt.Paint;
+import java.awt.RenderingHints;
 import java.awt.Shape;
 import java.awt.Stroke;
 import java.awt.event.WindowEvent;
 import java.awt.geom.Ellipse2D;
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
+import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -66,6 +72,9 @@ import org.jfree.chart.JFreeChart;
 import org.jfree.chart.LegendItem;
 import org.jfree.chart.LegendItemCollection;
 import org.jfree.chart.annotations.XYTextAnnotation;
+import org.jfree.chart.axis.NumberAxis;
+import org.jfree.chart.axis.ValueAxis;
+import org.jfree.chart.event.ChartProgressEvent;
 import org.jfree.chart.labels.StandardXYToolTipGenerator;
 import org.jfree.chart.labels.XYToolTipGenerator;
 import org.jfree.chart.plot.PlotOrientation;
@@ -73,10 +82,13 @@ import org.jfree.chart.plot.SeriesRenderingOrder;
 import org.jfree.chart.plot.ValueMarker;
 import org.jfree.chart.plot.XYPlot;
 import org.jfree.chart.renderer.xy.XYLineAndShapeRenderer;
+import org.jfree.chart.text.TextUtils;
 import org.jfree.chart.ui.Layer;
 import org.jfree.chart.ui.RectangleEdge;
 import org.jfree.chart.ui.TextAnchor;
 import org.jfree.data.Range;
+import org.jfree.data.general.DatasetUtils;
+import org.jfree.data.xy.XYDataset;
 import org.jfree.data.xy.XYSeries;
 import org.jfree.data.xy.XYSeriesCollection;
 import org.jfree.graphics2d.svg.SVGGraphics2D;
@@ -124,6 +136,15 @@ class Plotter extends JFrame implements ChartMouseListener {
 	private final List<ChartPanel> chartPanels;
 	private final List<DataSeries> plotsData;
 	private final List<Integer> plotNumbers;
+	// Lanes whose axis ranges are set; kept on redraws until the profiles change
+	private final Set<Integer> rangeSet = new HashSet<>();
+	// Range each chart was fitted to, to tell a reset view from a user zoom
+	private final Map<JFreeChart, Range> fittedRanges = new HashMap<>();
+	// Plot height each fit used, and charts whose data changed since their fit
+	private final Map<JFreeChart, Double> fittedHeights = new HashMap<>();
+	private final Set<JFreeChart> labelFitPending = new HashSet<>();
+	private static final Font labelFont = new Font("Sans Serif", Font.PLAIN, 14);
+	private static final int labelGap = 4; // px between a label and the curves
 	private List<VerticalMarker> verticalMarkers;
 
 	private List<JPanel> chartTabs;
@@ -293,6 +314,97 @@ class Plotter extends JFrame implements ChartMouseListener {
 			updatePlot(i);
 	}
 
+	/**
+	 * While the view is reset, raises the top of the range just enough for the
+	 * ladder labels, drawn down from the top, to clear the curves under them
+	 */
+	private void fitRangeToLabels(final ChartPanel p) {
+		final JFreeChart c = p.getChart();
+		final XYPlot pl = c.getXYPlot();
+		final ValueAxis ra = pl.getRangeAxis();
+		final Range fitted = fittedRanges.get(c);
+		final Rectangle2D area = p.getChartRenderingInfo().getPlotInfo()
+			.getDataArea();
+		final XYDataset ds = pl.getDataset();
+		// Fit once per change (new data, reset view, new plot height), never on
+		// every paint: each fit repaints, and a fit per paint never settles
+		final boolean atReset = ra.isAutoRange() || fitted == null || ra.getRange()
+			.equals(fitted);
+		final Double usedHeight = fittedHeights.get(c);
+		final boolean changed = labelFitPending.contains(c) || ra.isAutoRange() ||
+			usedHeight == null || usedHeight != area.getHeight();
+		if (atReset && changed && ds != null && area.getHeight() > 0) {
+			labelFitPending.remove(c);
+			fittedHeights.put(c, area.getHeight());
+			final Range yr = DatasetUtils.findRangeBounds(ds, false);
+			if (yr != null) {
+				final double h = area.getHeight();
+				final double lo = yr.getLowerBound();
+				double hi = yr.getUpperBound();
+				final ValueAxis da = pl.getDomainAxis();
+				final Graphics2D g2 = labelGraphics();
+				for (final Object a : pl.getAnnotations()) {
+					if (!(a instanceof XYTextAnnotation)) continue;
+					final XYTextAnnotation t = (XYTextAnnotation) a;
+					// Box of the label anchored at the top of the plot, in px
+					g2.setFont(t.getFont());
+					final Shape box = TextUtils.calculateRotatedStringBounds(t.getText(),
+						g2, (float) da.valueToJava2D(t.getX(), area, pl.getDomainAxisEdge()),
+						(float) area.getMinY(), t.getTextAnchor(), t.getRotationAngle(), t
+							.getRotationAnchor());
+					if (box == null) continue; // Empty label, e.g. an unnamed band
+					final Rectangle2D b = box.getBounds2D();
+					final double depth = b.getMaxY() - area.getMinY() + labelGap;
+					if (depth >= h) continue; // Cannot fit anyway
+					// Curves under the label, one data point wider on each side
+					final double x0 = da.java2DToValue(b.getMinX(), area, pl
+						.getDomainAxisEdge());
+					final double x1 = da.java2DToValue(b.getMaxX(), area, pl
+						.getDomainAxisEdge());
+					final double top = maxInStrip(ds, FastMath.min(x0, x1) - 1, FastMath
+						.max(x0, x1) + 1);
+					// The label ends depth px below hi: hi - depth * (hi - lo) / h >= top
+					if (!Double.isNaN(top)) hi = FastMath.max(hi, (top * h - lo *
+						depth) / (h - depth));
+				}
+				g2.dispose();
+				final Range target = new Range(lo, hi);
+				fittedRanges.put(c, target);
+				if (ra.isAutoRange() || !target.equals(ra.getRange())) ra.setRange(
+					target);
+			}
+		}
+		// Keep the labels at the top of the view
+		final double upper = ra.getUpperBound();
+		for (final Object a : pl.getAnnotations()) {
+			if (a instanceof XYTextAnnotation && ((XYTextAnnotation) a)
+				.getY() != upper) ((XYTextAnnotation) a).setY(upper);
+		}
+	}
+
+	private static Graphics2D labelGraphics() {
+		final Graphics2D g2 = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB)
+			.createGraphics();
+		g2.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS,
+			RenderingHints.VALUE_FRACTIONALMETRICS_ON);
+		return g2;
+	}
+
+	/** Largest y of any series in [x0, x1], NaN if there is none */
+	private static double maxInStrip(final XYDataset ds, final double x0,
+		final double x1)
+	{
+		double max = Double.NaN;
+		for (int s = 0; s < ds.getSeriesCount(); s++) {
+			for (int i = 0; i < ds.getItemCount(s); i++) {
+				final double x = ds.getXValue(s, i);
+				final double y = ds.getYValue(s, i);
+				if (x >= x0 && x <= x1 && !Double.isNaN(y) && !(y <= max)) max = y;
+			}
+		}
+		return max;
+	}
+
 	void updateProfile(final Roi roi) {
 		final DataSeries profile = getLaneProfile(roi);
 		// Assume plotsData, chartsMainPanel was reset
@@ -332,17 +444,30 @@ class Plotter extends JFrame implements ChartMouseListener {
 			thePlot = newPlot;
 			final ChartPanel chartPanel = new ChartPanel(newChart);
 			chartPanel.addChartMouseListener(this);
+			newChart.addProgressListener(e -> {
+				if (e.getType() != ChartProgressEvent.DRAWING_FINISHED) return;
+				try {
+					fitRangeToLabels(chartPanel);
+				}
+				catch (final RuntimeException ex) {
+					// Never let the label fit stop the chart from being painted
+					ex.printStackTrace();
+				}
+			});
 			chartPanels.add(chartPanel);
 		}
 
-		thePlot.getDomainAxis().setLowerMargin(0);
-		thePlot.getDomainAxis().setUpperMargin(0);
-		thePlot.getRangeAxis().setLowerMargin(0);
-		thePlot.getRangeAxis().setUpperMargin(0);
-		final double min = 0.95 * profile.getMinY();
-		final double max = 1.2 * profile.getMaxY();
-		thePlot.getRangeAxis().setLowerBound(min);
-		thePlot.getRangeAxis().setUpperBound(max);
+		// Auto range (also used by the zoom reset) spans exactly the profile's
+		// domain and the smallest to largest value of the curves displayed
+		for (final ValueAxis a : new ValueAxis[] { thePlot.getDomainAxis(), thePlot
+			.getRangeAxis() })
+		{
+			a.setLowerMargin(0);
+			a.setUpperMargin(0);
+			if (a instanceof NumberAxis) ((NumberAxis) a).setAutoRangeIncludesZero(
+				false);
+			a.setAutoRange(true);
+		}
 	}
 
 	public void updatePlot(final Roi r) {
@@ -459,12 +584,19 @@ class Plotter extends JFrame implements ChartMouseListener {
 						}
 					}
 				}
+				final Range domain = pl.getDomainAxis().getRange();
+				final Range range = pl.getRangeAxis().getRange();
 				c.getXYPlot().setDataset(dataset);
-				final Range rng = dataset.getRangeBounds(true);
-				final double below = rng.getLength() * 0.05;
-				final double above = rng.getLength() * 0.3;
-				c.getXYPlot().getRangeAxis().setLowerBound(rng.getLowerBound() - below);
-				c.getXYPlot().getRangeAxis().setUpperBound(rng.getUpperBound() + above);
+				labelFitPending.add(c); // The curves under the labels may have changed
+				if (rangeSet.contains(ln)) { // Keep the current view
+					pl.getDomainAxis().setRange(domain);
+					pl.getRangeAxis().setRange(range);
+				}
+				else {
+					pl.getDomainAxis().setAutoRange(true);
+					pl.getRangeAxis().setAutoRange(true);
+					rangeSet.add(ln);
+				}
 				pl.setFixedLegendItems(legendItems);
 				c.getLegend().setPosition(RectangleEdge.RIGHT);
 
@@ -481,7 +613,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 						else if (m.getType() == VerticalMarker.BMARK) {
 							label.setPaint(bMarkerColor);
 						}
-						label.setFont(new Font("Sans Serif", Font.PLAIN, 14));
+						label.setFont(labelFont);
 						label.setRotationAnchor(TextAnchor.BOTTOM_RIGHT);
 						label.setTextAnchor(TextAnchor.TOP_RIGHT);
 						label.setRotationAngle(-Math.PI / 2);
@@ -547,6 +679,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 	public void resetData() {
 		plotsData.clear();
 		plotNumbers.clear();
+		rangeSet.clear();
+		fittedRanges.clear();
+		fittedHeights.clear();
+		labelFitPending.clear();
 		chartPanels.clear();
 		removeVerticalMarkers();
 	}
@@ -625,6 +761,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 								final double[] y = d.getY().toArray();
 								final PolynomialSplineFunction f = new LinearInterpolator()
 									.interpolate(x, y);
+								// Clicks in the axis margin fall outside the profile
+								if (!f.isValidPoint(xi)) continue;
 								final double yi = f.value(xi);
 								final DataSeries cp = getPlotsCustomPeaks(ln);
 								boolean found = false;
