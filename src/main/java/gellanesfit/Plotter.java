@@ -625,6 +625,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 								final double[] y = d.getY().toArray();
 								final PolynomialSplineFunction f = new LinearInterpolator()
 									.interpolate(x, y);
+								// Clicks in the axis margin fall outside the profile
+								if (!f.isValidPoint(xi)) continue;
 								final double yi = f.value(xi);
 								final DataSeries cp = getPlotsCustomPeaks(ln);
 								boolean found = false;
