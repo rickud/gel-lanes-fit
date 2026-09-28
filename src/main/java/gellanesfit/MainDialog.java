@@ -142,6 +142,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private static final String LVOFF = "lvoff";
 	private static final String AUTO = "auto";
 	private static final String OLDIMPTITLE = "oldImpTitle";
+	private static final String SKIPFITWARNING = "skipFitWarning";
 
 	private final double SW = IJ.getScreenSize().getWidth();
 	private final double SH = IJ.getScreenSize().getHeight();
@@ -655,6 +656,24 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		return false;
 	}
 
+	/** Keeps the Edit Custom Peaks button and the plots' mode in step */
+	private void setEditPeaks(final boolean on) {
+		buttonEditPeaks.setSelected(on);
+		plotter.setPlotMode(on ? Plotter.editPeaksMode : Plotter.regMode);
+	}
+
+	/** Warns that the fit will be lost, unless the user opted out */
+	private boolean askFitReset() {
+		if (prefs.getBoolean(SKIPFITWARNING, false)) return true;
+		final GenericDialog gd = new GenericDialog("WARNING!");
+		gd.addMessage(warningFit);
+		gd.addCheckbox("Don't show this again", false);
+		gd.showDialog();
+		if (!gd.wasOKed()) return false;
+		if (gd.getNextBoolean()) prefs.putBoolean(SKIPFITWARNING, true);
+		return true;
+	}
+
 	private Peak askPeak(final int lane, final double y, final double a) {
 		String title, message;
 		final String fwhmString = "FWHM = \u03C3 * (2 * \u221A (2 * ln(2))";
@@ -939,10 +958,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitDone = false;
 		chkBoxBands.setSelected(false);
 		chkBoxBands.setEnabled(false);
-		buttonEditPeaks.setEnabled(false);
-		buttonResetCustomPeaks.setEnabled(false);
 		plotter.resetData();
-		plotter.setPlotMode(Plotter.regMode);
 
 		try {
 			// rois.parallelStream().forEach((r) -> {
@@ -1254,7 +1270,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			sliderH, sliderSp, sliderHOff, sliderVOff, textNLanes));
 
 		if (fitDisruptors.contains(o)) {
-			if (fitDone && !askUser(warningFit)) {
+			if (fitDone && !askFitReset()) {
 				textNLanes.setValue(nLanes);
 				return;
 			}
@@ -1403,7 +1419,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// Buttons
 		// ----------------------------------------------------------------
 		if (e.getSource().equals(buttonFit)) {
-			if (fitDone && !askUser(warningFit)) return;
+			if (fitDone && !askFitReset()) return;
 
 			if (ladderLaneInt == noLadderLane) {
 				askUser("Reference ladder not selected");
@@ -1417,7 +1433,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 			// Remove everything in the plots, but the profile
 			plotter.setSelected(MainDialog.noLaneSelected);
-			plotter.setPlotMode(Plotter.regMode);
 			plotter.removeFit();
 			plotter.removeVerticalMarkers();
 
@@ -1431,7 +1446,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			chkBoxBands.setSelected(false);
 			buttonEditPeaks.setEnabled(true);
 			buttonResetCustomPeaks.setEnabled(true);
-			if (!buttonEditPeaks.isSelected()) buttonEditPeaks.doClick();
 			buttonResetCustomPeaks.setSelected(false);
 
 			// Start new fit, Ladder first
@@ -1554,9 +1568,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 
 		if (e.getSource().equals(buttonEditPeaks)) {
-			if (buttonEditPeaks.isSelected()) plotter.setPlotMode(
-				Plotter.editPeaksMode);
-			else plotter.setPlotMode(Plotter.regMode);
+			setEditPeaks(buttonEditPeaks.isSelected());
+			for (final int i : getAllLaneNumbers())
+				plotter.updatePlot(i);
 		}
 
 		if (e.getSource().equals(buttonResetCustomPeaks)) {
@@ -1720,7 +1734,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				}
 
 				if (askUser("Delete " + roiSelected + "?")) {
-					if (fitDone && !askUser(warningFit)) return;
+					if (fitDone && !askFitReset()) return;
 					final Iterator<Roi> roiIter = rois.iterator();
 					while (roiIter.hasNext()) {
 						final Roi roiRemove = roiIter.next();
@@ -1792,7 +1806,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	@Override
 	public void mouseWheelMoved(final MouseWheelEvent e) {
 		if (e.getSource() == imp.getCanvas() && imp.getImageStackSize() > 1) {
-			if (fitDone && !askUser(warningFit)) return;
+			if (fitDone && !askFitReset()) return;
 			redoProfilePlots();
 		}
 	}
