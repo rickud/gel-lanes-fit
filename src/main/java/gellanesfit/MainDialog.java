@@ -143,6 +143,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private static final String LVOFF = "lvoff";
 	private static final String AUTO = "auto";
 	private static final String OLDIMPTITLE = "oldImpTitle";
+	private static final String SKIPFITWARNING = "skipFitWarning";
 
 	private final double SW = IJ.getScreenSize().getWidth();
 	private final double SH = IJ.getScreenSize().getHeight();
@@ -654,6 +655,18 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		gd.showDialog();
 		if (gd.wasOKed()) return true;
 		return false;
+	}
+
+	/** Warns that the fit will be lost, unless the user opted out */
+	private boolean askFitReset() {
+		if (prefs.getBoolean(SKIPFITWARNING, false)) return true;
+		final GenericDialog gd = new GenericDialog("WARNING!");
+		gd.addMessage(warningFit);
+		gd.addCheckbox("Don't show this again", false);
+		gd.showDialog();
+		if (!gd.wasOKed()) return false;
+		if (gd.getNextBoolean()) prefs.putBoolean(SKIPFITWARNING, true);
+		return true;
 	}
 
 	private Peak askPeak(final int lane, final double y, final double a) {
@@ -1249,7 +1262,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			sliderH, sliderSp, sliderHOff, sliderVOff, textNLanes));
 
 		if (fitDisruptors.contains(o)) {
-			if (fitDone && !askUser(warningFit)) {
+			if (fitDone && !askFitReset()) {
 				textNLanes.setValue(nLanes);
 				return;
 			}
@@ -1398,7 +1411,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// Buttons
 		// ----------------------------------------------------------------
 		if (e.getSource().equals(buttonFit)) {
-			if (fitDone && !askUser(warningFit)) return;
+			if (fitDone && !askFitReset()) return;
 
 			if (ladderLaneInt == noLadderLane) {
 				askUser("Reference ladder not selected");
@@ -1703,7 +1716,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				}
 
 				if (askUser("Delete " + roiSelected + "?")) {
-					if (fitDone && !askUser(warningFit)) return;
+					if (fitDone && !askFitReset()) return;
 					final Iterator<Roi> roiIter = rois.iterator();
 					while (roiIter.hasNext()) {
 						final Roi roiRemove = roiIter.next();
@@ -1775,7 +1788,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	@Override
 	public void mouseWheelMoved(final MouseWheelEvent e) {
 		if (e.getSource() == imp.getCanvas() && imp.getImageStackSize() > 1) {
-			if (fitDone && !askUser(warningFit)) return;
+			if (fitDone && !askFitReset()) return;
 			redoProfilePlots();
 		}
 	}
