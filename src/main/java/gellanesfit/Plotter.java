@@ -68,6 +68,8 @@ import org.jfree.chart.JFreeChart;
 import org.jfree.chart.LegendItem;
 import org.jfree.chart.LegendItemCollection;
 import org.jfree.chart.annotations.XYTextAnnotation;
+import org.jfree.chart.axis.NumberAxis;
+import org.jfree.chart.axis.ValueAxis;
 import org.jfree.chart.labels.StandardXYToolTipGenerator;
 import org.jfree.chart.labels.XYToolTipGenerator;
 import org.jfree.chart.plot.PlotOrientation;
@@ -339,14 +341,17 @@ class Plotter extends JFrame implements ChartMouseListener {
 			chartPanels.add(chartPanel);
 		}
 
-		thePlot.getDomainAxis().setLowerMargin(0);
-		thePlot.getDomainAxis().setUpperMargin(0);
-		thePlot.getRangeAxis().setLowerMargin(0);
-		thePlot.getRangeAxis().setUpperMargin(0);
-		final double min = 0.95 * profile.getMinY();
-		final double max = 1.2 * profile.getMaxY();
-		thePlot.getRangeAxis().setLowerBound(min);
-		thePlot.getRangeAxis().setUpperBound(max);
+		// Auto range (also used by the zoom reset) spans exactly the profile's
+		// domain and the smallest to largest value of the curves displayed
+		for (final ValueAxis a : new ValueAxis[] { thePlot.getDomainAxis(), thePlot
+			.getRangeAxis() })
+		{
+			a.setLowerMargin(0);
+			a.setUpperMargin(0);
+			if (a instanceof NumberAxis) ((NumberAxis) a).setAutoRangeIncludesZero(
+				false);
+			a.setAutoRange(true);
+		}
 	}
 
 	public void updatePlot(final Roi r) {
@@ -471,11 +476,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 					pl.getRangeAxis().setRange(range);
 				}
 				else {
-					final Range rng = dataset.getRangeBounds(true);
-					final double below = rng.getLength() * 0.05;
-					final double above = rng.getLength() * 0.3;
-					c.getXYPlot().getRangeAxis().setLowerBound(rng.getLowerBound() - below);
-					c.getXYPlot().getRangeAxis().setUpperBound(rng.getUpperBound() + above);
+					pl.getDomainAxis().setAutoRange(true);
+					pl.getRangeAxis().setAutoRange(true);
 					rangeSet.add(ln);
 				}
 				pl.setFixedLegendItems(legendItems);
