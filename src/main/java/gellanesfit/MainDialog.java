@@ -74,6 +74,7 @@ import javax.swing.JTabbedPane;
 import javax.swing.JToggleButton;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
@@ -185,6 +186,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	private final ImagePlus imp;
 	private ArrayList<Roi> rois;
+	private List<Peak> savedCustomPeaks = new ArrayList<>();
+	private List<Rectangle> savedRects = new ArrayList<>(); // Manual ROIs
+	private FitState savedState; // Settings of the last session, if any
+	private boolean restoring = true; // Do not save while restoring the state
 
 	private int iw, ih, lw, lh, lsp, lhoff, lvoff, dlo, dhi, every;
 	private int nLanes;
@@ -314,6 +319,27 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			prefs.putInt(DLO, dlo);
 			prefs.putInt(DHI, dhi);
 			prefs.putInt(EVERY, every);
+		}
+
+		// The saved state of this image overrides the preferences
+		loadState();
+		if (savedState != null) {
+			auto = savedState.auto;
+			nLanes = savedState.nLanes;
+			lw = savedState.lw;
+			lh = savedState.lh;
+			lsp = savedState.lsp;
+			lhoff = savedState.lhoff;
+			lvoff = savedState.lvoff;
+			ladderLaneInt = savedState.ladderLane;
+			degBG = savedState.degBG;
+			polyDerivative = savedState.polyDerivative;
+			tolPK = savedState.tolPK;
+			areaDrift = savedState.areaDrift;
+			sdDrift = savedState.sdDrift;
+			dlo = savedState.dlo;
+			dhi = savedState.dhi;
+			every = savedState.every;
 		}
 
 		ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
@@ -568,7 +594,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
 
 		// Initial status of all dialog components
-		final boolean stateLoaded = loadState();
+		final boolean stateLoaded = !savedRects.isEmpty() || ladder != null;
 		int ladderType = 0;
 		if (stateLoaded && ladder != null) ladderType = ladder.getType();
 		if (auto) {
@@ -586,15 +612,19 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 		buttonAuto.setSelected(auto);
 		buttonManual.setSelected(!auto);
-		buttonBands.setSelected(true);
+		final boolean continuum = savedState != null && savedState.continuum;
+		buttonBands.setSelected(!continuum);
+		buttonContinuum.setSelected(continuum);
+		fitter.setFitMode(continuum ? Fitter.continuumMode : Fitter.bandMode);
 		chkBoxBands.setSelected(false);
 		chkBoxBands.setEnabled(false);
 		cmbBoxLadderType.setSelectedIndex(ladderType);
 		cmbBoxLadderType.setEnabled(ladder != null);
 		updateLadderLane();
 		updateLadderType();
-		cmbBoxDist.setSelectedIndex(0);
-		cmbBoxDist.setEnabled(false);
+		cmbBoxDist.setSelectedIndex(savedState == null ? 0 : savedState.dist);
+		cmbBoxDist.setEnabled(continuum);
+		loadDistribution(false);
 
 		buttonEditPeaks.setEnabled(false);
 		buttonResetCustomPeaks.setEnabled(false);
@@ -649,6 +679,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		reDrawROIs(imp, "none");
 		imp.killRoi();
 		redoProfilePlots();
+		restoring = false;
+		if (savedState != null && savedState.fitDone) {
+			log.info("Repeating the last fit ...");
+			SwingUtilities.invokeLater(this::runFit);
+		}
 	}
 
 	private boolean askUser(final String question) {
@@ -1123,33 +1158,72 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	private FitState currentState() {
+		final FitState st = new FitState();
+		st.auto = auto;
+		st.nLanes = nLanes;
+		st.lw = lw;
+		st.lh = lh;
+		st.lsp = lsp;
+		st.lhoff = lhoff;
+		st.lvoff = lvoff;
+		st.ladderLane = ladderLaneInt;
+		st.degBG = degBG;
+		st.polyDerivative = polyDerivative;
+		st.tolPK = tolPK;
+		st.areaDrift = areaDrift;
+		st.sdDrift = sdDrift;
+		st.continuum = buttonContinuum.isSelected();
+		st.dist = cmbBoxDist.getSelectedIndex();
+		st.dlo = dlo;
+		st.dhi = dhi;
+		st.every = every;
+		st.customPeaks = new ArrayList<>(fitter.getAllCustomPeaks());
+		st.fitDone = fitDone;
+		return st;
+	}
+
 	private boolean loadState() {
 		rois = new ArrayList<>();
+		savedRects = new ArrayList<>();
+		savedCustomPeaks = new ArrayList<>();
+		savedState = null;
 		final String file = "saved-state.bak";
 		final String fullPath = savePath + file;
 		log.info("Loading " + fullPath + " ...");
+		int i = 1;
 		try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(
 			fullPath)))
 		{
 			try {
-				int i = 1;
 				while (true) {
 					final Object o = ois.readObject();
-					if (o instanceof Rectangle && !auto) {
-						final Roi roi = new Roi((Rectangle) o);
-						roi.setName("Lane " + i++);
-						rois.add(roi);
+					if (o instanceof Rectangle) {
+						savedRects.add((Rectangle) o);
 					}
 					else if (o instanceof Ladder) {
 						ladder = (Ladder) o;
 						fitter.setLadder(ladder.getMolecularWeights());
-						cmbBoxLadderType.setEnabled(true);
+						if (cmbBoxLadderType != null) cmbBoxLadderType.setEnabled(true);
+					}
+					else if (o instanceof FitState) {
+						savedState = (FitState) o;
+						savedCustomPeaks = savedState.customPeaks;
 					}
 				}
 			}
 			catch (final Exception e) {
 				/* Exit */ }
 			ois.close();
+			// Old files have no FitState; the mode comes from the preferences
+			final boolean manual = savedState == null ? !auto : !savedState.auto;
+			if (manual) {
+				for (final Rectangle r : savedRects) {
+					final Roi roi = new Roi(r);
+					roi.setName("Lane " + i++);
+					rois.add(roi);
+				}
+			}
 			return true;
 		}
 		catch (final IOException e) {
@@ -1159,6 +1233,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private boolean saveState() {
+		if (restoring) return true;
 		final String file = "saved-state.bak";
 		final String fullPath = savePath + file;
 		new File(savePath).mkdirs();
@@ -1166,12 +1241,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(
 			fullPath)))
 		{
+			// Keep the manual ROIs while in AUTO mode
 			if (!auto) {
-				for (final Roi r : rois) {
-					oos.writeObject(r.getBounds());
-					// System.out.println(r.getClass());
-				}
+				savedRects = new ArrayList<>();
+				for (final Roi r : rois)
+					savedRects.add(r.getBounds());
 			}
+			for (final Rectangle r : savedRects)
+				oos.writeObject(r);
+			oos.writeObject(currentState());
 			if (ladder != null) {
 				// System.out.println(ladder.getClass());
 				oos.writeObject(ladder);
@@ -1229,6 +1307,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private void cleanupAndClose() {
+		saveState();
 		// Remove Listeners on gel image and close plugin-associated windows in
 		// preparation for exit
 		if (imp != null) {
@@ -1437,7 +1516,111 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				log.error("Wrong custom peaks count: " + d.getItemCount() + ", " +
 					peakNumber);
 			}
+			saveState();
 		}
+	}
+
+	/** Fits the ladder lane, then the other lanes with the current settings */
+	private void runFit() {
+		if (ladderLaneInt == noLadderLane) {
+			askUser("Reference ladder not selected");
+			return;
+		}
+
+		if (cmbBoxLadderType.getSelectedItem().equals("Select Ladder Type")) {
+			askUser("Ladder type not selected");
+			return;
+		}
+
+		// Remove everything in the plots, but the profile
+		plotter.setSelected(MainDialog.noLaneSelected);
+		plotter.removeFit();
+		plotter.removeVerticalMarkers();
+
+		// Reset fit
+		for (final int l : getAllLaneNumbers())
+			fitter.resetFit(l);
+		fitter.setInputData(plotter.getProfiles());
+		fitDone = false;
+
+		chkBoxBands.setEnabled(true);
+		chkBoxBands.setSelected(false);
+		buttonEditPeaks.setEnabled(true);
+		buttonResetCustomPeaks.setEnabled(true);
+		buttonResetCustomPeaks.setSelected(false);
+
+		// Start new fit, Ladder first
+		List<DataSeries> fitted = new ArrayList<>();
+		fitter.setFitMode(Fitter.bandMode);
+		fitted = fitter.doFit(ladderLaneInt);
+		fitter.updateResultsTable(savePath);
+
+		// Update Reference plot with peaks and vertical markers
+		plotter.addDataSeries(fitted);
+		plotter.addVerticalMarkers(fitter.getFittedPeaks(ladderLaneInt));
+		for (final int i : getAllLaneNumbers()) {
+			plotter.updatePlot(i);
+		}
+		final List<Peak> peaks = fitter.getFittedPeaks(ladderLaneInt);
+		final int l1 = peaks.size();
+		final int l2 = ladder.getRange()[1] - ladder.getRange()[0] + 1;
+
+		// If mismatched, return
+		if (l1 != l2) {
+			String message =
+				"The number of peaks detected does not match the ladder range";
+			message = message + "\n Peaks detected: " + l1;
+			message = message + "\n Bands in range: " + l2;
+			new MessageDialog(frame, "WARNING", message);
+			plotter.savePlots(savePath);
+			new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
+			return;
+		}
+
+		// If ladder peaks correct, rename vertical markers
+		for (final Peak p : peaks) { // Rename ladder peaks with band names
+			p.setName(ladder.getStrings()[ladder.getRange()[0] + peaks.indexOf(p)]);
+		}
+		plotter.addVerticalMarkers(peaks);
+
+		// Set ladder in Fitter
+		fitter.setLadder(ladder.getMolecularWeights());
+		// Fit the rest based on selected criterion
+		if (buttonBands.isSelected()) fitter.setFitMode(Fitter.bandMode);
+		else if (buttonContinuum.isSelected()) {
+			fitter.setFitMode(Fitter.continuumMode);
+			if (cmbBoxDist.getSelectedItem().equals(
+				"Select Fragment Distribution"))
+			{
+				new MessageDialog(frame, "WARNING!",
+					"Fragment distribution not selected");
+				return;
+			}
+		}
+
+		final List<Integer> otherLanes = new ArrayList<>();
+		for (final int i : getAllLaneNumbers()) {
+			if (i != ladderLaneInt) otherLanes.add(i);
+		}
+		fitted.addAll(fitter.doFit(otherLanes));
+		fitter.updateResultsTable(savePath);
+		fitDone = true;
+
+		plotter.removeFit();
+		plotter.addDataSeries(fitted);
+		for (final int i : getAllLaneNumbers()) {
+			plotter.updatePlot(i);
+		}
+		reDrawROIs(imp, "none"); // adds the bands to the ROIs
+
+		plotter.savePlots(savePath);
+		if (!plotter.isVisible()){
+			plotter.pack();
+			plotter.setVisible(true);
+		}
+		displayLog();
+		new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
+		saveState();
 	}
 
 	@Override
@@ -1446,105 +1629,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// ----------------------------------------------------------------
 		if (e.getSource().equals(buttonFit)) {
 			if (fitDone && !askFitReset()) return;
-
-			if (ladderLaneInt == noLadderLane) {
-				askUser("Reference ladder not selected");
-				return;
-			}
-
-			if (cmbBoxLadderType.getSelectedItem().equals("Select Ladder Type")) {
-				askUser("Ladder type not selected");
-				return;
-			}
-
-			// Remove everything in the plots, but the profile
-			plotter.setSelected(MainDialog.noLaneSelected);
-			plotter.removeFit();
-			plotter.removeVerticalMarkers();
-
-			// Reset fit
-			for (final int l : getAllLaneNumbers())
-				fitter.resetFit(l);
-			fitter.setInputData(plotter.getProfiles());
-			fitDone = false;
-
-			chkBoxBands.setEnabled(true);
-			chkBoxBands.setSelected(false);
-			buttonEditPeaks.setEnabled(true);
-			buttonResetCustomPeaks.setEnabled(true);
-			buttonResetCustomPeaks.setSelected(false);
-
-			// Start new fit, Ladder first
-			List<DataSeries> fitted = new ArrayList<>();
-			fitter.setFitMode(Fitter.bandMode);
-			fitted = fitter.doFit(ladderLaneInt);
-			fitter.updateResultsTable(savePath);
-
-			// Update Reference plot with peaks and vertical markers
-			plotter.addDataSeries(fitted);
-			plotter.addVerticalMarkers(fitter.getFittedPeaks(ladderLaneInt));
-			for (final int i : getAllLaneNumbers()) {
-				plotter.updatePlot(i);
-			}
-			final List<Peak> peaks = fitter.getFittedPeaks(ladderLaneInt);
-			final int l1 = peaks.size();
-			final int l2 = ladder.getRange()[1] - ladder.getRange()[0] + 1;
-
-			// If mismatched, return
-			if (l1 != l2) {
-				String message =
-					"The number of peaks detected does not match the ladder range";
-				message = message + "\n Peaks detected: " + l1;
-				message = message + "\n Bands in range: " + l2;
-				new MessageDialog(frame, "WARNING", message);
-				plotter.savePlots(savePath);
-				new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
-				return;
-			}
-
-			// If ladder peaks correct, rename vertical markers
-			for (final Peak p : peaks) { // Rename ladder peaks with band names
-				p.setName(ladder.getStrings()[ladder.getRange()[0] + peaks.indexOf(p)]);
-			}
-			plotter.addVerticalMarkers(peaks);
-
-			// Set ladder in Fitter
-			fitter.setLadder(ladder.getMolecularWeights());
-			// Fit the rest based on selected criterion
-			if (buttonBands.isSelected()) fitter.setFitMode(Fitter.bandMode);
-			else if (buttonContinuum.isSelected()) {
-				fitter.setFitMode(Fitter.continuumMode);
-				if (cmbBoxDist.getSelectedItem().equals(
-					"Select Fragment Distribution"))
-				{
-					new MessageDialog(frame, "WARNING!",
-						"Fragment distribution not selected");
-					return;
-				}
-			}
-
-			final List<Integer> otherLanes = new ArrayList<>();
-			for (final int i : getAllLaneNumbers()) {
-				if (i != ladderLaneInt) otherLanes.add(i);
-			}
-			fitted.addAll(fitter.doFit(otherLanes));
-			fitter.updateResultsTable(savePath);
-			fitDone = true;
-
-			plotter.removeFit();
-			plotter.addDataSeries(fitted);
-			for (final int i : getAllLaneNumbers()) {
-				plotter.updatePlot(i);
-			}
-			reDrawROIs(imp, "none"); // adds the bands to the ROIs
-
-			plotter.savePlots(savePath);
-			if (!plotter.isVisible()){
-				plotter.pack();
-				plotter.setVisible(true);
-			}
-			displayLog();
-			new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
+			runFit();
 		}
 
 		if (e.getSource().equals(buttonAuto)) {
@@ -1564,8 +1649,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			resetAutoROIs();
 			reDrawROIs(imp, "none");
 			if (plotter == null || fitter == null) return;
-			redoProfilePlots();
 			fitter.resetAllFitter();
+			if (restoring) for (final Peak p : savedCustomPeaks)
+				fitter.addCustomPeak(p);
+			redoProfilePlots();
 			fitter.setInputData(plotter.getProfiles());
 		}
 
@@ -1578,9 +1665,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				reDrawROIs(imp, "none");
 			}
 			if (plotter == null || fitter == null) return;
+			fitter.resetAllFitter();
+			if (restoring) for (final Peak p : savedCustomPeaks)
+				fitter.addCustomPeak(p);
 			reDrawROIs(imp, "none");
 			redoProfilePlots();
-			fitter.resetAllFitter();
 			fitter.setInputData(plotter.getProfiles());
 		}
 
@@ -1604,6 +1693,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			for (final int i : lanes) {
 				resetCustomPeaks(i);
 			}
+			saveState();
 			reDrawROIs(imp, "none");
 		}
 
@@ -1637,6 +1727,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			}
 			ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
 			updateLadderLane();
+			saveState();
 			reDrawROIs(imp, "none");
 		}
 
@@ -1651,37 +1742,45 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 
 		if (e.getSource().equals(cmbBoxDist)) {
-			if (cmbBoxDist.getSelectedIndex() == 0) return;
-			else if (cmbBoxDist.getSelectedItem().equals("Uniform")) {
+			loadDistribution(true);
+		}
+	}
+
+	/** Sets the fitter's fragment distribution from the selection */
+	private void loadDistribution(final boolean ask) {
+		if (cmbBoxDist.getSelectedIndex() == 0) return;
+		if (cmbBoxDist.getSelectedItem().equals("Uniform")) {
+			if (ask) {
 				final String title = "DISTRIBUTION RANGE";
-				final String message = "Enter the basepair-length range for the distribution.";
+				final String message =
+					"Enter the basepair-length range for the distribution.";
 				final GenericDialog gd = new GenericDialog(title);
 				gd.addMessage(message);
-				gd.addNumericField("Lower", dlo , 0, 5, "bp");
+				gd.addNumericField("Lower", dlo, 0, 5, "bp");
 				gd.addNumericField("Upper", dhi, 0, 5, "bp");
 				gd.addNumericField("Every", every, 0, 5, "bp");
 				gd.showDialog();
-				if (gd.wasOKed()) {
-					dlo = (int) gd.getNextNumber();
-					dhi = (int) gd.getNextNumber();
-					every = (int) gd.getNextNumber();
-					prefs.putInt(DLO, dlo);
-					prefs.putInt(DHI, dhi);
-					prefs.putInt(EVERY, every);
-					final double[][] dist = new double[(dhi - dlo) / every + 1][3];
-					double f = 1.0/(dhi - dlo + 1);
-					
-					for (int i = 0; i < dist.length; i++) {
-						dist[i][0] = f;
-						dist[i][1] = dhi - i * every;
-						dist[i][2] = dist[i][1] * 607.4 + 157.9; // MW;
-					}
-					fitter.setFragmentDistribution(dist);
-				}
-			} else {
-				final String filename = "data/" + cmbBoxDist.getSelectedItem() + ".txt";
-				fitter.setFragmentDistribution(readDistFile(filename));
+				if (!gd.wasOKed()) return;
+				dlo = (int) gd.getNextNumber();
+				dhi = (int) gd.getNextNumber();
+				every = (int) gd.getNextNumber();
+				prefs.putInt(DLO, dlo);
+				prefs.putInt(DHI, dhi);
+				prefs.putInt(EVERY, every);
 			}
+			final double[][] dist = new double[(dhi - dlo) / every + 1][3];
+			final double f = 1.0 / (dhi - dlo + 1);
+
+			for (int i = 0; i < dist.length; i++) {
+				dist[i][0] = f;
+				dist[i][1] = dhi - i * every;
+				dist[i][2] = dist[i][1] * 607.4 + 157.9; // MW;
+			}
+			fitter.setFragmentDistribution(dist);
+		}
+		else {
+			final String filename = "data/" + cmbBoxDist.getSelectedItem() + ".txt";
+			fitter.setFragmentDistribution(readDistFile(filename));
 		}
 	}
 
@@ -1998,4 +2097,24 @@ class Ladder implements Serializable {
 
 		ladderRange = new int[] { 0, ladderStrings.length - 1 };
 	}
+}
+
+/**
+ * Fitting settings of an image, saved with its lanes and ladder so that the
+ * last fit can be repeated when the image is opened again
+ */
+class FitState implements Serializable {
+
+	private static final long serialVersionUID = 1L;
+
+	boolean auto;
+	int nLanes, lw, lh, lsp, lhoff, lvoff;
+	int ladderLane;
+	int degBG;
+	double polyDerivative, tolPK, areaDrift, sdDrift;
+	boolean continuum;
+	int dist; // index of the fragment distribution
+	int dlo, dhi, every;
+	List<Peak> customPeaks = new ArrayList<>();
+	boolean fitDone;
 }

@@ -16,6 +16,7 @@ import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -586,6 +587,10 @@ class Fitter {
 		return c;
 	}
 
+	public List<Peak> getAllCustomPeaks() {
+		return new ArrayList<>(allCustomList);
+	}
+
 	public List<Peak> getGuessPeaks(final int lane) {
 		final List<Peak> g = new ArrayList<>();
 		final Iterator<Peak> it = allGuessList.iterator();
@@ -680,7 +685,9 @@ class Fitter {
  * Class to generate Gaussian Peak objects Could be expanded to represent other
  * types of peaks
  **/
-class Peak implements Comparable<Peak> {
+class Peak implements Comparable<Peak>, Serializable {
+
+	private static final long serialVersionUID = 1L;
 
 	private String name = "";
 	private final int lane;
