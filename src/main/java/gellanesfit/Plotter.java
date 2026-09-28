@@ -39,8 +39,10 @@ import java.io.IOException;
 import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -124,6 +126,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 	private final List<ChartPanel> chartPanels;
 	private final List<DataSeries> plotsData;
 	private final List<Integer> plotNumbers;
+	// Lanes whose axis ranges are set; kept on redraws until the profiles change
+	private final Set<Integer> rangeSet = new HashSet<>();
 	private List<VerticalMarker> verticalMarkers;
 
 	private List<JPanel> chartTabs;
@@ -459,12 +463,21 @@ class Plotter extends JFrame implements ChartMouseListener {
 						}
 					}
 				}
+				final Range domain = pl.getDomainAxis().getRange();
+				final Range range = pl.getRangeAxis().getRange();
 				c.getXYPlot().setDataset(dataset);
-				final Range rng = dataset.getRangeBounds(true);
-				final double below = rng.getLength() * 0.05;
-				final double above = rng.getLength() * 0.3;
-				c.getXYPlot().getRangeAxis().setLowerBound(rng.getLowerBound() - below);
-				c.getXYPlot().getRangeAxis().setUpperBound(rng.getUpperBound() + above);
+				if (rangeSet.contains(ln)) { // Keep the current view
+					pl.getDomainAxis().setRange(domain);
+					pl.getRangeAxis().setRange(range);
+				}
+				else {
+					final Range rng = dataset.getRangeBounds(true);
+					final double below = rng.getLength() * 0.05;
+					final double above = rng.getLength() * 0.3;
+					c.getXYPlot().getRangeAxis().setLowerBound(rng.getLowerBound() - below);
+					c.getXYPlot().getRangeAxis().setUpperBound(rng.getUpperBound() + above);
+					rangeSet.add(ln);
+				}
 				pl.setFixedLegendItems(legendItems);
 				c.getLegend().setPosition(RectangleEdge.RIGHT);
 
@@ -547,6 +560,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 	public void resetData() {
 		plotsData.clear();
 		plotNumbers.clear();
+		rangeSet.clear();
 		chartPanels.clear();
 		removeVerticalMarkers();
 	}
