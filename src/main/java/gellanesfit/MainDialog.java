@@ -657,6 +657,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		return false;
 	}
 
+	/** Keeps the Edit Custom Peaks button and the plots' mode in step */
+	private void setEditPeaks(final boolean on) {
+		buttonEditPeaks.setSelected(on);
+		plotter.setPlotMode(on ? Plotter.editPeaksMode : Plotter.regMode);
+	}
+
 	/** Warns that the fit will be lost, unless the user opted out */
 	private boolean askFitReset() {
 		if (prefs.getBoolean(SKIPFITWARNING, false)) return true;
@@ -947,10 +953,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitDone = false;
 		chkBoxBands.setSelected(false);
 		chkBoxBands.setEnabled(false);
-		buttonEditPeaks.setEnabled(false);
-		buttonResetCustomPeaks.setEnabled(false);
 		plotter.resetData();
-		plotter.setPlotMode(Plotter.regMode);
 
 		try {
 			// rois.parallelStream().forEach((r) -> {
@@ -1425,7 +1428,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 			// Remove everything in the plots, but the profile
 			plotter.setSelected(MainDialog.noLaneSelected);
-			plotter.setPlotMode(Plotter.regMode);
 			plotter.removeFit();
 			plotter.removeVerticalMarkers();
 
@@ -1439,7 +1441,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			chkBoxBands.setSelected(false);
 			buttonEditPeaks.setEnabled(true);
 			buttonResetCustomPeaks.setEnabled(true);
-			if (!buttonEditPeaks.isSelected()) buttonEditPeaks.doClick();
 			buttonResetCustomPeaks.setSelected(false);
 
 			// Start new fit, Ladder first
@@ -1562,9 +1563,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 
 		if (e.getSource().equals(buttonEditPeaks)) {
-			if (buttonEditPeaks.isSelected()) plotter.setPlotMode(
-				Plotter.editPeaksMode);
-			else plotter.setPlotMode(Plotter.regMode);
+			setEditPeaks(buttonEditPeaks.isSelected());
+			for (final int i : getAllLaneNumbers())
+				plotter.updatePlot(i);
 		}
 
 		if (e.getSource().equals(buttonResetCustomPeaks)) {
