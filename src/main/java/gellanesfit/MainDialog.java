@@ -264,9 +264,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final FileInfo fi = imp.getOriginalFileInfo();
 		final String imageDir = fi != null && fi.directory != null && !fi.directory
 			.isEmpty() ? fi.directory : IJ.getDirectory("imagej");
-		savePath = new File(new File(imageDir, "gel-lanes-fit"), imp
-			.getShortTitle()).getAbsolutePath() + sep;
-		if (!new File(savePath).isDirectory() && !new File(savePath).mkdirs())
+		final String title = imp.getTitle();
+		final String imageName = title.lastIndexOf('.') > 0 ? title.substring(0,
+			title.lastIndexOf('.')) : title;
+		final File dataDir = new File(imageDir, imageName + " - Gel Lanes Fit");
+		moveOldDataFolder(new File(new File(imageDir, "gel-lanes-fit"), imp
+			.getShortTitle()), dataDir);
+		savePath = dataDir.getAbsolutePath() + sep;
+		if (!dataDir.isDirectory() && !dataDir.mkdirs())
 			log.error("Cannot create the data folder " + savePath);
 		log.info("Data folder: " + savePath);
 		frame = new JFrame(string);
@@ -274,6 +279,21 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		ladder = null;
 		setupMainDialog();
 		frame.setLocation((int) SW / 16, (int) SH / 8);
+	}
+
+	/**
+	 * Data used to go to gel-lanes-fit/(short title)/ next to the image;
+	 * moves it to the new folder so the saved state is found again
+	 */
+	private void moveOldDataFolder(final File oldDir, final File newDir) {
+		if (!oldDir.isDirectory() || newDir.exists()) return;
+		if (oldDir.renameTo(newDir)) {
+			log.info("Moved " + oldDir + " to " + newDir);
+			final File parent = oldDir.getParentFile();
+			final String[] left = parent.list();
+			if (left != null && left.length == 0) parent.delete();
+		}
+		else log.error("Could not move " + oldDir + " to " + newDir);
 	}
 
 	private void setupMainDialog() {
