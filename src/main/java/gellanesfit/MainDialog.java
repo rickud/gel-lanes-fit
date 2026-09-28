@@ -626,7 +626,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonBands.setSelected(!continuum);
 		buttonContinuum.setSelected(continuum);
 		fitter.setFitMode(continuum ? Fitter.continuumMode : Fitter.bandMode);
-		chkBoxBands.setSelected(false);
+		// Only the user changes Show Bands; it is kept with the saved state
+		chkBoxBands.setSelected(savedState != null && savedState.showBands);
 		chkBoxBands.setEnabled(false);
 		cmbBoxLadderType.setSelectedIndex(ladderType);
 		cmbBoxLadderType.setEnabled(ladder != null);
@@ -1067,7 +1068,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	private void redoProfilePlots() {
 		fitDone = false;
-		chkBoxBands.setSelected(false);
 		chkBoxBands.setEnabled(false);
 		plotter.resetData();
 
@@ -1234,6 +1234,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		st.every = every;
 		st.customPeaks = allCustomPeaks();
 		st.fitDone = fitDone;
+		st.showBands = chkBoxBands.isSelected();
 		return st;
 	}
 
@@ -1591,7 +1592,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitDone = false;
 
 		chkBoxBands.setEnabled(true);
-		chkBoxBands.setSelected(false);
 		buttonEditPeaks.setEnabled(true);
 		buttonResetCustomPeaks.setEnabled(true);
 		buttonResetCustomPeaks.setSelected(false);
@@ -1753,6 +1753,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// -------------------------------------------------------------
 		if (e.getSource().equals(chkBoxBands)) {
 			reDrawROIs(imp, "none");
+			saveState();
 		}
 
 		// ComboBoxes
@@ -2189,4 +2190,5 @@ class FitState implements Serializable {
 	int dlo, dhi, every;
 	List<Peak> customPeaks = new ArrayList<>();
 	boolean fitDone;
+	boolean showBands; // false when loading files saved before it was added
 }
