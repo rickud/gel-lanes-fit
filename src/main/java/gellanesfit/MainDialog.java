@@ -110,6 +110,7 @@ import ij.gui.MessageDialog;
 import ij.gui.Overlay;
 import ij.gui.Roi;
 import ij.gui.TextRoi;
+import ij.io.FileInfo;
 import ij.io.FileSaver;
 
 class MainDialog extends JFrame implements ActionListener, ChangeListener,
@@ -259,7 +260,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		this.imp = imp;
 		this.impTitle = imp.getTitle().substring(0, imp.getTitle().indexOf("."));
 		final String sep = File.separator;
-		savePath = "gel-lanes-fit" + sep + "data" + sep + imp.getShortTitle() + sep;
+		// Absolute, next to the image, so it does not depend on how Fiji started
+		final FileInfo fi = imp.getOriginalFileInfo();
+		final String imageDir = fi != null && fi.directory != null && !fi.directory
+			.isEmpty() ? fi.directory : IJ.getDirectory("imagej");
+		savePath = new File(new File(imageDir, "gel-lanes-fit"), imp
+			.getShortTitle()).getAbsolutePath() + sep;
+		if (!new File(savePath).isDirectory() && !new File(savePath).mkdirs())
+			log.error("Cannot create the data folder " + savePath);
+		log.info("Data folder: " + savePath);
 		frame = new JFrame(string);
 		rois = new ArrayList<>();
 		ladder = null;

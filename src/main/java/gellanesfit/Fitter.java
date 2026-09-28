@@ -130,9 +130,10 @@ class Fitter {
 			final int lane = d.getLane();
 			final List<Peak> guess = getGuessPeaks(lane);
 			final List<Peak> fitted = getFittedPeaks(lane);
+			// Lanes not fitted yet, e.g. while only the ladder has been fitted
+			if (fitted.isEmpty()) continue;
 			RealVector areas = new ArrayRealVector();
-			if (guess.size() != fitted.size() || 
-					guess.size() == 0 || fitted.size() == 0) {
+			if (guess.size() != fitted.size()) {
 				log.info("Data Size " + lane + " : " + guess.size() + ", " + fitted.size());
 			}
 
