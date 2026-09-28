@@ -188,6 +188,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private ArrayList<Roi> rois;
 	private List<Peak> savedCustomPeaks = new ArrayList<>();
 	private List<Rectangle> savedRects = new ArrayList<>(); // Manual ROIs
+	// Custom peaks outside the current lanes, kept for when they fit again
+	private List<Peak> parkedPeaks = new ArrayList<>();
 	private FitState savedState; // Settings of the last session, if any
 	private boolean restoring = true; // Do not save while restoring the state
 
@@ -988,7 +990,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	/**
 	 * Custom peaks keep their position on the gel when a lane changes: those
-	 * now outside the lane are removed, the others take the new profile height
+	 * now outside the lane are parked, the others take the new profile height
 	 */
 	private List<Peak> snapCustomPeaks(final int ln) {
 		DataSeries profile = null;
@@ -999,6 +1001,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final PolynomialSplineFunction f = new LinearInterpolator().interpolate(
 			profile.getX().toArray(), profile.getY().toArray());
 
+		// Parked peaks inside the lane again go back to the fitter
+		final Iterator<Peak> itParked = parkedPeaks.iterator();
+		while (itParked.hasNext()) {
+			final Peak p = itParked.next();
+			if (p.getLane() == ln && f.isValidPoint(p.getMean())) {
+				fitter.addCustomPeak(p);
+				itParked.remove();
+			}
+		}
+
 		final List<Peak> peaks = fitter.getCustomPeaks(ln);
 		final Iterator<Peak> it = peaks.iterator();
 		while (it.hasNext()) {
@@ -1006,10 +1018,37 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			if (f.isValidPoint(p.getMean())) p.setNorm(f.value(p.getMean()));
 			else {
 				fitter.removeCustomPeak(p);
+				parkedPeaks.add(p);
 				it.remove();
 			}
 		}
 		return peaks;
+	}
+
+	/** Custom peaks in the fitter and those parked outside the lanes */
+	private List<Peak> allCustomPeaks() {
+		final List<Peak> all = new ArrayList<>(fitter.getAllCustomPeaks());
+		all.addAll(parkedPeaks);
+		return all;
+	}
+
+	/** Keeps the custom peaks while the fitter is reset for new lanes */
+	private void resetFitterKeepCustomPeaks() {
+		final List<Peak> keep = restoring ? savedCustomPeaks : allCustomPeaks();
+		fitter.resetAllFitter();
+		parkedPeaks = new ArrayList<>();
+		for (final Peak p : keep)
+			fitter.addCustomPeak(p);
+	}
+
+	private void manualROIsFromSavedRects() {
+		rois = new ArrayList<>();
+		int i = 1;
+		for (final Rectangle r : savedRects) {
+			final Roi roi = new Roi(r);
+			roi.setName("Lane " + i++);
+			rois.add(roi);
+		}
 	}
 
 	private void redoProfilePlots() {
@@ -1091,6 +1130,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	private void resetCustomPeaks(final int lane) {
 		fitter.resetCustomPeaks(lane);
+		parkedPeaks.removeIf(p -> p.getLane() == lane);
 		DataSeries d = plotter.getPlotsCustomPeaks(lane);
 		if (d == null) {
 			final RealVector empty = new ArrayRealVector();
@@ -1178,7 +1218,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		st.dlo = dlo;
 		st.dhi = dhi;
 		st.every = every;
-		st.customPeaks = new ArrayList<>(fitter.getAllCustomPeaks());
+		st.customPeaks = allCustomPeaks();
 		st.fitDone = fitDone;
 		return st;
 	}
@@ -1191,7 +1231,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final String file = "saved-state.bak";
 		final String fullPath = savePath + file;
 		log.info("Loading " + fullPath + " ...");
-		int i = 1;
 		try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(
 			fullPath)))
 		{
@@ -1217,13 +1256,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			ois.close();
 			// Old files have no FitState; the mode comes from the preferences
 			final boolean manual = savedState == null ? !auto : !savedState.auto;
-			if (manual) {
-				for (final Rectangle r : savedRects) {
-					final Roi roi = new Roi(r);
-					roi.setName("Lane " + i++);
-					rois.add(roi);
-				}
-			}
+			if (manual) manualROIsFromSavedRects();
 			return true;
 		}
 		catch (final IOException e) {
@@ -1649,28 +1682,27 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			resetAutoROIs();
 			reDrawROIs(imp, "none");
 			if (plotter == null || fitter == null) return;
-			fitter.resetAllFitter();
-			if (restoring) for (final Peak p : savedCustomPeaks)
-				fitter.addCustomPeak(p);
+			resetFitterKeepCustomPeaks();
 			redoProfilePlots();
 			fitter.setInputData(plotter.getProfiles());
+			saveState();
 		}
 
 		if (e.getSource().equals(buttonManual)) {
 			auto = false;
 			prefs.putBoolean(AUTO, auto);
 			setSliderPanelEnabled(false);
-			if (!loadState() || rois.size() == 0) { // Use the AUTO rois as a start
+			manualROIsFromSavedRects();
+			if (rois.size() == 0) { // Use the AUTO rois as a start
 				resetAutoROIs();
 				reDrawROIs(imp, "none");
 			}
 			if (plotter == null || fitter == null) return;
-			fitter.resetAllFitter();
-			if (restoring) for (final Peak p : savedCustomPeaks)
-				fitter.addCustomPeak(p);
+			resetFitterKeepCustomPeaks();
 			reDrawROIs(imp, "none");
 			redoProfilePlots();
 			fitter.setInputData(plotter.getProfiles());
+			saveState();
 		}
 
 		if (e.getSource().equals(buttonBands)) {
