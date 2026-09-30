@@ -1130,6 +1130,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final List<Integer> fragmentFrequency = new ArrayList<>();
 
 		final URL url = MainDialog.class.getClassLoader().getResource(filename);
+		if (url == null) {
+			IJ.error("Fragment Distribution", "The plugin does not contain " +
+				filename + ".");
+			return null;
+		}
 		log.info("Loading " + url.getPath() + " ...");
 		try (BufferedReader buffer = new BufferedReader(new InputStreamReader(url
 			.openStream())))
@@ -1884,8 +1889,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			fitter.setFragmentDistribution(dist);
 		}
 		else {
-			final String filename = "data/" + cmbBoxDist.getSelectedItem() + ".txt";
-			fitter.setFragmentDistribution(readDistFile(filename));
+			final String filename = "sample-distributions/" + cmbBoxDist
+				.getSelectedItem() + ".txt";
+			final double[][] dist = readDistFile(filename);
+			if (dist == null) cmbBoxDist.setSelectedIndex(0);
+			else fitter.setFragmentDistribution(dist);
 		}
 	}
 
