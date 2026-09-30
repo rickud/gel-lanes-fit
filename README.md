@@ -66,4 +66,4 @@ Developed at [The University of Texas at Dallas](https://www.utdallas.edu) by Ri
 
 ## License
 
-See [LICENSE](LICENSE).
+Gel Lanes Fit is free software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
