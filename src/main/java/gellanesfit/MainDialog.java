@@ -492,7 +492,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		labelDegBG = new JLabel("Polynomial Degree");
 		labelPolyDerivative = new JLabel(
 			"Max Polynomial Derivative (grayvalue/px)");
-		labelTolPK = new JLabel("Peak Tolerance (%)");
+		labelTolPK = new JLabel("Peak Tolerance (fraction)");
 		labelAreaDrift = new JLabel("Area Drift ");
 		labelSDDrift = new JLabel("SD Drift ");
 
