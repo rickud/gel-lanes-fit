@@ -24,7 +24,8 @@
 	</organization>
 	<licenses>
 		<license>
-			<name>Simplified BSD License</name>
+			<name>GNU Affero General Public License v3.0</name>
+			<url>https://www.gnu.org/licenses/agpl-3.0.txt</url>
 			<distribution>repo</distribution>
 		</license>
 	</licenses>
@@ -32,7 +33,7 @@
 	<properties>
 		<main-class>gellanesfit.GelLanesFit</main-class>
 <!-- 		<scijava.jvm.version>1.8</scijava.jvm.version> -->
-		<license.licenseName>bsd_2</license.licenseName>
+		<license.licenseName>agpl_v3</license.licenseName>
 		<license.copyrightOwners>The University of Texas at Dallas </license.copyrightOwners>
 	</properties>
 
