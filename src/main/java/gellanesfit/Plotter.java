@@ -187,14 +187,22 @@ class Plotter extends JFrame implements ChartMouseListener {
 	 *
 	 * @param roi
 	 */
-	private DataSeries getLaneProfile(final Roi roi) {
+	/**
+	 * A lane's profile: the intensity averaged across the lane's width, row by
+	 * row. x is the row's distance from the top of the image, in pixels.
+	 *
+	 * @param imp the gel image
+	 * @param roi the lane, named "Lane n"
+	 * @return the profile, or null if the lane is less than 2 pixels tall
+	 */
+	static DataSeries laneProfile(final ImagePlus imp, final Roi roi) {
 		imp.setRoi(roi);
+		final RealVector profile = new ArrayRealVector(new ProfilePlot(imp, true)
+			.getProfile());
+		imp.killRoi();
+		if (profile.getDimension() < 2) return null;
 		final String name = roi.getName();
 		final int lane = Integer.parseInt(name.substring(5));
-		final ProfilePlot profileP = new ProfilePlot(imp, true); // get the profile
-		final RealVector profile = new ArrayRealVector(profileP.getProfile());
-		if (profile.getDimension() < 2) return null;
-		imp.killRoi();
 		final double y0 = roi.getBounds().getMinY();
 		final double[] y = new double[profile.getDimension()];
 		for (int p = 0; p < y.length; p++)
@@ -417,7 +425,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 	}
 
 	void updateProfile(final Roi roi) {
-		final DataSeries profile = getLaneProfile(roi);
+		final DataSeries profile = laneProfile(imp, roi);
 		// Assume plotsData, chartsMainPanel was reset
 		plotNumbers.add(profile.getLane());
 		plotsData.add(profile);

@@ -7,7 +7,6 @@ import static org.junit.Assert.assertTrue;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.apache.commons.math3.linear.ArrayRealVector;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -18,7 +17,6 @@ import org.scijava.log.LogService;
 
 import ij.IJ;
 import ij.ImagePlus;
-import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 
 /**
@@ -50,30 +48,18 @@ public class SampleImageFitTest {
 		context.dispose();
 	}
 
-	/** The lane's profile, built the way Plotter.getLaneProfile() builds it */
-	private static DataSeries profile(final ImagePlus imp, final int lane,
-		final Roi roi)
-	{
-		imp.setRoi(roi);
-		final double[] y = new ProfilePlot(imp, true).getProfile();
-		imp.killRoi();
-		final double y0 = roi.getBounds().getMinY();
-		final double[] x = new double[y.length];
-		for (int p = 0; p < x.length; p++)
-			x[p] = y0 + p;
-		return new DataSeries("Lane " + lane, lane, DataSeries.PROFILE,
-			new ArrayRealVector(x), new ArrayRealVector(y), java.awt.Color.BLACK);
-	}
-
 	@Test
 	public void fitsTheSampleLanes() {
 		final ImagePlus imp = IJ.openImage(IMAGE);
 		assertNotNull(IMAGE, imp);
 
 		final List<DataSeries> lanes = new ArrayList<>();
-		for (int i = 0; i < LANE_CENTRES.length; i++)
-			lanes.add(profile(imp, i + 1, new Roi(LANE_CENTRES[i] - LANE_WIDTH / 2,
-				TOP, LANE_WIDTH, BOTTOM - TOP)));
+		for (int i = 0; i < LANE_CENTRES.length; i++) {
+			final Roi roi = new Roi(LANE_CENTRES[i] - LANE_WIDTH / 2, TOP,
+				LANE_WIDTH, BOTTOM - TOP);
+			roi.setName("Lane " + (i + 1));
+			lanes.add(Plotter.laneProfile(imp, roi));
+		}
 
 		final List<String> profileSums = new ArrayList<>();
 		for (final DataSeries d : lanes)
