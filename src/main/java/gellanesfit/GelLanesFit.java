@@ -163,7 +163,6 @@ public class GelLanesFit implements Command {
 			ImageConverter ic = new ImageConverter(iPlus);
 			ic.convertToGray8();
 			iPlus.getProcessor().invert();
-			//iPlus.updateAndDraw();
 		}
 		final LUT[] lut = iPlus.getLuts();
 		iPlus.setLut(lut[0].createInvertedLut());

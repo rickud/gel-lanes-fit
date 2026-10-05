@@ -95,8 +95,6 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		this.polyOffset = polyOffset;
 		this.areaDrift = areaDrift;
 		this.sdDrift = sdDrift;
-
-//		f.getContentPane().add(new ChartPanel(chart));
 	}
 
 	/**
@@ -417,8 +415,6 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 						// Do another round with larger hm
 						hm = hm * inc;
 					}
-	//				System.out.println("PeakDist: " + peakDistance + " (" + LWHM + ":" +
-	//					RWHM + "); " + hm / yRange);
 					sds[m] = FWHM / (2 * FastMath.sqrt(2 * FastMath.log(2)));
 					normG = normG.append(norms[m]);
 					meanG = meanG.append(means[m]);
@@ -603,7 +599,6 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			}
 			List<Integer> out = new ArrayList<>(); 
 			final double[] means = interpolateDisplacement(meanLadder, ladderMW, distMatrix.getColumnVector(2));
-//			double margin = (xrange[1] - xrange[0]) * 0.2;
 			double margin = 0.0;
 			for (int i = 0; i < means.length; i++) {
 				if (means[i] > xrange[0] - margin && means[i] < xrange[1] + margin) out.add(i);
@@ -760,25 +755,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			// Gaussian Parameters
 			int peakCount = iniSP.getMean().getDimension();
 			for (int i = 0; i < peakCount; i++) {
-				// Keep means close to maxima or original mean guess`
-				if (peakCount == 1) {
-					// Do not restrict
-				}
-//				else if (i == 0) {
-//					if (mean.getEntry(i) > mean.getEntry(i + 1))
-//						mean.setEntry(i, mean.getEntry(i + 1));
-//				}
-//				else if (i + 1 == peakCount) {
-//					if (mean.getEntry(i) < mean.getEntry(i - 1))
-//						mean.setEntry(i, mean.getEntry(i - 1));
-//				}
-//				else {
-//					if (mean.getEntry(i) > mean.getEntry(i + 1))
-//						mean.setEntry(i, mean.getEntry(i + 1));
-//					if (mean.getEntry(i) < mean.getEntry(i - 1))
-//						mean.setEntry(i, mean.getEntry(i - 1));
-//				}
-
+				// Keep means close to the original guess
 				final double diff = mean.getEntry(i) - iniSP.getMean().getEntry(i);
 				double sign = 0.0;
 				if (diff != 0.0) 
@@ -838,12 +815,6 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					// Use a log-normal distribution with parameters mu, sigma
 					double mu = FastMath.log(meanRatio /
 						FastMath.sqrt(1 + varRatio/(meanRatio*meanRatio)));
-					final String outStr = String.format("%1$.4f; %2$.4f; %3$.4f; %4$.4f; %5$.4f; %6$.4f",
-						mu, sigma,
-						meanRatio, FastMath.exp(mu + 0.5*sigma*sigma), 
-						varRatio, (FastMath.exp(sigma*sigma)-1)*FastMath.exp(2*mu+sigma*sigma));
-					System.out.println(outStr);
-//					double mu = meanRatio;
 					sigma = areaDrift;
 					LogNormalDistribution logNormal = new LogNormalDistribution(random,
 						mu, sigma);
@@ -964,7 +935,8 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 															sp.getMean().getEntry(i), 
 															sp.getSD().getEntry(i)).value(x);
 		}
-		output += new PolynomialFunction(sp.getPoly().toArray()).value(x);
+		if (sp.getPoly().getDimension() > 0) output += new PolynomialFunction(sp
+			.getPoly().toArray()).value(x);
 		return output;
 	}
 
@@ -972,24 +944,14 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 	public DerivativeStructure value(final DerivativeStructure t)
 		throws DimensionMismatchException
 	{
-		// TODO Write Derivative Structure for future use
-		// final double[] u = new double[]
-		// {is.multiplyToSelf(means.subtractToself(t.getValue()).multiplyToSelf(-1)).toArray()};
-
-		// final double[] f = new double[t.getOrder() + 1];
-
-		// the nth order derivative of the Gaussian has the form:
-		// dn(g(x)/dxn = (norm / s^n) P_n(u) exp(-u^2/2) with u=(x-m)/s
-		// where P_n(u) is a degree n polynomial with same parity as n
-		// P_0(u) = 1, P_1(u) = -u, P_2(u) = u^2 - 1, P_3(u) = -u^3 + 3 u...
-		// the general recurrence relation for P_n is:
-		// P_n(u) = P_(n-1)'(u) - u P_(n-1)(u)
-		// as per polynomial parity, we can store coefficients of both P_(n-1)
-		// and
-		// P_n in the same array
-		System.out.println("Need derivative structure!");
-		final PolynomialFunction p = new PolynomialFunction(sp.getPoly().toArray());
-		return p.value(t);
+		DerivativeStructure output = t.getField().getZero();
+		for (int i = 0; i < sp.getNorm().getDimension(); i++) {
+			output = output.add(new Gaussian(sp.getNorm().getEntry(i), sp.getMean()
+				.getEntry(i), sp.getSD().getEntry(i)).value(t));
+		}
+		if (sp.getPoly().getDimension() > 0) output = output.add(
+			new PolynomialFunction(sp.getPoly().toArray()).value(t));
+		return output;
 	}
 	/**
 	 * Parametric function where the input array contains the parameters of the
@@ -1016,7 +978,6 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 		 */
 		@Override
 		public double value(final double x, final double... param) {
-			// validateParameters(param);
 			SortedParameters sp = new SortedParameters(param);
 			return new GaussianArray(sp).value(x);
 		}

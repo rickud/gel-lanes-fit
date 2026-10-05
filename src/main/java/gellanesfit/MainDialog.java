@@ -1097,7 +1097,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		plotter.resetData();
 
 		try {
-			// rois.parallelStream().forEach((r) -> {
 			for (final Roi r : rois) {
 				final int ln = Integer.parseInt(r.getName().substring(5));
 				final Rectangle rect = r.getBounds();
@@ -1114,7 +1113,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 					plotter.addDataSeries(d);
 					plotter.updatePlot(r);
 				}
-				// });
 			}
 			plotter.reloadTabs();
 		}
@@ -1138,23 +1136,28 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		try (BufferedReader buffer = new BufferedReader(new InputStreamReader(url
 			.openStream())))
 		{
+			int lineNumber = 0;
 			while (true) {
 				line = buffer.readLine();
 				if (line == null) break;
+				lineNumber++;
 
 				final String[] words = line.split("\t");
 				try {
-					fragmentLength.add(Integer.parseInt(words[0].trim()));
-					fragmentFrequency.add(Integer.parseInt(words[1].trim()));
+					final int length = Integer.parseInt(words[0].trim());
+					final int frequency = Integer.parseInt(words[1].trim());
+					fragmentLength.add(length);
+					fragmentFrequency.add(frequency);
 				}
 				catch (final NumberFormatException e1) {
+					if (lineNumber == 1) continue; // the header line
 					log.info("Invalid token: " + words[0].trim() + " " + words[1].trim());
 				}
 			}
 			buffer.close();
 		}
 		catch (final Exception e) {
-			e.printStackTrace();
+			log.error("Could not read " + filename, e);
 		}
 		if (fragmentLength.size() != fragmentFrequency.size()) return null;
 		final double[][] out = new double[fragmentLength.size()][3];
@@ -1211,9 +1214,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		if (buttonContinuum.isSelected()) {
 			final JTabbedPane distributionsPane = new JTabbedPane();
-			Component[] c = logWindow.getContentPane().getComponents();
-//					(JRootPane) ((BorderLayout)
-//							logWindow.getLayout()).getLayoutComponent(BorderLayout.CENTER).get;
+			final Component[] c = logWindow.getContentPane().getComponents();
 
 			for (final int i : getAllLaneNumbers()) {
 				if (i != ladderLaneInt) {
@@ -1236,8 +1237,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			}
 			final JSplitPane sp = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
 				distributionsPane, c[0]);
-//			c = logWindow.getContentPane().getComponents();
-//			log.info(c.toString());
 			logWindow.getContentPane().add(sp);
 			final Dimension screenD = IJ.getScreenSize();
 			final Dimension dialogD = logWindow.getSize();
@@ -1345,14 +1344,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				oos.writeObject(r);
 			oos.writeObject(currentState());
 			if (ladder != null) {
-				// System.out.println(ladder.getClass());
 				oos.writeObject(ladder);
 			}
 			return true;
 		}
 		catch (final IOException e) {
-			log.error("ROI file not Found. Creating a new one.");
-			e.printStackTrace();
+			log.error("Could not save " + fullPath, e);
 			return false;
 		}
 	}
@@ -1809,7 +1806,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// ComboBoxes
 		// -------------------------------------------------------------
 		if (e.getSource().equals(cmbBoxLadderLane)) {
-			//final String laneStr = cmbBoxLadderLane.getSelectedItem().toString();			
 			final int laneInt = cmbBoxLadderLane.getSelectedIndex();
 			if (laneInt == -1) return;
 			if (laneInt == 0) {
@@ -1993,7 +1989,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 					final Rectangle rN = roiNew.getBounds();
 					if (rN.getWidth() * rN.getHeight() > 100) {
 						if (roiNew.getName() != null) { // Existing ROI
-							// log.info("Modify Roi");
 							// Moving/Resizing a specific ROI
 							final Iterator<Roi> roisIter = rois.iterator();
 							while (roisIter.hasNext()) {
@@ -2140,7 +2135,7 @@ class Ladder implements Serializable {
 					bp = bp.append(Integer.parseInt(line));
 				}
 				catch (final NumberFormatException e1) {
-					e1.printStackTrace();
+					// Not a band size, e.g. a header line: skip it
 				}
 			}
 		}

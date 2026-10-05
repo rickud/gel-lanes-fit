@@ -55,7 +55,6 @@ import javax.swing.JTabbedPane;
 import javax.swing.WindowConstants;
 import javax.swing.border.EmptyBorder;
 
-//import org.apache.batik.svggen.SVGGraphics2D;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
@@ -95,6 +94,8 @@ import org.jfree.data.xy.XYSeriesCollection;
 import org.jfree.graphics2d.svg.SVGGraphics2D;
 import org.jfree.graphics2d.svg.SVGUtils;
 import org.scijava.Context;
+import org.scijava.log.LogService;
+import org.scijava.plugin.Parameter;
 
 import ij.IJ;
 import ij.ImagePlus;
@@ -104,6 +105,9 @@ import ij.gui.Roi;
 class Plotter extends JFrame implements ChartMouseListener {
 
 	private static final long serialVersionUID = 1L;
+
+	@Parameter
+	private LogService log;
 
 	private final double SW = IJ.getScreenSize().getWidth();
 	private final double SH = IJ.getScreenSize().getHeight();
@@ -453,7 +457,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				}
 				catch (final RuntimeException ex) {
 					// Never let the label fit stop the chart from being painted
-					ex.printStackTrace();
+					log.error("Could not fit the plot range to the labels", ex);
 				}
 			});
 			chartPanels.add(chartPanel);
@@ -517,8 +521,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 
 				// Plot the data series
 				final LegendItems legendItems = new LegendItems();
-//				double min = Integer.MAX_VALUE;
-//				double max = Integer.MIN_VALUE;
 				for (final DataSeries d : plotsData) {
 					if (d.getLane() == ln) {
 						if (d.getItemCount() > 0) {
@@ -571,8 +573,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 								li.setFillPaint(d.getColor());
 								legendItems.add(li);
 							}
-//							if (d.getMaxY() > max) max = d.getMaxY();
-//							if (d.getMaxY() < min) min = d.getMinY();
 						}
 					}
 				}
@@ -697,7 +697,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 					(int) x, (int) y);
 			}
 			catch (final IOException e) {
-				e.printStackTrace();
+				log.error("Could not save " + plotfile + ".png", e);
 			}
 
 			// Save PDF
@@ -717,7 +717,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				doc.close();
 			}
 			catch (DocumentException | IOException e) {
-				e.printStackTrace();
+				log.error("Could not save " + plotfile + ".pdf", e);
 			}
 
 			try { // Save SVG
@@ -727,7 +727,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				SVGUtils.writeToSVG(out, svgGen.getSVGElement());
 			}
 			catch (final IOException e) {
-				e.printStackTrace();
+				log.error("Could not save " + plotfile + ".svg", e);
 			}
 		}
 	}
