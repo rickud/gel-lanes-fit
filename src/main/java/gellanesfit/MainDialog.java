@@ -1122,11 +1122,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/** Reads a bundled fragment distribution; null if it can't be read */
 	private double[][] readDistFile(final String filename) {
-		String line = null;
-		final List<Integer> fragmentLength = new ArrayList<>();
-		final List<Integer> fragmentFrequency = new ArrayList<>();
-
 		final URL url = MainDialog.class.getClassLoader().getResource(filename);
 		if (url == null) {
 			IJ.error("Fragment Distribution", "The plugin does not contain " +
@@ -1137,43 +1134,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		try (BufferedReader buffer = new BufferedReader(new InputStreamReader(url
 			.openStream())))
 		{
-			int lineNumber = 0;
-			while (true) {
-				line = buffer.readLine();
-				if (line == null) break;
-				lineNumber++;
-
-				final String[] words = line.split("\t");
-				try {
-					final int length = Integer.parseInt(words[0].trim());
-					final int frequency = Integer.parseInt(words[1].trim());
-					fragmentLength.add(length);
-					fragmentFrequency.add(frequency);
-				}
-				catch (final NumberFormatException e1) {
-					if (lineNumber == 1) continue; // the header line
-					log.info("Invalid token: " + words[0].trim() + " " + words[1].trim());
-				}
-			}
-			buffer.close();
+			return FragmentDistribution.read(buffer, w -> log.info(filename + ": " +
+				w));
 		}
-		catch (final Exception e) {
+		catch (final IOException e) {
 			log.error("Could not read " + filename, e);
+			return null;
 		}
-		if (fragmentLength.size() != fragmentFrequency.size()) return null;
-		final double[][] out = new double[fragmentLength.size()][3];
-		int count = 0;
-		for (int i = 0; i < fragmentLength.size(); i++) {
-			out[i][0] = fragmentFrequency.get(i);
-			out[i][1] = fragmentLength.get(i);
-			out[i][2] = Ladder.molecularWeight(fragmentLength.get(i));
-			count = count + fragmentFrequency.get(i);
-		}
-		for (int i = 0; i < fragmentLength.size(); i++) {
-			out[i][0] = out[i][0] / count;
-		}
-		// 3 columns: Relative Frequency, Length, MW
-		return out;
 	}
 
 	private void resetCustomPeaks(final int lane) {
@@ -1874,18 +1841,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				prefs.putInt(DHI, dhi);
 				prefs.putInt(EVERY, every);
 			}
-			final double[][] dist = new double[(dhi - dlo) / every + 1][3];
-			final double f = 1.0 / (dhi - dlo + 1);
-
-			for (int i = 0; i < dist.length; i++) {
-				dist[i][0] = f;
-				dist[i][1] = dhi - i * every;
-				dist[i][2] = Ladder.molecularWeight(dist[i][1]);
-			}
-			fitter.setFragmentDistribution(dist);
+			fitter.setFragmentDistribution(FragmentDistribution.uniform(dlo, dhi,
+				every));
 		}
 		else {
-			final String filename = "sample-distributions/" + cmbBoxDist
+			final String filename = FragmentDistribution.FOLDER + cmbBoxDist
 				.getSelectedItem() + ".txt";
 			final double[][] dist = readDistFile(filename);
 			if (dist == null) cmbBoxDist.setSelectedIndex(0);

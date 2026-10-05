@@ -4,6 +4,7 @@ import static gellanesfit.TestProfiles.band;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -51,31 +52,14 @@ public class ContinuumFitTest {
 		return 100 + 250 * (Math.log10(1000 * 607.4 + 157.9) - Math.log10(mw));
 	}
 
-	/** Fragment distribution as the plugin reads it: frequency, bp, MW */
+	/** A bundled fragment distribution, read as the plugin reads it */
 	static double[][] distribution(final String name) throws Exception {
 		final InputStream in = ContinuumFitTest.class.getClassLoader()
-			.getResourceAsStream("sample-distributions/" + name + ".txt");
+			.getResourceAsStream(FragmentDistribution.FOLDER + name + ".txt");
 		assertNotNull(name + " is packaged", in);
-		final List<double[]> rows = new ArrayList<>();
-		double count = 0;
 		try (BufferedReader r = new BufferedReader(new InputStreamReader(in))) {
-			String line;
-			while ((line = r.readLine()) != null) {
-				final String[] w = line.split("\t");
-				try {
-					final int bp = Integer.parseInt(w[0].trim());
-					final int n = Integer.parseInt(w[1].trim());
-					rows.add(new double[] { n, bp, bp * 607.4 + 157.9 });
-					count += n;
-				}
-				catch (final NumberFormatException e) {
-					// header line
-				}
-			}
+			return FragmentDistribution.read(r, w -> fail(name + ": " + w));
 		}
-		for (final double[] row : rows)
-			row[0] /= count;
-		return rows.toArray(new double[0][]);
 	}
 
 	private Fitter fitContinuum() throws Exception {
