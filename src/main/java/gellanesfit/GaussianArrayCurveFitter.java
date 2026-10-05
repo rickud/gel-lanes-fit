@@ -107,6 +107,24 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private static final double HALF_MAX_LIMIT = 0.9;
 
 
+	/**
+	 * A profile's value at position x, interpolated linearly. Beyond the lane,
+	 * it's extrapolated from the first or last segment, and never negative.
+	 */
+	static double profileAt(final PolynomialSplineFunction profile,
+		final double x)
+	{
+		final double[] knots = profile.getKnots();
+		final PolynomialFunction[] segments = profile.getPolynomials();
+		if (x < knots[0]) return FastMath.max(0.0, segments[0].value(x -
+			knots[0]));
+		if (x > knots[knots.length - 1]) {
+			final int n = segments.length - 1;
+			return FastMath.max(0.0, segments[n].value(x - knots[n]));
+		}
+		return profile.value(x);
+	}
+
 	/** Initial guess. */
 	private final SortedParameters initialGuess;
 	/** Maximum number of iterations of the optimization algorithm. */
@@ -372,158 +390,181 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			final double p0 = minY - slope * minX;
 			
 			
-			RealVector normG = new ArrayRealVector();
-			RealVector meanG = new ArrayRealVector();
-			RealVector sdG = new ArrayRealVector();
 			RealVector polyG = new ArrayRealVector(deg + 1);
 			if (deg >= 0) 
 				polyG.setEntry(0,p0);
 			
-			if (fitMode == GaussianArrayCurveFitter.bandMode) {
-				// Local maxima where the peaks are
-				final int[] maximaIdx = findMaxima(points, tolpk, true);
-	
-				// Define a Gaussian at each peak
-				final double[] means = new double[maximaIdx.length];
-				final double[] sds = new double[maximaIdx.length];
-				final double[] norms = new double[maximaIdx.length];
-	
-				for (int m = 0; m < maximaIdx.length; m++) {
-					norms[m] = yvals.getEntry(maximaIdx[m]) - minY;
-					means[m] = xvals.getEntry(maximaIdx[m]);
-				}
-	
-				// estimate sds from maxima and mean
-				for (int m = 0; m < maximaIdx.length; m++) {
-					boolean foundFWHM = false; // Full width at half maximum
-					boolean foundRWHM = false;
-					boolean foundLWHM = false;
-					double LWHM = 0.0;
-					double RWHM = 0.0;
-					double FWHM = (xvals.getMaxValue() - xvals.getMinValue()) / 2;
-	
-					final double yRange = yvals.getEntry(maximaIdx[m]) - minY;
-					double hm = yRange / 2.0; // Actual profile value; incledes offset
-					final int pkPos = maximaIdx[m];
-	
-					final double inc = HALF_MAX_STEP;
-					double peakDistance;
-					if (maximaIdx.length == 1) {
-						peakDistance = FastMath.min(means[0] - minX, maxX - means[0]);
-					}
-					else if (m == 0) {
-						peakDistance = FastMath.min(means[m + 1] - means[m], means[m] - minX);
-					}
-					else if (m + 1 == maximaIdx.length) {
-						peakDistance = FastMath.min(maxX - means[m], means[m] - means[m - 1]);
-					}
-					else {
-						peakDistance = FastMath.min(means[m + 1] - means[m], means[m] -
-							means[m - 1]);
-					}
-	
-					while ((!foundFWHM || FWHM > peakDistance) && hm * inc < HALF_MAX_LIMIT * yRange) {
-						foundFWHM = false;
-						foundRWHM = false;
-						foundLWHM = false;
-						// Right side, check 3 consecutive points for smoothing
-						int p = 0;
-						while (pkPos + p + 2 < xvals.getDimension() && !foundRWHM) {
-							if (yvals.getEntry(pkPos + p) < (hm + minY) && yvals.getEntry(
-								pkPos + p + 1) < (hm + minY) && yvals.getEntry(pkPos + p +
-									2) < (hm + minY))
-							{
-								foundRWHM = true;
-								RWHM = xvals.getEntry(pkPos + p) - means[m];
-							}
-							p++;
-						}
-	
-						// Left side, check 3 consecutive points for smoothing
-						p = 0;
-						while (pkPos - p - 2 >= 0 && !foundLWHM) {
-							if (yvals.getEntry(pkPos - p) < (hm + minY) && yvals.getEntry(
-								pkPos - p - 1) < (hm + minY) && yvals.getEntry(pkPos - p -
-									2) < (hm + minY))
-							{
-								foundLWHM = true;
-								LWHM = means[m] - xvals.getEntry(pkPos - p);
-							}
-							p++;
-						}
-	
-						if (foundLWHM && foundRWHM) {
-							foundFWHM = true;
-							FWHM = 2 * FastMath.min(LWHM, RWHM);
-						}
-	
-						// Do another round with larger hm
-						hm = hm * inc;
-					}
-					sds[m] = FWHM / (2 * FastMath.sqrt(2 * FastMath.log(2)));
-					normG = normG.append(norms[m]);
-					meanG = meanG.append(means[m]);
-					sdG   = sdG.append(sds[m]);
-				}
-			}
-			else if (fitMode == continuumMode) {
-				final RealVector profile = yvals.mapSubtractToSelf(yvals.getMinValue()*polyOffset);
-				
-				PolynomialSplineFunction pr = new LinearInterpolator()
-						.interpolate(xvals.toArray(), profile.toArray());
+			if (fitMode == bandMode) return guessBands(points, xvals, yvals, polyG,
+				tolpk);
+			if (fitMode == continuumMode) return guessFragments(xvals, yvals, polyG);
+			return new SortedParameters(polyG, new ArrayRealVector(),
+				new ArrayRealVector(), new ArrayRealVector());
+		}
 
-				// Use the stored distribution as a guess
-				// fragmentDistribution[:][0] = Frequency
-				// fragmentDistribution[:][1] = Length (bp)
-				// fragmentDistribution[:][2] = MW
-	
-				final double[] meanLadder = new double[ladderPeaks.size()];
-				final double[] sdLadder = new double[ladderPeaks.size()];
-				for (int p = 0; p < ladderPeaks.size(); p++) {
-					meanLadder[p] = ladderPeaks.get(p).getMean();
-					sdLadder[p] = ladderPeaks.get(p).getSigma();
+		/**
+		 * Banded starting guess: a Gaussian at each band found by
+		 * {@link #findMaxima}, its height measured from the lane's minimum and
+		 * its width from where the band falls to half its height.
+		 */
+		private SortedParameters guessBands(final WeightedObservedPoint[] points,
+			final RealVector xvals, final RealVector yvals, final RealVector polyG,
+			final double tolpk)
+		{
+			final double minX = xvals.getMinValue();
+			final double maxX = xvals.getMaxValue();
+			final double minY = yvals.getMinValue();
+			RealVector normG = new ArrayRealVector();
+			RealVector meanG = new ArrayRealVector();
+			RealVector sdG = new ArrayRealVector();
+			// Local maxima where the peaks are
+			final int[] maximaIdx = findMaxima(points, tolpk, true);
+
+			// Define a Gaussian at each peak
+			final double[] means = new double[maximaIdx.length];
+			final double[] sds = new double[maximaIdx.length];
+			final double[] norms = new double[maximaIdx.length];
+
+			for (int m = 0; m < maximaIdx.length; m++) {
+				norms[m] = yvals.getEntry(maximaIdx[m]) - minY;
+				means[m] = xvals.getEntry(maximaIdx[m]);
+			}
+
+			// estimate sds from maxima and mean
+			for (int m = 0; m < maximaIdx.length; m++) {
+				boolean foundFWHM = false; // Full width at half maximum
+				boolean foundRWHM = false;
+				boolean foundLWHM = false;
+				double LWHM = 0.0;
+				double RWHM = 0.0;
+				double FWHM = (xvals.getMaxValue() - xvals.getMinValue()) / 2;
+
+				final double yRange = yvals.getEntry(maximaIdx[m]) - minY;
+				double hm = yRange / 2.0; // Actual profile value; incledes offset
+				final int pkPos = maximaIdx[m];
+
+				final double inc = HALF_MAX_STEP;
+				double peakDistance;
+				if (maximaIdx.length == 1) {
+					peakDistance = FastMath.min(means[0] - minX, maxX - means[0]);
 				}
-				final double[] means = interpolateDisplacement(meanLadder, ladderMW, distMatrix.getColumnVector(2));
-				final double[] sds = interpolateSD(meanLadder, sdLadder, means);
-				final RealVector scaledFrequency = distMatrix.getColumnVector(0);
-				for (int s = 0; s < scaledFrequency.getDimension(); s++) {
-					double pv = 0.0;
-					if (means[s] < xvals.getMinValue()) {
-						double pv0 = pr.getPolynomials()[0].value(means[s] - pr.getKnots()[0]);
-						pv = FastMath.max(0.0, pv0);
-					} else if (means[s] > xvals.getMaxValue()) {
-						int n = pr.getPolynomials().length - 1;
-						double pv0 = pr.getPolynomials()[n].value(means[s] - pr.getKnots()[n]);
-						pv = FastMath.max(0.0, pv0);
-					}	else 
-						pv = pr.value(means[s]);
-					
-					scaledFrequency.setEntry(s, scaledFrequency.getEntry(s) * pv);
+				else if (m == 0) {
+					peakDistance = FastMath.min(means[m + 1] - means[m], means[m] - minX);
 				}
-				final RealVector mwArray = distMatrix.getColumnVector(2);
-				RealVector scale = scaledFrequency.ebeMultiply(mwArray.map(new Log()));
-				scale = scale.mapDivide(scale.getMaxValue());
-			
-				List<Integer> fragmentSubset = new ArrayList<>();
-				double margin = (xvals.getMaxValue() - xvals.getMinValue()) *
-					CONTINUUM_MARGIN;
-				for (int i = 0; i < means.length; i++) {
-					if (means[i] > xvals.getMinValue() - margin &&
-							means[i] < xvals.getMaxValue() + margin) {
-						fragmentSubset.add(i);
-						meanG = meanG.append(means[i]);
+				else if (m + 1 == maximaIdx.length) {
+					peakDistance = FastMath.min(maxX - means[m], means[m] - means[m - 1]);
+				}
+				else {
+					peakDistance = FastMath.min(means[m + 1] - means[m], means[m] -
+						means[m - 1]);
+				}
+
+				while ((!foundFWHM || FWHM > peakDistance) && hm * inc < HALF_MAX_LIMIT * yRange) {
+					foundFWHM = false;
+					foundRWHM = false;
+					foundLWHM = false;
+					// Right side, check 3 consecutive points for smoothing
+					int p = 0;
+					while (pkPos + p + 2 < xvals.getDimension() && !foundRWHM) {
+						if (yvals.getEntry(pkPos + p) < (hm + minY) && yvals.getEntry(
+							pkPos + p + 1) < (hm + minY) && yvals.getEntry(pkPos + p +
+								2) < (hm + minY))
+						{
+							foundRWHM = true;
+							RWHM = xvals.getEntry(pkPos + p) - means[m];
+						}
+						p++;
 					}
+
+					// Left side, check 3 consecutive points for smoothing
+					p = 0;
+					while (pkPos - p - 2 >= 0 && !foundLWHM) {
+						if (yvals.getEntry(pkPos - p) < (hm + minY) && yvals.getEntry(
+							pkPos - p - 1) < (hm + minY) && yvals.getEntry(pkPos - p -
+								2) < (hm + minY))
+						{
+							foundLWHM = true;
+							LWHM = means[m] - xvals.getEntry(pkPos - p);
+						}
+						p++;
+					}
+
+					if (foundLWHM && foundRWHM) {
+						foundFWHM = true;
+						FWHM = 2 * FastMath.min(LWHM, RWHM);
+					}
+
+					// Do another round with larger hm
+					hm = hm * inc;
 				}
-				for (int i : fragmentSubset) {
-					sdG = sdG.append(sds[i]);
-					normG = normG.append(scale.getEntry(i));
-				}
-				double scale2  = profile.getMaxValue() 
-						/ FastMath.log(normG.getDimension());
-				normG = normG.mapMultiply(scale2);
+				sds[m] = FWHM / (2 * FastMath.sqrt(2 * FastMath.log(2)));
+				normG = normG.append(norms[m]);
+				meanG = meanG.append(means[m]);
+				sdG   = sdG.append(sds[m]);
 			}
 			return new SortedParameters(polyG, normG, meanG, sdG);
 		}
+
+		/**
+		 * Continuum starting guess: a Gaussian for each fragment of the
+		 * distribution predicted to run within the lane (or within
+		 * {@link #CONTINUUM_MARGIN} of it), at the position and width predicted
+		 * from the ladder, with a height from the profile at that position scaled
+		 * by the fragment's frequency.
+		 */
+		private SortedParameters guessFragments(final RealVector xvals,
+			final RealVector yvals, final RealVector polyG)
+		{
+			RealVector normG = new ArrayRealVector();
+			RealVector meanG = new ArrayRealVector();
+			RealVector sdG = new ArrayRealVector();
+			final RealVector profile = yvals.mapSubtractToSelf(yvals.getMinValue()*polyOffset);
+			
+			PolynomialSplineFunction pr = new LinearInterpolator()
+					.interpolate(xvals.toArray(), profile.toArray());
+
+			// Use the stored distribution as a guess
+			// fragmentDistribution[:][0] = Frequency
+			// fragmentDistribution[:][1] = Length (bp)
+			// fragmentDistribution[:][2] = MW
+
+			final double[] meanLadder = new double[ladderPeaks.size()];
+			final double[] sdLadder = new double[ladderPeaks.size()];
+			for (int p = 0; p < ladderPeaks.size(); p++) {
+				meanLadder[p] = ladderPeaks.get(p).getMean();
+				sdLadder[p] = ladderPeaks.get(p).getSigma();
+			}
+			final double[] means = interpolateDisplacement(meanLadder, ladderMW, distMatrix.getColumnVector(2));
+			final double[] sds = interpolateSD(meanLadder, sdLadder, means);
+			final RealVector scaledFrequency = distMatrix.getColumnVector(0);
+			for (int s = 0; s < scaledFrequency.getDimension(); s++) {
+				final double pv = profileAt(pr, means[s]);
+				
+				scaledFrequency.setEntry(s, scaledFrequency.getEntry(s) * pv);
+			}
+			final RealVector mwArray = distMatrix.getColumnVector(2);
+			RealVector scale = scaledFrequency.ebeMultiply(mwArray.map(new Log()));
+			scale = scale.mapDivide(scale.getMaxValue());
+		
+			List<Integer> fragmentSubset = new ArrayList<>();
+			double margin = (xvals.getMaxValue() - xvals.getMinValue()) *
+				CONTINUUM_MARGIN;
+			for (int i = 0; i < means.length; i++) {
+				if (means[i] > xvals.getMinValue() - margin &&
+						means[i] < xvals.getMaxValue() + margin) {
+					fragmentSubset.add(i);
+					meanG = meanG.append(means[i]);
+				}
+			}
+			for (int i : fragmentSubset) {
+				sdG = sdG.append(sds[i]);
+				normG = normG.append(scale.getEntry(i));
+			}
+			double scale2  = profile.getMaxValue() 
+					/ FastMath.log(normG.getDimension());
+			normG = normG.mapMultiply(scale2);
+			return new SortedParameters(polyG, normG, meanG, sdG);
+		}
+
 
 		/**
 		 * Adapted From: Calculates peak positions of 1D array N.Vischer,
@@ -852,16 +893,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					mean.setEntry(i, mi);
 				}
 				
-				double profv = 0.0;
-				if (mi < xtarget.getMinValue()) {
-					double profv0 = profile.getPolynomials()[0].value(mi - profile.getKnots()[0]);
-					profv = FastMath.max(0.0, profv0);
-				} else if (mi > xtarget.getMaxValue()) {
-					int n = profile.getPolynomials().length - 1;
-					double profv0 = profile.getPolynomials()[n].value(mi - profile.getKnots()[n]);
-					profv = FastMath.max(0.0, profv0);
-				}	else 
-					profv = profile.value(mi);
+				final double profv = profileAt(profile, mi);
 
 				double minNi = FastMath.max((profv - p.value(mi)) * minN, 0.0);
 				double maxNi = FastMath.max(2.0 * minNi, (profv - p.value(mi)) *
