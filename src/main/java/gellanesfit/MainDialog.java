@@ -39,8 +39,6 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -1256,32 +1254,20 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		savedRects = new ArrayList<>();
 		savedCustomPeaks = new ArrayList<>();
 		savedState = null;
-		final String file = "saved-state.bak";
-		final String fullPath = savePath + file;
+		final String fullPath = savePath + SavedStateFile.NAME;
 		log.info("Loading " + fullPath + " ...");
-		try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(
-			fullPath)))
-		{
-			try {
-				while (true) {
-					final Object o = ois.readObject();
-					if (o instanceof Rectangle) {
-						savedRects.add((Rectangle) o);
-					}
-					else if (o instanceof Ladder) {
-						ladder = (Ladder) o;
-						fitter.setLadder(ladder.getMolecularWeights());
-						if (cmbBoxLadderType != null) cmbBoxLadderType.setEnabled(true);
-					}
-					else if (o instanceof FitState) {
-						savedState = (FitState) o;
-						savedCustomPeaks = savedState.customPeaks;
-					}
-				}
+		try (FileInputStream in = new FileInputStream(fullPath)) {
+			final SavedStateFile file = SavedStateFile.read(in);
+			savedRects = file.lanes;
+			if (file.ladder != null) {
+				ladder = file.ladder;
+				fitter.setLadder(ladder.getMolecularWeights());
+				if (cmbBoxLadderType != null) cmbBoxLadderType.setEnabled(true);
 			}
-			catch (final Exception e) {
-				/* Exit */ }
-			ois.close();
+			if (file.state != null) {
+				savedState = file.state;
+				savedCustomPeaks = savedState.customPeaks;
+			}
 			// Old files have no FitState; the mode comes from the preferences
 			final boolean manual = savedState == null ? !auto : !savedState.auto;
 			if (manual) manualROIsFromSavedRects();
@@ -1295,25 +1281,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	private boolean saveState() {
 		if (restoring) return true;
-		final String file = "saved-state.bak";
-		final String fullPath = savePath + file;
+		final String fullPath = savePath + SavedStateFile.NAME;
 		new File(savePath).mkdirs();
 		log.info("Saving to " + fullPath + " ...");
-		try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(
-			fullPath)))
-		{
-			// Keep the manual ROIs while in AUTO mode
-			if (!auto) {
-				savedRects = new ArrayList<>();
-				for (final Roi r : rois)
-					savedRects.add(r.getBounds());
-			}
-			for (final Rectangle r : savedRects)
-				oos.writeObject(r);
-			oos.writeObject(currentState());
-			if (ladder != null) {
-				oos.writeObject(ladder);
-			}
+		// Keep the manual ROIs while in AUTO mode
+		if (!auto) {
+			savedRects = new ArrayList<>();
+			for (final Roi r : rois)
+				savedRects.add(r.getBounds());
+		}
+		try (FileOutputStream out = new FileOutputStream(fullPath)) {
+			new SavedStateFile(savedRects, currentState(), ladder).write(out);
 			return true;
 		}
 		catch (final IOException e) {

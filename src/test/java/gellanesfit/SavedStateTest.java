@@ -3,17 +3,14 @@ package gellanesfit;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.awt.Rectangle;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.EOFException;
 import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Arrays;
 
 import org.junit.Test;
 
@@ -26,34 +23,23 @@ import org.junit.Test;
  */
 public class SavedStateTest {
 
-	/** Reads every object in a saved-state file, as MainDialog.loadState() */
-	private static List<Object> read(final InputStream in) throws Exception {
-		final List<Object> objects = new ArrayList<>();
-		try (ObjectInputStream ois = new ObjectInputStream(in)) {
-			while (true)
-				objects.add(ois.readObject());
-		}
-		catch (final EOFException e) {
-			// end of file
-		}
-		return objects;
-	}
-
-	private static List<Object> fixture(final String name) throws Exception {
+	private static SavedStateFile fixture(final String name) throws Exception {
 		final InputStream in = SavedStateTest.class.getResourceAsStream(
 			"saved-state/" + name);
 		assertNotNull(name, in);
-		return read(in);
+		try (InputStream i = in) {
+			return SavedStateFile.read(i);
+		}
 	}
 
 	@Test
 	public void readsTheCurrentFormat() throws Exception {
-		final List<Object> objects = fixture("current.bak");
-		assertEquals(5, objects.size());
-		assertEquals(new Rectangle(20, 50, 40, 400), objects.get(0));
-		assertEquals(new Rectangle(120, 55, 40, 395), objects.get(2));
+		final SavedStateFile file = fixture("current.bak");
+		assertEquals(3, file.lanes.size());
+		assertEquals(new Rectangle(20, 50, 40, 400), file.lanes.get(0));
+		assertEquals(new Rectangle(120, 55, 40, 395), file.lanes.get(2));
 
-		final FitState st = (FitState) objects.get(3);
+		final FitState st = file.state;
 		assertEquals(false, st.auto);
 		assertEquals(3, st.nLanes);
 		assertEquals(1, st.ladderLane);
@@ -72,33 +58,34 @@ public class SavedStateTest {
 		assertEquals(120.5, p.getNorm(), 0);
 		assertEquals(3.5, p.getSigma(), 0);
 
-		final Ladder ladder = (Ladder) objects.get(4);
-		assertEquals(Ladder.HILO, ladder.getType());
-		assertArrayEquals(new int[] { 7, 9 }, ladder.getRange());
-		assertEquals(3, ladder.getMolecularWeights().getDimension());
+		assertEquals(Ladder.HILO, file.ladder.getType());
+		assertArrayEquals(new int[] { 7, 9 }, file.ladder.getRange());
+		assertEquals(3, file.ladder.getMolecularWeights().getDimension());
 	}
 
 	@Test
 	public void readsFilesFromBeforeFitStateExisted() throws Exception {
-		final List<Object> objects = fixture("before-fitstate.bak");
-		assertEquals(3, objects.size());
-		assertTrue(objects.get(0) instanceof Rectangle);
-		assertEquals(Ladder.HILO, ((Ladder) objects.get(2)).getType());
+		final SavedStateFile file = fixture("before-fitstate.bak");
+		assertEquals(2, file.lanes.size());
+		assertNull(file.state);
+		assertEquals(Ladder.HILO, file.ladder.getType());
 	}
 
 	@Test
-	public void fitStateRoundTrip() throws Exception {
+	public void roundTrip() throws Exception {
 		final FitState st = new FitState();
 		st.degBG = 3;
 		st.customPeaks.add(new Peak(1, 10, 200, 2));
 		final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-		try (ObjectOutputStream out = new ObjectOutputStream(bytes)) {
-			out.writeObject(st);
-		}
-		final FitState copy = (FitState) read(new ByteArrayInputStream(bytes
-			.toByteArray())).get(0);
-		assertEquals(3, copy.degBG);
-		assertEquals(200, copy.customPeaks.get(0).getMean(), 0);
-		assertEquals(false, copy.showBands);
+		new SavedStateFile(Arrays.asList(new Rectangle(1, 2, 3, 4)), st, null)
+			.write(bytes);
+
+		final SavedStateFile copy = SavedStateFile.read(new ByteArrayInputStream(
+			bytes.toByteArray()));
+		assertEquals(new Rectangle(1, 2, 3, 4), copy.lanes.get(0));
+		assertEquals(3, copy.state.degBG);
+		assertEquals(200, copy.state.customPeaks.get(0).getMean(), 0);
+		assertEquals(false, copy.state.showBands);
+		assertNull(copy.ladder);
 	}
 }
