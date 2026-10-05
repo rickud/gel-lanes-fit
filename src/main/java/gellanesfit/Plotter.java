@@ -47,6 +47,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -101,6 +102,8 @@ import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 
 class Plotter extends JFrame implements ChartMouseListener {
+
+	private static final long serialVersionUID = 1L;
 
 	private final double SW = IJ.getScreenSize().getWidth();
 	private final double SH = IJ.getScreenSize().getHeight();
@@ -414,7 +417,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 		final String yLabel = "Grayscale Value";
 		final XYSeriesCollection dataset = new XYSeriesCollection();
 		XYPlot thePlot = new XYPlot();
-		profile.setKey(String.format("%d", DataSeries.PROFILE));
 		dataset.addSeries(profile);
 		boolean found = false;
 		for (final ChartPanel c : chartPanels) {
@@ -491,7 +493,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 			final int plotNumber = Integer.parseInt(p.getChart().getTitle().getText()
 				.substring(5));
 			if (plotNumber == ln) {
-				int gcount = 0;
 				final JFreeChart c = p.getChart();
 				final XYPlot pl = c.getXYPlot();
 
@@ -522,18 +523,9 @@ class Plotter extends JFrame implements ChartMouseListener {
 					if (d.getLane() == ln) {
 						if (d.getItemCount() > 0) {
 							final int k = d.getType();
-							String key = "";
-							if (k == DataSeries.GAUSS_BG) {
-								key = String.format("%d", k + gcount);
-								gcount++;
-							}
-							else {
-								key = String.format("%d", k);
-							}
-							d.setKey(key);
 							dataset.addSeries(d);
 							pl.setSeriesRenderingOrder(SeriesRenderingOrder.FORWARD);
-							final int seriesIdx = dataset.getSeriesIndex(key);
+							final int seriesIdx = dataset.getSeriesIndex(d.getKey());
 							final XYLineAndShapeRenderer renderer =
 								(XYLineAndShapeRenderer) pl.getRenderer();
 							renderer.setSeriesShapesVisible(seriesIdx, false);
@@ -708,12 +700,12 @@ class Plotter extends JFrame implements ChartMouseListener {
 				e.printStackTrace();
 			}
 
-			try { // Save PDF
+			// Save PDF
+			try (FileOutputStream pdf = new FileOutputStream(plotfile + ".pdf")) {
 				final Rectangle ps = new Rectangle((float) x, (float) y);
 				final com.itextpdf.text.Document doc = new com.itextpdf.text.Document(
 					ps, 20, 20, 20, 20);
-				final PdfWriter writer = PdfWriter.getInstance(doc,
-					new FileOutputStream(plotfile + ".pdf"));
+				final PdfWriter writer = PdfWriter.getInstance(doc, pdf);
 				doc.open();
 				final PdfContentByte cb = writer.getDirectContent();
 				final PdfTemplate t = cb.createTemplate((float) x, (float) y);
@@ -827,6 +819,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 
 	private class LegendItems extends LegendItemCollection {
 
+		private static final long serialVersionUID = 1L;
+
 		public LegendItems() {
 			super();
 		}
@@ -842,6 +836,8 @@ class Plotter extends JFrame implements ChartMouseListener {
 }
 
 class VerticalMarker extends ValueMarker {
+
+	private static final long serialVersionUID = 1L;
 
 	// Possible types
 	final static int VMARK = 0; // Vertical Position
@@ -879,6 +875,15 @@ class VerticalMarker extends ValueMarker {
 
 class DataSeries extends XYSeries implements Comparable<DataSeries> {
 
+	private static final long serialVersionUID = 1L;
+
+	// Series in a chart's dataset need unique keys; they aren't displayed
+	private static final AtomicLong keys = new AtomicLong();
+
+	private static String uniqueKey(final int type) {
+		return type + "-" + keys.incrementAndGet();
+	}
+
 	private final String name; // Name for Legend
 	private final int lane; // Reference
 	private final int type; // Type of function
@@ -894,7 +899,7 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 	public DataSeries(final String name, final int lane, final int type,
 		final RealVector x, final RealVector y, final Color color)
 	{
-		super(type);
+		super(uniqueKey(type));
 		this.name = name;
 		this.lane = lane;
 		this.type = type;
@@ -914,7 +919,7 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 		final RealVector x, final UnivariateFunction[] function,
 		final Color color)
 	{
-		super(type);
+		super(uniqueKey(type));
 		this.name = name;
 		this.lane = lane;
 		this.type = type;
@@ -936,7 +941,7 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 	public DataSeries(final String name, final int lane, final int type,
 		final RealVector x, final UnivariateFunction function, final Color color)
 	{
-		super(type);
+		super(uniqueKey(type));
 		this.name = name;
 		this.lane = lane;
 		this.type = type;

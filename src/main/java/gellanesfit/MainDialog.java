@@ -118,6 +118,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	SeriesChangeListener, MouseMotionListener, MouseListener, MouseWheelListener,
 	WindowListener
 {
+	private static final long serialVersionUID = 1L;
 
 	@Parameter
 	private LogService log;
@@ -855,12 +856,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private JSlider makeTitledSlider(final String string, final Color color,
-		final int minVal, final int maxVal, int val)
+		final int minVal, final int maxVal, final int val)
 	{
-		if (val < minVal) val = minVal;
-		if (val > maxVal) val = maxVal;
 		final JSlider slider = new JSlider(SwingConstants.HORIZONTAL, minVal,
-			maxVal, val);
+			maxVal, Math.min(Math.max(val, minVal), maxVal));
 		final TitledBorder tb = new TitledBorder(BorderFactory.createEtchedBorder(),
 			// empty,
 			"", TitledBorder.CENTER, TitledBorder.BELOW_TOP, new Font("Sans",
@@ -904,7 +903,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		if (!auto) {
 			// Housekeeping: Sort the rois based on POSITION and remove null
 			// elements
-			final Comparator<Roi> roiNameComparator = new Comparator<Roi>() {
+			final Comparator<Roi> roiNameComparator = new Comparator<>() {
 
 				@Override
 				public int compare(final Roi r1, final Roi r2) {

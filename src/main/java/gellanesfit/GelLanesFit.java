@@ -21,6 +21,7 @@ package gellanesfit;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.util.Enumeration;
@@ -48,7 +49,6 @@ import net.imagej.ImageJ;
 
 @Plugin(type = Command.class, headless = true,
 	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
-@SuppressWarnings("ucd")
 public class GelLanesFit implements Command {
 
 	@Parameter
@@ -120,9 +120,8 @@ public class GelLanesFit implements Command {
 			final Enumeration<URL> resources = getClass().getClassLoader()
 				.getResources("META-INF/MANIFEST.MF");
 			while (resources.hasMoreElements()) {
-				try {
-					final Manifest manifest = new Manifest(resources.nextElement()
-						.openStream());
+				try (InputStream in = resources.nextElement().openStream()) {
+					final Manifest manifest = new Manifest(in);
 					// check that this is your manifest and do what you need or get the
 					// next one
 					final Attributes a = manifest.getMainAttributes();

@@ -64,7 +64,6 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private static final int bandMode = 0;
 	private static final int continuumMode = 1;
 	private static final long RANDOM_SEED = 20170213L;
-	private static final double sd2FWHM = 2 * FastMath.sqrt(2 * FastMath.log(2));
 	
 
 	/** Initial guess. */
@@ -269,7 +268,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				unsorted);
 
 			final Comparator<WeightedObservedPoint> cmp =
-				new Comparator<WeightedObservedPoint>()
+				new Comparator<>()
 			{
 
 					/** {@inheritDoc} */
@@ -489,19 +488,19 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 * 13-sep-2013
 		 *
 		 * @param x Array containing peaks.
-		 * @param tolerance Depth of a qualified valley must exceed tolerance.
+		 * @param depth Depth of a qualified valley must exceed depth.
 		 *          Tolerance must be >= 0. Flat tops are marked at their centers.
 		 * @param includeEnds If 'false', a peak is only accepted if it is separated
 		 *          by two qualified valleys. If 'true', a peak is also accepted if
 		 *          separated by one qualified valley and by a border.
 		 * @return Positions of peaks, sorted with decreasing amplitude
 		 */
-		private int[] findMaxima(final WeightedObservedPoint[] x, double tolerance,
+		private int[] findMaxima(final WeightedObservedPoint[] x, final double depth,
 			final boolean includeEnds)
 		{
 			final int len = x.length;
 			if (len < 2) return new int[0];
-			if (tolerance < 0) tolerance = 0;
+			final double tolerance = FastMath.max(depth, 0);
 			int[] maxPositions = new int[len];
 			double max = x[0].getY();
 			double min = x[0].getY();
@@ -632,7 +631,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private final double areaDrift;
 		private RealVector maxMeanDiff = new ArrayRealVector();
 
-		private final double maxX, minX, maxY, minY, margin;
+		private final double maxX, minX, margin;
 		private final double minN;
 		private double minSD;
 		private double maxSD;
@@ -662,8 +661,6 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			else this.margin = 0.0;
 			minX = this.xtarget.getMinValue() - margin;
 			maxX = this.xtarget.getMaxValue() + margin;
-			minY = this.ytarget.getMinValue();
-			maxY = this.ytarget.getMaxValue();
 
 			maxD1 = polyDerivative;
 			minD1 = -polyDerivative;
@@ -962,7 +959,6 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 	@Override
 	public double value(final double x) {
 		double output = 0;
-		final int degPoly = (int) sp.getPoly().getEntry(0);
 		for (int i = 0; i < sp.getNorm().getDimension(); i++) {
 			output += new Gaussian( sp.getNorm().getEntry(i),
 															sp.getMean().getEntry(i), 
