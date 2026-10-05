@@ -50,6 +50,8 @@ import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.DiagonalMatrix;
 import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.linear.RealVector;
+import org.apache.commons.math3.random.RandomGenerator;
+import org.apache.commons.math3.random.Well19937c;
 import org.apache.commons.math3.stat.descriptive.moment.Mean;
 import org.apache.commons.math3.stat.descriptive.moment.Variance;
 import org.apache.commons.math3.util.FastMath;
@@ -61,6 +63,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		new GaussianArray.Parametric();
 	private static final int bandMode = 0;
 	private static final int continuumMode = 1;
+	private static final long RANDOM_SEED = 20170213L;
 	private static final double sd2FWHM = 2 * FastMath.sqrt(2 * FastMath.log(2));
 	
 
@@ -637,6 +640,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private final double maxD1;
 		private final double polyOffset;
 		private final PolynomialSplineFunction profile;
+		// Fixed seed: the same data always gives the same Continuum fit
+		private final RandomGenerator random = new Well19937c(RANDOM_SEED);
 
 		private GaussianArrayParameterValidator(final int fitMode,
 			final SortedParameters iniSP, final double[] xtarget,
@@ -843,7 +848,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					System.out.println(outStr);
 //					double mu = meanRatio;
 					sigma = areaDrift;
-					LogNormalDistribution logNormal = new LogNormalDistribution(mu, sigma);
+					LogNormalDistribution logNormal = new LogNormalDistribution(random,
+						mu, sigma);
 					norm = new ArrayRealVector();
 					for (int i = 0; i < area.getDimension(); i++) {
 						norm = norm.append(logNormal.sample());
