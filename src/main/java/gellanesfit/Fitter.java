@@ -64,6 +64,8 @@ class Fitter {
 
 	public static final double peakDistanceTol = 2;
 	public static final double sd2FWHM = 2 * FastMath.sqrt(2 * FastMath.log(2));
+	/** The background stays below this fraction of the lane's lowest intensity */
+	private static final double BACKGROUND_CEILING = 0.98;
 
 	private int degBG;
 	private double tolPK, areaDrift, sdDrift, polyDerivative, polyOffset;
@@ -92,7 +94,7 @@ class Fitter {
 		this.allGuessList = new ArrayList<>();
 		this.allFittedList = new ArrayList<>();
 		this.allCustomList = new ArrayList<>();
-		this.polyOffset = 0.98;
+		this.polyOffset = BACKGROUND_CEILING;
 	}
 
 	private List<Peak> arrayToPeaks(final int ln, final double[] param) {

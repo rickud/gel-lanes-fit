@@ -1165,7 +1165,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		for (int i = 0; i < fragmentLength.size(); i++) {
 			out[i][0] = fragmentFrequency.get(i);
 			out[i][1] = fragmentLength.get(i);
-			out[i][2] = fragmentLength.get(i) * 607.4 + 157.9; // MW
+			out[i][2] = Ladder.molecularWeight(fragmentLength.get(i));
 			count = count + fragmentFrequency.get(i);
 		}
 		for (int i = 0; i < fragmentLength.size(); i++) {
@@ -1879,7 +1879,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			for (int i = 0; i < dist.length; i++) {
 				dist[i][0] = f;
 				dist[i][1] = dhi - i * every;
-				dist[i][2] = dist[i][1] * 607.4 + 157.9; // MW;
+				dist[i][2] = Ladder.molecularWeight(dist[i][1]);
 			}
 			fitter.setFragmentDistribution(dist);
 		}
@@ -2097,6 +2097,16 @@ class Ladder implements Serializable {
 			1500, 1000, 700, 500, 400, 300, 200, 100, 50, 25 });
 	private RealVector custom_bp = new ArrayRealVector();
 	
+	/** Average molecular weight of a base pair of double-stranded DNA, Da */
+	private static final double DALTONS_PER_BP = 607.4;
+	/** Molecular weight of the two ends of a double-stranded fragment, Da */
+	private static final double END_DALTONS = 157.9;
+
+	/** Molecular weight of a double-stranded DNA fragment, in Da */
+	static double molecularWeight(final double bp) {
+		return bp * DALTONS_PER_BP + END_DALTONS;
+	}
+
 	static final int HILO        = 1;
 	static final int BP100       = 2;
 	static final int QUICKLOAD   = 3;
@@ -2182,7 +2192,7 @@ class Ladder implements Serializable {
 		else if (this.type == CUSTOM) {
 			bp = custom_bp.getSubVector(ladderRange[0], nel);
 		}
-		final RealVector mw = bp.mapMultiply(607.4).mapAdd(157.9);
+		final RealVector mw = bp.map(Ladder::molecularWeight);
 		return mw;
 	}
 

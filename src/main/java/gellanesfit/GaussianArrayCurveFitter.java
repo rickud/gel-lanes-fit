@@ -64,7 +64,39 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private static final int bandMode = 0;
 	private static final int continuumMode = 1;
 	private static final long RANDOM_SEED = 20170213L;
-	
+
+	// Limits of the fit. Positions, heights and widths are relative to the
+	// starting guess unless noted.
+
+	/** Banded: a band may move this fraction of the distance to its neighbour */
+	private static final double BAND_POSITION_DRIFT = 0.8;
+	/** Continuum: a fragment may move this fraction of the fragment spacing */
+	private static final double FRAGMENT_POSITION_DRIFT = 0.1;
+	/** Lowest peak height, as a fraction of the profile above the background */
+	private static final double MIN_HEIGHT = 0.01;
+	/** Highest peak height, as a multiple of the profile above the background */
+	private static final double MAX_HEIGHT = 2.0;
+	/** Banded: narrowest and widest band, as multiples of the starting width */
+	private static final double BAND_MIN_WIDTH = 0.4;
+	private static final double BAND_MAX_WIDTH = 2.0;
+	/**
+	 * Continuum: fragments predicted up to this fraction of the lane length
+	 * beyond either end are fitted too, so edge bands fit properly
+	 */
+	private static final double CONTINUUM_MARGIN = 0.2;
+	/**
+	 * The background stays above this fraction of its ceiling (the ceiling
+	 * being the lane's lowest intensity times polyOffset)
+	 */
+	private static final double BACKGROUND_FLOOR = 0.4;
+	/**
+	 * Starting band widths: the half-maximum level is raised by this factor
+	 * while the width found is wider than the gap to the next band, but not
+	 * above HALF_MAX_LIMIT of the band's height
+	 */
+	private static final double HALF_MAX_STEP = 1.05;
+	private static final double HALF_MAX_LIMIT = 0.9;
+
 
 	/** Initial guess. */
 	private final SortedParameters initialGuess;
@@ -361,7 +393,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					double hm = yRange / 2.0; // Actual profile value; incledes offset
 					final int pkPos = maximaIdx[m];
 	
-					final double inc = 1.05;
+					final double inc = HALF_MAX_STEP;
 					double peakDistance;
 					if (maximaIdx.length == 1) {
 						peakDistance = FastMath.min(means[0] - minX, maxX - means[0]);
@@ -377,7 +409,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 							means[m - 1]);
 					}
 	
-					while ((!foundFWHM || FWHM > peakDistance) && hm * inc < 0.9 * yRange) {
+					while ((!foundFWHM || FWHM > peakDistance) && hm * inc < HALF_MAX_LIMIT * yRange) {
 						foundFWHM = false;
 						foundRWHM = false;
 						foundLWHM = false;
@@ -460,7 +492,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				scale = scale.mapDivide(scale.getMaxValue());
 			
 				List<Integer> fragmentSubset = new ArrayList<>();
-				double margin = (xvals.getMaxValue() - xvals.getMinValue() )* 0.2;
+				double margin = (xvals.getMaxValue() - xvals.getMinValue()) *
+					CONTINUUM_MARGIN;
 				for (int i = 0; i < means.length; i++) {
 					if (means[i] > xvals.getMinValue() - margin &&
 							means[i] < xvals.getMaxValue() + margin) {
@@ -652,7 +685,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 			this.polyOffset = polyOffset; // proportion of the profile value
 			if (fitMode == GaussianArrayCurveFitter.continuumMode)
-				this.margin = (this.xtarget.getMaxValue() - this.xtarget.getMinValue()) * 0.2;
+				this.margin = (this.xtarget.getMaxValue() - this.xtarget
+					.getMinValue()) * CONTINUUM_MARGIN;
 			else this.margin = 0.0;
 			minX = this.xtarget.getMinValue() - margin;
 			maxX = this.xtarget.getMaxValue() + margin;
@@ -660,10 +694,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			maxD1 = polyDerivative;
 			minD1 = -polyDerivative;
 			this.profile = new LinearInterpolator().interpolate(xtarget, ytarget);
-			double mds = 0.8; // Distance from guess peak mean, as fraction of initial inter-peak distance
-			if (fitMode == continuumMode) {
-				mds = 0.1;
-			}
+			final double mds = fitMode == continuumMode ? FRAGMENT_POSITION_DRIFT
+				: BAND_POSITION_DRIFT;
 			if (iniSP.getMean().getDimension() > 1) {
 				maxMeanDiff = iniSP.getMean().getSubVector(1, iniSP.getMean().getDimension() - 1).subtract(
 					iniSP.getMean().getSubVector(0, iniSP.getMean().getDimension() - 1)).map(new Abs())
@@ -675,10 +707,10 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				maxMeanDiff = maxMeanDiff.append((maxX - minX) / 2.0);
 			}
 
-			minN = 0.01; // proportion of the profile-bg difference
+			minN = MIN_HEIGHT;
 
-			minSD = 0.4; // proportion of sd0[i]
-			maxSD = 2.0;
+			minSD = BAND_MIN_WIDTH;
+			maxSD = BAND_MAX_WIDTH;
 			if (fitMode == continuumMode) { // controllable from interface
 				minSD = 1/sdDrift;
 				maxSD = sdDrift;
@@ -708,7 +740,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			// Polynomyal parameters
 			if (poly.getDimension() > 0) {
 				final double tolHigh = ytarget.getMinValue() * polyOffset;
-				final double tolLow = 0.4 * tolHigh;
+				final double tolLow = BACKGROUND_FLOOR * tolHigh;
 
 				p = new PolynomialFunction(poly.toArray());
 				PolynomialFunction p1 = p.polynomialDerivative();
@@ -787,7 +819,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 					profv = profile.value(mi);
 
 				double minNi = FastMath.max((profv - p.value(mi)) * minN, 0.0);
-				double maxNi = FastMath.max(2.0*minNi, (profv - p.value(mi))*2.0);
+				double maxNi = FastMath.max(2.0 * minNi, (profv - p.value(mi)) *
+					MAX_HEIGHT);
 				if (ni < minNi)
 					norm.setEntry(i, minNi);
 				if (ni > maxNi) 
