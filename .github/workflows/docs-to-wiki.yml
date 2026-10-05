@@ -1,0 +1,73 @@
+# Publishes the documentation in docs/ to the repository's wiki.
+#
+# docs/<name>.md becomes the wiki page <Name> (user-guide.md -> User-Guide),
+# with links between the docs rewritten to wiki page names. The files in
+# docs/wiki/ (Home.md, _Sidebar.md) are copied as they are. The wiki is
+# generated: edit docs/ and let this workflow update it.
+
+name: Publish docs to the wiki
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'docs/**'
+      - '.github/workflows/docs-to-wiki.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: wiki
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the wiki
+        run: >
+          git clone --depth 1
+          "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.wiki.git"
+          wiki
+
+      - name: Copy the docs into the wiki
+        run: |
+          set -euo pipefail
+          # user-guide.md -> User-Guide
+          page() {
+            basename "$1" .md | awk -F- -v OFS=- \
+              '{ for (i = 1; i <= NF; i++) $i = toupper(substr($i, 1, 1)) substr($i, 2) } 1'
+          }
+
+          # Rewrite links such as (user-guide.md#installing) to (User-Guide#installing)
+          links=()
+          for f in docs/*.md; do
+            name=$(basename "$f")
+            links+=(-e "s#](${name//./\\.}#]($(page "$f")#g")
+          done
+
+          for f in docs/*.md; do
+            sed "${links[@]}" "$f" > "wiki/$(page "$f").md"
+          done
+          cp docs/wiki/*.md wiki/
+
+          # Pages from before the user guide, which it replaces
+          git -C wiki rm -q --ignore-unmatch Installation.md Usage.md
+
+      - name: Publish
+        run: |
+          set -euo pipefail
+          cd wiki
+          git add -A
+          if git diff --cached --quiet; then
+            echo "The wiki is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -q -m "Update from ${GITHUB_REPOSITORY}@${GITHUB_SHA::7}"
+          git push
