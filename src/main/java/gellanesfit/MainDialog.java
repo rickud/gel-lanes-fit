@@ -1,13 +1,10 @@
-/**
- * Gel Lanes Fit
- * GelLanesFit.java
- * author: Rick Ziraldo, 2017
- * The /University of Texas at Dallas, Richardson, TX
- * http://www.utdallas.edu
+/*
+ * Gel Lanes Fit - MainDialog.java
+ * Author: Rick Ziraldo, 2017
+ * The University of Texas at Dallas, Richardson, TX
  *
- * The source code is maintained and made available on GitHub
- * https://github.com/rickud/gauss-curve-fit
- *
+ * Licensed under the GNU Affero General Public License v3.0; see LICENSE.
+ * Source: https://github.com/rickud/gel-lanes-fit
  */
 
 package gellanesfit;
@@ -114,6 +111,12 @@ import ij.gui.TextRoi;
 import ij.io.FileInfo;
 import ij.io.FileSaver;
 
+/**
+ * The plugin's main window, and the controller of an analysis: the lanes drawn
+ * on the image, the ladder and fit settings, the fit itself (run through
+ * {@link Fitter} and shown in the {@link Plotter}), custom peaks, and the saved
+ * state of the image (saved-state.bak in the image's data folder).
+ */
 class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	SeriesChangeListener, MouseMotionListener, MouseListener, MouseWheelListener,
 	WindowListener
@@ -2069,6 +2072,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 }
 
+/**
+ * A size ladder: its band names and sizes, and the range of bands visible in
+ * the ladder lane. Built-in types (Hi-Lo, 100bp, Quick-Load, Tapestation) or
+ * CUSTOM, loaded from a text file with one size in bp per line. It's saved in
+ * saved-state.bak, so its fields must stay compatible (see SavedStateTest).
+ */
 class Ladder implements Serializable {
 
 	// Pinned to the value computed before Ladder changed, so saved states still load

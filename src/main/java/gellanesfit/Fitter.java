@@ -1,13 +1,10 @@
-/**
- * Gel Lanes Fit
- * GelLanesFit.java
- * author: Rick Ziraldo, 2017
- * The /University of Texas at Dallas, Richardson, TX
- * http://www.utdallas.edu
+/*
+ * Gel Lanes Fit - Fitter.java
+ * Author: Rick Ziraldo, 2017
+ * The University of Texas at Dallas, Richardson, TX
  *
- * The source code is maintained and made available on GitHub
- * https://github.com/rickud/gauss-curve-fit
- *
+ * Licensed under the GNU Affero General Public License v3.0; see LICENSE.
+ * Source: https://github.com/rickud/gel-lanes-fit
  */
 
 package gellanesfit;
@@ -50,6 +47,21 @@ import org.scijava.plugin.Parameter;
 import gellanesfit.GaussianArrayCurveFitter.ParameterGuesser;
 import ij.measure.ResultsTable;
 
+/**
+ * Fits the lanes' profiles and keeps the results.
+ * <p>
+ * Each lane's profile is modelled as a polynomial background plus a sum of
+ * Gaussian peaks (see {@link GaussianArrayCurveFitter}). In Banded mode the
+ * peaks start at the bands found in the profile; in Continuum mode, at the
+ * positions where the fragment distribution's lengths are expected to run,
+ * predicted from the fitted ladder lane. Custom peaks added by the user replace
+ * or add to the starting guess.
+ * </p>
+ * <p>
+ * Positions and widths are in pixels along the lane, heights in gray values.
+ * The fitter also writes the results table and the LOG summary.
+ * </p>
+ */
 class Fitter {
 
 	@Parameter
@@ -86,6 +98,10 @@ class Fitter {
 	private Array2DRowRealMatrix statMatrix;
 	private List<DataSeries> fittedDistributions;
 
+	/**
+	 * @param context SciJava context, for the log and status services
+	 * @param title the image's title, used to name the results file
+	 */
 	public Fitter(final Context context, final String title) {
 		context.inject(this);
 		this.title = title;
@@ -97,6 +113,10 @@ class Fitter {
 		this.polyOffset = BACKGROUND_CEILING;
 	}
 
+	/**
+	 * The peaks in a fitter parameter array: degree, background, then
+	 * (height, position, width) for each peak.
+	 */
 	private List<Peak> arrayToPeaks(final int ln, final double[] param) {
 		final int gaussStart = (int) param[0] + 2;
 		final List<Peak> peaks = new ArrayList<>();
@@ -106,6 +126,7 @@ class Fitter {
 		return peaks;
 	}
 
+	/** The (height, position, width) triplets of the peaks, in order. */
 	private RealVector peaksToArray(final List<Peak> peaks) {
 		RealVector guessArray = new ArrayRealVector();
 		for (final Peak p : peaks) {
@@ -116,6 +137,13 @@ class Fitter {
 		return guessArray;
 	}
 
+	/**
+	 * Shows the results of every fitted lane in the Results Display table and saves
+	 * it as "Fit of &lt;title&gt;.xls" in {@code savePath}. Lanes without a fit yet
+	 * are skipped. For Continuum fits it also computes each lane's average fragment
+	 * size and rescales the fitted size distribution shown in the LOG.
+	 * @param savePath the image's data folder, ending with a separator
+	 */
 	public void updateResultsTable(final String savePath) {
 		// Results Table Columns
 		final String[] headersB = { "Lane", "Band", "Distance", "Dist. G.",
@@ -292,6 +320,11 @@ class Fitter {
 
 	
 
+	/**
+	 * The starting guess for a lane: the guesser's peaks, with the lane's custom
+	 * peaks replacing the closest guessed peak (in Banded mode, only when within
+	 * {@link #peakDistanceTol} pixels) or added to it.
+	 */
 	private SortedParameters doGuess(final int lane, final ParameterGuesser pg) {
 		// Guess a set of peaks a set of peaks
 		SortedParameters guess = pg.guess();
@@ -335,6 +368,7 @@ class Fitter {
 		return new SortedParameters(poly.append(peaksToArray(peaks)).toArray());
 	}
 
+	/** Area of a Gaussian peak, integrated over the lane's positions. */
 	private double doIntegrate(final RealVector xvals, final double n,
 		final double m, final double s)
 	{
@@ -347,6 +381,10 @@ class Fitter {
 		return area;
 	}
 
+	/**
+	 * Fits the given lanes one after the other, in the current fit mode.
+	 * @return the curves to plot for every lane: background, peaks and fit
+	 */
 	public List<DataSeries> doFit(final List<Integer> lanes) {
 		
 		final ArrayList<DataSeries> in = new ArrayList<>();
@@ -377,6 +415,10 @@ class Fitter {
 		return out;
 	}
 
+	/**
+	 * Fits one lane in the current fit mode.
+	 * @return the curves to plot: background, peaks and fit
+	 */
 	public List<DataSeries> doFit(final int lane) {
 		final List<DataSeries> out = new ArrayList<>();
 		for (final DataSeries d : inputData) {
@@ -387,6 +429,11 @@ class Fitter {
 		return out;
 	}
 
+	/**
+	 * Fits a lane's profile: guesses the peaks, fits them with the background, and
+	 * stores the guessed and fitted peaks and the lane's RMS. Continuum fits use
+	 * the fitted peaks of the reference (ladder) lane.
+	 */
 	private List<DataSeries> doFit(final DataSeries in) {
 		final int lane = in.getLane();
 
@@ -479,6 +526,10 @@ class Fitter {
 		return output;
 	}
 
+	/**
+	 * The LOG summary, in HTML: the fit parameters and each lane's RMS, and for
+	 * Continuum fits the average fragment size.
+	 */
 	public String getSummary() {
 		String s = "" + "<h1>FIT SUMMARY</h1>";
 		s += "<h2>PARAMETERS</h2>";
@@ -518,6 +569,10 @@ class Fitter {
 		return s;
 	}
 
+	/**
+	 * Adds a custom peak, or updates the width of the lane's custom peak within
+	 * {@link #peakDistanceTol} pixels of it.
+	 */
 	public void addCustomPeak(final Peak peak) {
 		boolean found = false;
 		// If close to existing replace
@@ -536,6 +591,11 @@ class Fitter {
 		Collections.sort(allCustomList);
 	}
 
+	/**
+	 * Removes the lane's custom peak within {@link #peakDistanceTol} pixels of the
+	 * given one.
+	 * @return whether a peak was removed
+	 */
 	public boolean removeCustomPeak(final Peak peak) {
 		// Remove from custom list
 		final Iterator<Peak> peakIter = allCustomList.iterator();
@@ -552,6 +612,7 @@ class Fitter {
 		return false;
 	}
 
+	/** Removes all of a lane's custom peaks. */
 	public void resetCustomPeaks(final int lane) {
 		final Iterator<Peak> peakIter = allCustomList.iterator();
 		while (peakIter.hasNext()) {
@@ -559,6 +620,7 @@ class Fitter {
 		}
 	}
 
+	/** Forgets a lane's guessed and fitted peaks; its custom peaks are kept. */
 	public void resetFit(final int lane) {
 		final Iterator<Peak> itFitted = allFittedList.iterator();
 		while (itFitted.hasNext()) {
@@ -575,6 +637,7 @@ class Fitter {
 		Collections.sort(allGuessList);
 	}
 
+	/** Forgets all lanes, peaks and custom peaks. */
 	public void resetAllFitter() {
 		inputData = new ArrayList<>();
 		allGuessList = new ArrayList<>();
@@ -623,10 +686,15 @@ class Fitter {
 		return null;
 	}
 
+	/** Degree of the background polynomial (Polynomial Degree). */
 	public void setDegBG(final int degBG) {
 		this.degBG = degBG;
 	}
 
+	/**
+	 * Sets the lanes' profiles, numbered from 1 in order. Forgets the previous fits
+	 * and drops custom peaks that fall outside their lane.
+	 */
 	public void setInputData(final ArrayList<DataSeries> inputData) {
 		for (DataSeries d : this.inputData) 
 			resetFit(d.getLane());
@@ -652,42 +720,66 @@ class Fitter {
 		}
 	}
 
+	/** {@link #bandMode} or {@link #continuumMode}. */
 	public void setFitMode(final int fitMode) {
 		this.fitMode = fitMode;
 	}
 
+	/** Molecular weights of the ladder bands in the chosen range, in Da. */
 	public void setLadder(final RealVector ladder) {
 		this.ladder = ladder.toArray();
 	}
 
+	/** The ladder lane, whose fitted bands Continuum fits are based on. */
 	public void setReferenceLane(final int ladderLane) {
 		this.ladderLane = ladderLane;
 	}
 
+	/**
+	 * The fragment distribution for Continuum fits: one row per fragment length,
+	 * with its relative frequency, length in bp and molecular weight in Da.
+	 */
 	public void setFragmentDistribution(final double[][] fragmentDistribution) {
 		this.fragmentDistribution = fragmentDistribution;
 	}
 
+	/**
+	 * Limit on the background's average slope, in gray values per pixel (Max
+	 * Polynomial Derivative).
+	 */
 	public void setPolyDerivative(final double polyDerivative) {
 		this.polyDerivative = polyDerivative;
 	}
 
+	/**
+	 * Peak Tolerance: how much a band must stand out to be detected, as a fraction
+	 * of the lane's intensity range.
+	 */
 	public void setTolPK(final double tolPK) {
 		this.tolPK = tolPK;
 	}
 
+	/**
+	 * Area Drift: how far Continuum fits may depart from the distribution's
+	 * proportions.
+	 */
 	public void setAreaDrift(final double areaDrift) {
 		this.areaDrift = areaDrift;
 	}
+	/**
+	 * SD Drift: how far Continuum fits' widths may depart from the ladder-based
+	 * widths, as a factor.
+	 */
 	public void setSDDrift(final double sdDrift) {
 		this.sdDrift = sdDrift;
 	}
 }
 
 /**
- * Class to generate Gaussian Peak objects Could be expanded to represent other
- * types of peaks
- **/
+ * A Gaussian peak in a lane: a band, a fragment, or a custom peak added by the
+ * user. It's saved with custom peaks in saved-state.bak, so its fields must stay
+ * compatible (see SavedStateTest).
+ */
 class Peak implements Comparable<Peak>, Serializable {
 
 	private static final long serialVersionUID = 1L;
@@ -698,6 +790,12 @@ class Peak implements Comparable<Peak>, Serializable {
 	private double norm;
 	private double sd;
 
+	/**
+	 * A peak without a width yet.
+	 * @param lane lane number, from 1
+	 * @param norm height above the background, in gray values
+	 * @param mean position along the lane, in pixels
+	 */
 	public Peak(final int lane, final double norm, final double mean) {
 		this.lane = lane;
 		this.norm = norm;
@@ -705,6 +803,13 @@ class Peak implements Comparable<Peak>, Serializable {
 		this.sd = 0.0;
 	}
 
+	/**
+	 * @param lane lane number, from 1
+	 * @param norm height above the background, in gray values
+	 * @param mean position along the lane, in pixels
+	 * @param sd standard deviation, in pixels (FWHM = sd * {@link Fitter#sd2FWHM})
+	 * @throws NotStrictlyPositiveException if sd isn't positive
+	 */
 	public Peak(final int lane, final double norm, final double mean,
 		final double sd)
 	{
@@ -761,6 +866,10 @@ class Peak implements Comparable<Peak>, Serializable {
 		}
 	}
 
+	/**
+	 * Orders peaks by lane, then by position. Positions are compared as whole
+	 * pixels, so peaks less than a pixel apart compare as equal.
+	 */
 	@Override
 	public int compareTo(final Peak p) {
 		final double m = mean - p.getMean();

@@ -1,13 +1,10 @@
-/**
- * Gel Lanes Fit
- * GelLanesFit.java
- * author: Rick Ziraldo, 2017
- * The /University of Texas at Dallas, Richardson, TX
- * http://www.utdallas.edu
+/*
+ * Gel Lanes Fit - GaussianArrayCurveFitter.java
+ * Author: Rick Ziraldo, 2017
+ * The University of Texas at Dallas, Richardson, TX
  *
- * The source code is maintained and made available on GitHub
- * https://github.com/rickud/gauss-curve-fit
- *
+ * Licensed under the GNU Affero General Public License v3.0; see LICENSE.
+ * Source: https://github.com/rickud/gel-lanes-fit
  */
 
 package gellanesfit;
@@ -56,6 +53,18 @@ import org.apache.commons.math3.stat.descriptive.moment.Mean;
 import org.apache.commons.math3.stat.descriptive.moment.Variance;
 import org.apache.commons.math3.util.FastMath;
 
+/**
+ * Fits a lane's profile with a polynomial background plus a sum of Gaussian
+ * peaks, by Levenberg-Marquardt least squares.
+ * <p>
+ * The parameters are one array: the polynomial's degree, its coefficients
+ * (constant first), then a (height, position, standard deviation) triplet per
+ * peak; {@link SortedParameters} splits it up. After each step, a
+ * {@code GaussianArrayParameterValidator} pulls the parameters back within the
+ * limits defined below and by the user's fit parameters, which keeps the fit
+ * close to its starting guess.
+ * </p>
+ */
 class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 	/** Parametric function to be fitted. */
@@ -130,15 +139,19 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	}
 
 	/**
-	 * Creates a default curve fitter. The initial guess for the parameters will
-	 * be {@link ParameterGuesser} computed automatically, and the maximum number
-	 * of iterations of the optimization algorithm is set to
-	 * {@link Integer#MAX_VALUE}.
+	 * A curve fitter without a start point; set one with
+	 * {@link #withStartPoint(SortedParameters)}, usually from a
+	 * {@link ParameterGuesser}. The number of iterations isn't limited.
 	 *
-	 * @param fitMode
-	 * @param sdDrift 
-	 * @return a curve fitter.
-	 * @see #withStartPoint(final SortedParameters newStart)
+	 * @param fitMode Fitter.bandMode or Fitter.continuumMode
+	 * @param deg degree of the background polynomial
+	 * @param polyDerivative limit on the background's average slope
+	 * @param polyOffset ceiling of the background, as a fraction of the lane's
+	 *          lowest intensity
+	 * @param peakTol Peak Tolerance, in gray values
+	 * @param areaDrift Area Drift (Continuum fits)
+	 * @param sdDrift SD Drift (Continuum fits)
+	 * @return a curve fitter
 	 */
 	static GaussianArrayCurveFitter create(final int fitMode, final int deg,
 		final double polyDerivative, final double polyOffset, final double peakTol, final double areaDrift, final double sdDrift)
@@ -582,6 +595,19 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		}
 	
 	
+		/**
+		 * Predicts where fragments run: migration distance is interpolated linearly
+		 * against log10 of the molecular weight between the ladder bands, and
+		 * extrapolated from the first and last segments beyond them.
+		 * <p>
+		 * Note: reverses {@code y} in place. {@link #interpolateSD} relies on this
+		 * when it is called after it with the same array.
+		 * </p>
+		 * @param y positions of the ladder bands, in pixels, top band first
+		 * @param ladder molecular weights of the ladder bands, in Da
+		 * @param dist molecular weights of the fragments, in Da
+		 * @return the predicted position of each fragment, in pixels
+		 */
 		private double[] interpolateDisplacement(final double[] y,
 			final double[] ladder, final RealVector dist) {
 			final RealVector logs = dist.map(new Log10());
@@ -610,6 +636,15 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			return yi.toArray();
 		}
 	
+		/**
+		 * Predicts fragment widths from a straight line fitted to the ladder bands'
+		 * widths against their positions.
+		 * @param y ladder band positions, as left reversed by
+		 *          {@link #interpolateDisplacement}
+		 * @param sd ladder band standard deviations, top band first
+		 * @param yi positions of the fragments
+		 * @return the predicted standard deviation of each fragment
+		 */
 		private double[] interpolateSD(final double[] y, final double[] sd,
 			final double[] yi)
 		{
@@ -625,6 +660,10 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			return sdi.toArray();
 		}
 
+		/**
+		 * Indexes of the distribution's fragments predicted to run within the given
+		 * range of positions.
+		 */
 		public List<Integer> getUsedFragments(double[] xrange) {
 			final double[] meanLadder = new double[ladderPeaks.size()];
 			for (int p = 0; p < ladderPeaks.size(); p++) {
@@ -717,8 +756,14 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			}
 		}
 
+		/**
+		 * Pulls the parameters back within the fit's limits: the background's slope,
+		 * level and spread; each peak's position, height and width relative to its
+		 * starting guess; and, for Continuum fits, the areas' departure from the
+		 * distribution's proportions (Area Drift), by redrawing them when it's
+		 * exceeded.
+		 */
 		@Override
-		// Set parameter constraints here
 		public RealVector validate(final RealVector param) {
 			// Sort the parameter array the same way as the initial array
 			RealVector poly = new ArrayRealVector();
@@ -874,6 +919,12 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	}
 }
 
+/**
+ * The fit's parameters, split up: the background polynomial's degree and
+ * coefficients (constant first), and each peak's height, position and standard
+ * deviation. {@link #getParameters()} gives them as one array: degree,
+ * coefficients, then a triplet per peak.
+ */
 class SortedParameters {
 	private double[] parameters;
 	private RealVector mean;
@@ -949,6 +1000,10 @@ class SortedParameters {
 	}
 }
 
+/**
+ * The fitted curve: the sum of the Gaussian peaks and the polynomial
+ * background. An empty background (degree -1) counts as zero.
+ */
 class GaussianArray implements UnivariateDifferentiableFunction {
 	// Implements a train of Gaussian peaks
 	// with an optional polynomial background function

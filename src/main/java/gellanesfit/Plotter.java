@@ -1,13 +1,10 @@
-/**
- * Gel Lanes Fit
- * GelLanesFit.java
- * author: Rick Ziraldo, 2017
- * The /University of Texas at Dallas, Richardson, TX
- * http://www.utdallas.edu
+/*
+ * Gel Lanes Fit - Plotter.java
+ * Author: Rick Ziraldo, 2017
+ * The University of Texas at Dallas, Richardson, TX
  *
- * The source code is maintained and made available on GitHub
- * https://github.com/rickud/gauss-curve-fit
- *
+ * Licensed under the GNU Affero General Public License v3.0; see LICENSE.
+ * Source: https://github.com/rickud/gel-lanes-fit
  */
 
 package gellanesfit;
@@ -102,6 +99,13 @@ import ij.ImagePlus;
 import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 
+/**
+ * The Profiles window: one chart per lane, in tabs of four, with the lane's
+ * profile, the fitted background, peaks and fit, the custom peaks, and the
+ * ladder bands as labelled vertical markers. Clicks in a chart add or remove
+ * custom peaks in Edit Custom Peaks mode. Also saves the charts as PNG, PDF and
+ * SVG.
+ */
 class Plotter extends JFrame implements ChartMouseListener {
 
 	private static final long serialVersionUID = 1L;
@@ -817,6 +821,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 		}
 	}
 
+	/** A chart's legend, with one item per kind of curve. */
 	private class LegendItems extends LegendItemCollection {
 
 		private static final long serialVersionUID = 1L;
@@ -835,6 +840,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 
 }
 
+/** A labelled vertical line on a lane's chart, such as a ladder band. */
 class VerticalMarker extends ValueMarker {
 
 	private static final long serialVersionUID = 1L;
@@ -873,6 +879,11 @@ class VerticalMarker extends ValueMarker {
 	}
 }
 
+/**
+ * A curve on a lane's chart: the profile, the background, a peak, the fit, or
+ * the custom peaks. x is the position along the lane in pixels, y the
+ * intensity in gray values.
+ */
 class DataSeries extends XYSeries implements Comparable<DataSeries> {
 
 	private static final long serialVersionUID = 1L;
