@@ -57,6 +57,7 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 ### Saved state
 
 - [ ] **Restore:** close the plugin and start it again on the same image. The lanes, ladder, settings, Show Bands, and custom peaks come back, and the last fit runs on its own.
+- [ ] **Interrupted fit:** start a slow fit (for example Continuum with a Uniform distribution of a few hundred lengths) and quit Fiji while it runs. On the next start the plugin restores the lanes and settings, doesn't repeat the fit, and explains why in a message.
 - [ ] **Old data folder:** an old-style `gel-lanes-fit/<name>/` folder next to an image is moved to `<image name> - Gel Lanes Fit` on first start.
 
 Note anything unexpected in the pull request or merge commit, with the Console output if there was an error.
