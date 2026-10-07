@@ -62,6 +62,7 @@ import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -326,6 +327,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buildSliderPanel();
 		buildButtonPanel();
 		buildSettingsPanel();
+		addToolTips();
 		dialogPanel = new JPanel();
 		dialogPanel.setBackground(Color.darkGray);
 		dialogPanel.setLayout(new BorderLayout());
@@ -534,7 +536,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		buttonPanel.add(buttonFit);
 		buttonOpenFolder = new JButton("Open Data Folder");
-		buttonOpenFolder.setToolTipText(savePath);
 		buttonPanel.add(buttonOpenFolder);
 		buttonClose = new JButton("Close");
 		buttonPanel.add(buttonClose);
@@ -681,6 +682,99 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		c2.gridheight = 1;
 		c2.weighty = 1.0;
 		settingsPanel.add(new JLabel(), c2);
+	}
+
+	private static final String FIT_TIP =
+		"Fits the ladder lane, then every other lane, with the settings above.<br>" +
+			"Results go to the Results Display, the LOG and the data folder.";
+	private static final String STOP_TIP =
+		"Stops the fit within a few seconds; lanes already fitted are kept.";
+
+	/**
+	 * The hover tips of the controls. A parameter's tip is also on its label, and
+	 * on the spinner's text field, where the mouse usually is.
+	 */
+	private void addToolTips() {
+		setToolTip("Places equally sized, evenly spaced lanes,<br>" +
+			"set with Number of Lanes and the sliders below.", buttonAuto);
+		setToolTip("Draw each lane on the image with the rectangle tool.<br>" +
+			"Drag a lane to move or resize it; click inside it to delete it.<br>" +
+			"Suits bent or unevenly spaced lanes.", buttonManual);
+		setToolTip("For distinct bands: one peak per band found in each lane.",
+			buttonBands);
+		setToolTip("For smears, such as fragmented DNA: one peak per length<br>" +
+			"of the fragment distribution chosen below, placed using the ladder.",
+			buttonContinuum);
+
+		setToolTip("How many lanes to place across the image.", labelNLanes,
+			textNLanes);
+		setToolTip("Width of each lane, in pixels. The profile averages<br>" +
+			"the intensity across this width.", sliderW);
+		setToolTip("Height of each lane, in pixels.", sliderH);
+		setToolTip("Space between neighbouring lanes, in pixels.", sliderSp);
+		setToolTip("Distance of the first lane from the image's left edge, in " +
+			"pixels.", sliderHOff);
+		setToolTip("Distance of the lanes from the image's top edge, in pixels.",
+			sliderVOff);
+
+		setToolTip("Shape of the background under each lane, -1 to 15 (default " +
+			"2).<br>" + "-1: no background; 0: constant; 1: straight slope; 2: " +
+			"gentle curve.<br>" + "Higher degrees follow uneven backgrounds but " +
+			"can absorb broad bands.", labelDegBG, textDegBG);
+		setToolTip("Limit on the background's steepness, as its average slope<br>" +
+			"in gray values per pixel, 0 to 10 (default 10). 0 forces a flat " +
+			"background.", labelPolyDerivative, textPolyDerivative);
+		setToolTip("How much a band must stand out to be detected, as a " +
+			"fraction<br>" + "of the lane's intensity range, 0.01 to 1 (default " +
+			"0.1).<br>" + "Lower it to catch faint bands; raise it if noise is " +
+			"detected as bands.<br>" + "Used in Banded fits, and for the ladder " +
+			"lane in both fit types.", labelTolPK, textTolPK);
+		setToolTip("Continuum only. How far the fragments' fitted areas may<br>" +
+			"depart from the distribution's proportions, 0.001 to 1 (default " +
+			"0.1).<br>" + "Small values keep the distribution's shape; larger " +
+			"ones follow the data.", labelAreaDrift, textAreaDrift);
+		setToolTip("Continuum only. How far each fragment's width may depart<br>" +
+			"from the width expected from the ladder, as a factor, 1 to 5 " +
+			"(default 1).<br>" + "1 keeps the widths fixed; 2 allows half to " +
+			"double.", labelSDDrift, textSDDrift);
+
+		setToolTip("Marks the bands on the image: fitted in magenta,<br>" +
+			"guesses in blue, custom peaks in green.", chkBoxBands);
+		setToolTip("The lane with the size ladder. It's fitted first, and its<br>" +
+			"bands label the plots of every lane.", cmbBoxLadderLane);
+		setToolTip("The ladder's band sizes. After choosing it, you pick which<br>" +
+			"of its bands are visible in the ladder lane.", cmbBoxLadderType);
+		setToolTip("Continuum only. The fragment lengths expected in the " +
+			"sample,<br>" + "and how common each one is. More lengths make fits " +
+			"slower.", cmbBoxDist);
+		setToolTip("While on, click in a plot to add a custom peak there,<br>" +
+			"or near a green dot to remove it. Custom peaks are used<br>" +
+			"by the next fit, in addition to or in place of detected bands.",
+			buttonEditPeaks);
+		setToolTip("Removes the custom peaks from the lanes you choose.",
+			buttonResetCustomPeaks);
+
+		setToolTip(FIT_TIP, buttonFit);
+		setToolTip("Opens the folder with this image's results and saved " +
+			"state:<br>" + savePath, buttonOpenFolder);
+		setToolTip("Closes the plugin. Lanes, settings and custom peaks are " +
+			"saved<br>" + "and come back the next time you open this image.",
+			buttonClose);
+	}
+
+	/**
+	 * Sets a hover tip on components; on a spinner also on its text field, which
+	 * otherwise shows none
+	 */
+	private static void setToolTip(final String text,
+		final JComponent... components)
+	{
+		final String html = "<html>" + text + "</html>";
+		for (final JComponent c : components) {
+			c.setToolTipText(html);
+			if (c instanceof JSpinner) ((JSpinner.DefaultEditor) ((JSpinner) c)
+				.getEditor()).getTextField().setToolTipText(html);
+		}
 	}
 
 	/**
@@ -1707,12 +1801,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			editingBeforeFit = buttonEditPeaks.isSelected();
 			if (editingBeforeFit) setEditPeaks(false);
 			buttonFit.setText("Stop");
+			setToolTip(STOP_TIP, buttonFit);
 		}
 		else {
 			for (final Component c : controls)
 				c.setEnabled(enabledBeforeFit.getOrDefault(c, true));
 			if (editingBeforeFit) setEditPeaks(true);
 			buttonFit.setText("Fit");
+			setToolTip(FIT_TIP, buttonFit);
 			buttonFit.setEnabled(true);
 		}
 	}

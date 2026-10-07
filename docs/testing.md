@@ -57,6 +57,7 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 - [ ] **Show Bands:** marks the bands on the image (magenta fitted, blue guesses, green custom) and keeps its state.
 - [ ] **Plots:** zoom with a dragged box; toggling edit mode, fitting and editing peaks keep the zoom. Dragging up and to the left resets the view, with the ladder labels clear of the curves.
 - [ ] **Open Data Folder:** opens the image's data folder.
+- [ ] **Hover tips:** resting the mouse on each control, parameter label and parameter field shows a tip; disabled ones (Area Drift and SD Drift in Banded mode) too. During a fit, the Stop button's tip describes Stop, and Fit's comes back afterwards; Open Data Folder's tip shows the folder's path.
 
 ### Saved state
 
