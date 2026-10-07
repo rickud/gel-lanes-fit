@@ -64,6 +64,35 @@ final class Reference {
 		}
 	}
 
+	/** Compares text exactly, line by line, e.g. a saved results file */
+	static void checkText(final String name, final List<String> actual) {
+		if (Boolean.getBoolean("glf.record")) {
+			record(name, actual);
+			return;
+		}
+		assertEquals(name, String.join("\n", readAll(name)), String.join("\n",
+			actual));
+	}
+
+	private static List<String> readAll(final String name) {
+		final InputStream in = Reference.class.getResourceAsStream("reference/" +
+			name + ".txt");
+		assertNotNull("No reference file for " + name +
+			"; run once with -Dglf.record=true to create it", in);
+		try (BufferedReader r = new BufferedReader(new InputStreamReader(in,
+			StandardCharsets.UTF_8)))
+		{
+			final List<String> lines = new ArrayList<>();
+			String line;
+			while ((line = r.readLine()) != null)
+				lines.add(line);
+			return lines;
+		}
+		catch (final IOException e) {
+			throw new AssertionError(e);
+		}
+	}
+
 	private static List<String> read(final String name) {
 		final InputStream in = Reference.class.getResourceAsStream("reference/" +
 			name + ".txt");

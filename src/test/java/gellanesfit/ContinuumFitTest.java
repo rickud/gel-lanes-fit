@@ -134,5 +134,6 @@ public class ContinuumFitTest {
 			if (row.startsWith("Lane ")) stats.add(row.replace("Lane ", "")
 				.replace("\t", " "));
 		Reference.check("continuum-average-size", stats);
+		Reference.checkText("continuum-results-file", rows);
 	}
 }

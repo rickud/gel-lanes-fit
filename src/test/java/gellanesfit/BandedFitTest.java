@@ -113,5 +113,6 @@ public class BandedFitTest {
 		assertTrue(rows.get(0).startsWith("Lane\tBand\tDistance"));
 		assertEquals("header and 3 bands of lane 1", 4, rows.size());
 		assertTrue(rows.get(1).startsWith("1\t1\t"));
+		Reference.checkText("banded-results-file", rows);
 	}
 }
