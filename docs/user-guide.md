@@ -277,10 +277,27 @@ Continuum fits need a **fragment distribution**: the fragment lengths expected i
 | Distribution | Description |
 |---|---|
 | **AciI-Lambda**, **AciI-Lambda4**, **AciI-Lambda3**, **AciI-Lambda2** | four approximations of the same fragment distribution, an AciI digest of lambda DNA (2 to 1,086 bp), made with decreasing numbers of fragment lengths: 206, 155, 138 and 103. Each length becomes one peak in the fit, so fewer lengths mean fewer peaks to fit. Fitting the same lanes with each variant shows whether a coarser approximation, with fewer fragment lengths, gives a poorer fit or not; compare the lanes' RMS in the LOG. |
-| **Uniform** | every length between a **Lower** and an **Upper** size, in steps of **Every** bp, all equally frequent; the plugin asks for the three values when you choose it |
+| **Uniform** | every length between a **Lower** and an **Upper** size, in steps of **Every** bp, all equally frequent; the plugin asks for the three values when you choose it. A wide range with a small step makes fits slow; see below. |
 | **Ladder** | a fixed list of 22 sizes from 50 bp to 10 kbp (the Hi-Lo and 100bp band sizes), each once; it doesn't follow the ladder you selected |
 
 The distributions are tab-separated text files: a header line, then one line per fragment with its length in base pairs and its number of copies. Further columns are ignored. They're built into the plugin, so adding your own requires rebuilding it.
+
+#### Number of fragments and fitting time
+
+Each fragment length becomes one peak in the fit, with three values to adjust (height, position, width). The time a Continuum fit takes grows much faster than the number of fragments: twice as many fragments can take several times as long. For example, on the sample image `Long_5s.tif`:
+
+| Uniform distribution | Fragment lengths | Time per lane |
+|---|---|---|
+| 100 to 700 bp, every 20 bp | 31 | under a second |
+| 100 to 4,000 bp, every 20 bp | 196 | 10 to 40 seconds |
+
+A Uniform distribution has (**Upper** − **Lower**) ÷ **Every** + 1 lengths. Only the fragments predicted to run within the lane, or within 20 % of its length beyond either end, are fitted, so lengths far outside the lane cost nothing.
+
+To keep fits fast:
+
+- **Use a coarser step:** 100 to 4,000 bp every 50 bp gives 79 lengths, every 100 bp gives 40.
+- **Narrow the range** to the sizes the smear actually covers.
+- **Check whether a finer step helps:** fit the same lanes with two step sizes and compare their RMS in the LOG; if the finer step doesn't lower it, the coarser one is enough.
 
 ## Troubleshooting
 
@@ -342,6 +359,10 @@ Fiji's JavaScript scripting support needs a component that newer Java versions n
 - The **Console** shows the path on a line starting `Data folder:`.
 - On macOS, Finder may list the folder away from the image if the window is grouped or sorted by date, for example under **Today**. Choose **View › Use Groups** to turn grouping off, or sort by name.
 - Finder sometimes doesn't show a folder that was just created or renamed by another program until it refreshes. Go up a folder and back, or press ⇧⌘G and paste the path. If that doesn't help, relaunch Finder: hold ⌥ (Option), right-click the Finder icon in the Dock and choose **Relaunch**.
+
+### A Continuum fit takes a long time
+
+The fit time depends mostly on how many fragment lengths fall within the lanes. A Uniform distribution with a wide range and a small step can have hundreds, and then each lane can take tens of seconds. Use a coarser **Every** step or a narrower range; see [Number of fragments and fitting time](#number-of-fragments-and-fitting-time).
 
 ### "Cannot create the data folder" in the Console
 
