@@ -51,6 +51,7 @@ public class SavedStateTest {
 		assertEquals(5, st.every);
 		assertTrue(st.fitDone);
 		assertTrue(st.showBands);
+		assertEquals("saved before fitRunning existed", false, st.fitRunning);
 		assertEquals(2, st.customPeaks.size());
 		final Peak p = st.customPeaks.get(0);
 		assertEquals(2, p.getLane());
@@ -76,6 +77,7 @@ public class SavedStateTest {
 		final FitState st = new FitState();
 		st.degBG = 3;
 		st.customPeaks.add(new Peak(1, 10, 200, 2));
+		st.fitRunning = true;
 		final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 		new SavedStateFile(Arrays.asList(new Rectangle(1, 2, 3, 4)), st, null)
 			.write(bytes);
@@ -86,6 +88,7 @@ public class SavedStateTest {
 		assertEquals(3, copy.state.degBG);
 		assertEquals(200, copy.state.customPeaks.get(0).getMean(), 0);
 		assertEquals(false, copy.state.showBands);
+		assertTrue(copy.state.fitRunning);
 		assertNull(copy.ladder);
 	}
 }

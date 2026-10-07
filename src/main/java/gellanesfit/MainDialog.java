@@ -168,6 +168,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private boolean auto; // AUTO ROI mode; all lanes same size
 	private boolean selectionUpdate = false; // active updating is off
 	private boolean fitDone = false; // Keep track of whether fit data exists
+	private boolean fitRunning = false; // A fit is under way
 
 	private final String impTitle;
 	private String oldImpTitle; // Stored in Prefs
@@ -767,7 +768,18 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		imp.killRoi();
 		redoProfilePlots();
 		restoring = false;
-		if (savedState != null && savedState.fitDone) {
+		if (savedState != null && savedState.fitRunning) {
+			// The last fit was interrupted: repeating it could hang again
+			log.warn("The last fit didn't finish; it isn't repeated.");
+			SwingUtilities.invokeLater(() -> IJ.showMessage("Gel Lanes Fit",
+				"The last fit of this image didn't finish: Fiji was closed or\n" +
+					"stopped while it was running. It isn't repeated, so that it\n" +
+					"can't hang again. The lanes and settings are restored.\n \n" +
+					"If the fit was slow, check the fit settings before fitting\n" +
+					"again, for example the number of fragment lengths of the\n" +
+					"Uniform distribution."));
+		}
+		else if (savedState != null && savedState.fitDone) {
 			log.info("Repeating the last fit ...");
 			SwingUtilities.invokeLater(this::runFit);
 		}
@@ -1291,6 +1303,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		st.every = every;
 		st.customPeaks = allCustomPeaks();
 		st.fitDone = fitDone;
+		st.fitRunning = fitRunning;
 		st.showBands = chkBoxBands.isSelected();
 		return st;
 	}
@@ -1625,6 +1638,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			fitter.resetFit(l);
 		fitter.setInputData(plotter.getProfiles());
 		fitDone = false;
+		// Saved before fitting: if Fiji is quit or stops during the fit, the
+		// next start won't repeat it (see showWindow)
+		fitRunning = true;
+		saveState();
 
 		chkBoxBands.setEnabled(true);
 		buttonEditPeaks.setEnabled(true);
@@ -1656,6 +1673,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			new MessageDialog(frame, "WARNING", message);
 			plotter.savePlots(savePath);
 			new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
+			fitRunning = false;
+			saveState();
 			return;
 		}
 
@@ -1676,6 +1695,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			{
 				new MessageDialog(frame, "WARNING!",
 					"Fragment distribution not selected");
+				fitRunning = false;
+				saveState();
 				return;
 			}
 		}
@@ -1702,6 +1723,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 		displayLog();
 		new FileSaver(imp).saveAsTiff(savePath + impTitle + ".tif");
+		fitRunning = false;
 		saveState();
 	}
 

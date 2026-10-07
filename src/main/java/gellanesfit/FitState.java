@@ -30,5 +30,10 @@ class FitState implements Serializable {
 	int dlo, dhi, every;
 	List<Peak> customPeaks = new ArrayList<>();
 	boolean fitDone;
+	/**
+	 * A fit had started but not finished when the state was saved; false in
+	 * files saved before it was added
+	 */
+	boolean fitRunning;
 	boolean showBands; // false when loading files saved before it was added
 }
