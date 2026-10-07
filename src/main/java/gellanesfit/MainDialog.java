@@ -149,6 +149,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private static final String OLDIMPTITLE = "oldImpTitle";
 	private static final String SKIPFITWARNING = "skipFitWarning";
 
+	/** Width of the number fields, in characters */
+	private static final int SPINNER_COLUMNS = 5;
+
 	private final double SW = IJ.getScreenSize().getWidth();
 	private final double SH = IJ.getScreenSize().getHeight();
 
@@ -299,7 +302,27 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private void setupMainDialog() {
-		final int textWidth = 5;
+		readPreferences();
+		applySavedState();
+		buildModeButtons();
+		buildTopPanel();
+		buildSliderPanel();
+		buildButtonPanel();
+		buildSettingsPanel();
+		dialogPanel = new JPanel();
+		dialogPanel.setBackground(Color.darkGray);
+		dialogPanel.setLayout(new BorderLayout());
+		dialogPanel.add(topButtonsPanel, BorderLayout.NORTH);
+		dialogPanel.add(sliderPanel, BorderLayout.CENTER);
+		dialogPanel.add(settingsPanel, BorderLayout.EAST);
+		dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
+		setInitialState();
+		addListeners();
+		showWindow();
+	}
+
+	/** Reads the lane geometry and fit parameters from the preferences. */
+	private void readPreferences() {
 		iw = imp.getWidth();
 		ih = imp.getHeight();
 		// Default lane size/offset
@@ -352,7 +375,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			prefs.putInt(DHI, dhi);
 			prefs.putInt(EVERY, every);
 		}
+	}
 
+	/** The image's saved state, if any, overrides the preferences. */
+	private void applySavedState() {
 		// The saved state of this image overrides the preferences
 		loadState();
 		if (savedState != null) {
@@ -373,7 +399,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			dhi = savedState.dhi;
 			every = savedState.every;
 		}
+	}
 
+	/**
+	 * The Lane Selection (Automatic/Manual) and Fit Type (Banded/Continuum) buttons.
+	 */
+	private void buildModeButtons() {
 		ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
 		buttonPanelAutoManual = new JPanel();
 		buttonAuto = new JRadioButton("Automatic Rectangle Selection");
@@ -411,7 +442,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonPanelFitType.setBorder(new TitledBorder(BorderFactory
 			.createEtchedBorder(), "Fit Type", TitledBorder.LEADING,
 			TitledBorder.BELOW_TOP, new Font("Sans", Font.PLAIN, 11)));
+	}
 
+	/** Lays out the mode buttons at the top of the window. */
+	private void buildTopPanel() {
 		topButtonsPanel = new JPanel();
 		topButtonsPanel.setLayout(new GridBagLayout());
 		final GridBagConstraints c0 = new GridBagConstraints();
@@ -426,7 +460,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		c0.weightx = 0.0;
 		c0.anchor = GridBagConstraints.EAST;
 		topButtonsPanel.add(buttonPanelFitType, c0);
+	}
 
+	/** Number of Lanes and the sliders for automatic lanes. */
+	private void buildSliderPanel() {
 		sliderPanel = new JPanel();
 		lanesPanel = new JPanel();
 		lanesPanel.setLayout(new GridBagLayout());
@@ -437,7 +474,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textNLanes.setBorder(BorderFactory.createCompoundBorder(textNLanes
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textNLanes.getEditor()).getTextField().setColumns(
-			textWidth);
+			SPINNER_COLUMNS);
 
 		c1.gridx = 0;
 		c1.gridy = 0;
@@ -470,7 +507,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		sliderVOff = makeTitledSlider("Vertical Offset ( " + lvoff + " px )",
 			Color.black, 0, ih - 1, lvoff);
 		sliderPanel.add(sliderVOff);
+	}
 
+	/** The Fit, Open Data Folder and Close buttons. */
+	private void buildButtonPanel() {
 		buttonPanel = new JPanel();
 		buttonPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
 		buttonFit = new JButton("Fit");
@@ -481,7 +521,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonPanel.add(buttonOpenFolder);
 		buttonClose = new JButton("Close");
 		buttonPanel.add(buttonClose);
+	}
 
+	/**
+	 * The fit parameters, Show Bands, the ladder and distribution lists, and the custom peak buttons.
+	 */
+	private void buildSettingsPanel() {
 		// Settings Panel
 		settingsPanel = new JPanel();
 		settingsPanel.setLayout(new GridBagLayout());
@@ -503,7 +548,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textDegBG.setBorder(BorderFactory.createCompoundBorder(textDegBG
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textDegBG.getEditor()).getTextField().setColumns(
-			textWidth);
+			SPINNER_COLUMNS);
 
 		double minPolyDerivative = 0.00; double maxPolyDerivative = 10.0;
 		polyDerivative = polyDerivative < minPolyDerivative ? minPolyDerivative : polyDerivative;
@@ -514,7 +559,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			textPolyDerivative.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0,
 				2)));
 		((JSpinner.DefaultEditor) textPolyDerivative.getEditor()).getTextField()
-			.setColumns(textWidth);
+			.setColumns(SPINNER_COLUMNS);
 		
 		double minTolPK = 0.01; double maxTolPK = 1.00;
 		tolPK = tolPK < minTolPK ? minTolPK : tolPK;
@@ -523,7 +568,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textTolPK.setBorder(BorderFactory.createCompoundBorder(textTolPK
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textTolPK.getEditor()).getTextField().setColumns(
-			textWidth);
+			SPINNER_COLUMNS);
 
 		double minAreaDrift = 0.001; double maxAreaDrift = 1.00;
 		areaDrift = areaDrift < minAreaDrift ? minAreaDrift : areaDrift;
@@ -534,14 +579,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(textAreaDrift
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField()
-			.setColumns(textWidth);
+			.setColumns(SPINNER_COLUMNS);
 		textSDDrift = new JSpinner(new SpinnerNumberModel(sdDrift, 1.0, 5.0,
 			0.1));
 		textSDDrift.setEditor(new JSpinner.NumberEditor(textSDDrift, "###.#"));
 		textSDDrift.setBorder(BorderFactory.createCompoundBorder(textSDDrift
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textSDDrift.getEditor()).getTextField()
-			.setColumns(textWidth);
+			.setColumns(SPINNER_COLUMNS);
 
 		chkBoxBands = new JCheckBox("Show Bands");
 
@@ -619,15 +664,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		c2.gridheight = 1;
 		c2.weighty = 1.0;
 		settingsPanel.add(new JLabel(), c2);
+	}
 
-		dialogPanel = new JPanel();
-		dialogPanel.setBackground(Color.darkGray);
-		dialogPanel.setLayout(new BorderLayout());
-		dialogPanel.add(topButtonsPanel, BorderLayout.NORTH);
-		dialogPanel.add(sliderPanel, BorderLayout.CENTER);
-		dialogPanel.add(settingsPanel, BorderLayout.EAST);
-		dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
-
+	/**
+	 * Sets the controls from the restored settings, before their listeners are added.
+	 */
+	private void setInitialState() {
 		// Initial status of all dialog components
 		final boolean stateLoaded = !savedRects.isEmpty() || ladder != null;
 		int ladderType = 0;
@@ -670,7 +712,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitter.setTolPK(tolPK);
 		fitter.setAreaDrift(areaDrift);
 		fitter.setSDDrift(sdDrift);
+	}
 
+	/** Listens to the image and to every control. */
+	private void addListeners() {
 		// Add this class to all components as listener here for easy reference
 		imp.getCanvas().addMouseMotionListener(this);
 		imp.getCanvas().addMouseListener(this);
@@ -699,7 +744,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonFit.addActionListener(this);
 		buttonOpenFolder.addActionListener(this);
 		buttonClose.addActionListener(this);
+	}
 
+	/**
+	 * Shows the window, draws the lanes and profiles, and repeats the last fit if there was one.
+	 */
+	private void showWindow() {
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.getContentPane().add(dialogPanel);
 		frame.setResizable(true);
