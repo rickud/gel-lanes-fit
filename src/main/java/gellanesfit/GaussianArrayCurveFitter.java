@@ -15,6 +15,8 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.function.BooleanSupplier;
 
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.math3.analysis.ParametricUnivariateFunction;
@@ -127,6 +129,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 	/** Initial guess. */
 	private final SortedParameters initialGuess;
+	/** Checked on every step of the fit; true stops it */
+	private BooleanSupplier stopCheck = () -> false;
 	/** Maximum number of iterations of the optimization algorithm. */
 	private final int maxIter;
 	private final int fitMode;
@@ -189,6 +193,14 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			polyDerivative, polyOffset, peakTol, areaDrift, sdDrift);
 	}
 
+	/**
+	 * Sets a check made on every step of the fit: when it returns true, the fit
+	 * stops by throwing a {@link CancellationException}.
+	 */
+	void setStopCheck(final BooleanSupplier stopCheck) {
+		this.stopCheck = stopCheck;
+	}
+
 	/** {@inheritDoc} */
 	@Override
 	protected LeastSquaresProblem getProblem(
@@ -217,7 +229,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 
 		final GaussianArrayParameterValidator parValid =
 			new GaussianArrayParameterValidator(fitMode, startPoint, xx, target,
-				polyDerivative, polyOffset, areaDrift, sdDrift);
+				polyDerivative, polyOffset, areaDrift, sdDrift, stopCheck);
 
 		return new LeastSquaresBuilder().parameterValidator(parValid)
 			.maxEvaluations(Integer.MAX_VALUE).maxIterations(maxIter).lazyEvaluation(
@@ -747,14 +759,17 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		private final double maxD1;
 		private final double polyOffset;
 		private final PolynomialSplineFunction profile;
+		private final BooleanSupplier stopCheck;
 		// Fixed seed: the same data always gives the same Continuum fit
 		private final RandomGenerator random = new Well19937c(RANDOM_SEED);
 
 		private GaussianArrayParameterValidator(final int fitMode,
 			final SortedParameters iniSP, final double[] xtarget,
 			final double[] ytarget, final double polyDerivative, final double polyOffset,
-			final double areaDrift, final double sdDrift)
+			final double areaDrift, final double sdDrift,
+			final BooleanSupplier stopCheck)
 		{
+			this.stopCheck = stopCheck;
 
 			this.fitMode = fitMode;
 			this.iniSP = iniSP;
@@ -806,6 +821,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 */
 		@Override
 		public RealVector validate(final RealVector param) {
+			if (stopCheck.getAsBoolean()) throw new CancellationException(
+				"The fit was stopped");
 			// Split the parameters up the same way as the starting guess
 			RealVector poly = new ArrayRealVector();
 			RealVector norm = new ArrayRealVector();
