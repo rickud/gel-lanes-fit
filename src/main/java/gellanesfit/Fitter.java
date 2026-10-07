@@ -18,7 +18,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.CancellationException;
 
 import org.apache.commons.lang3.time.StopWatch;
 import org.apache.commons.math3.analysis.UnivariateFunction;
@@ -75,6 +75,9 @@ class Fitter {
 	static final int continuumMode = 1;
 
 	public static final double peakDistanceTol = 2;
+	/** Set from another thread to stop the fit; see {@link #requestStop()} */
+	private volatile boolean stopRequested;
+
 	public static final double sd2FWHM = 2 * FastMath.sqrt(2 * FastMath.log(2));
 	/** The background stays below this fraction of the lane's lowest intensity */
 	private static final double BACKGROUND_CEILING = 0.98;
@@ -420,17 +423,21 @@ class Fitter {
 		final ArrayList<DataSeries> out = new ArrayList<>();
 		final StopWatch sw = new StopWatch();
 		sw.start();
+		stopRequested = false;
 		try {
-			AtomicInteger progress = new AtomicInteger();
-			// Sequential: each lane's fit updates shared lists (allFittedList,
-			// fittedDistributions, ...), and the fits take well under a second
-			in.stream().forEach((d) -> {
+			int done = 0;
+			for (final DataSeries d : in) {
+				if (stopRequested) throw new CancellationException(
+					"The fit was stopped");
 				out.addAll(doFit(d.getLane()));
-				statusServ.showProgress(progress.incrementAndGet(), in.size());
-			});
+				statusServ.showProgress(++done, in.size());
+				statusServ.showStatus(progressMessage(done, in.size(), sw.getTime() /
+					1000.0));
+			}
 		}
-		catch (final NullPointerException np) {
-			log.info(in.size());
+		finally {
+			// A stop applies to this fit only
+			stopRequested = false;
 		}
 		final String t = String.format("Time elapsed: %1$.1f s\n", sw.getTime() /
 			1000.0);
@@ -483,6 +490,7 @@ class Fitter {
 		final SortedParameters firstGuess = doGuess(lane, pg);
 		final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(fitMode,
 			degBG, polyDerivative, polyOffset, tolpk, areaDrift, sdDrift).withStartPoint(firstGuess);
+		cf.setStopCheck(() -> stopRequested);
 		final LeastSquaresProblem problem = cf.getProblem(obs.toList());
 
 		final LeastSquaresOptimizer.Optimum optimum = cf.getOptimizer().optimize(problem);
@@ -542,6 +550,32 @@ class Fitter {
 			.getEntry(lane - 1));
 		log.info(outStr);
 		return output;
+	}
+
+	/**
+	 * The status bar message after each fitted lane, with the time left
+	 * estimated from the lanes fitted so far.
+	 *
+	 * @param done lanes fitted so far
+	 * @param total lanes to fit
+	 * @param elapsed seconds since the fit started
+	 */
+	static String progressMessage(final int done, final int total,
+		final double elapsed)
+	{
+		final String fitted = "Fitted " + done + " of " + total + " lanes";
+		if (done >= total) return fitted;
+		return fitted + ", about " + FitTimer.format(elapsed / done * (total -
+			done)) + " left";
+	}
+
+	/**
+	 * Asks a fit running in another thread to stop. The fit throws a
+	 * {@link CancellationException} after the current step; the lanes fitted so
+	 * far keep their results.
+	 */
+	public void requestStop() {
+		stopRequested = true;
 	}
 
 	/** A lane's profile as points to fit */

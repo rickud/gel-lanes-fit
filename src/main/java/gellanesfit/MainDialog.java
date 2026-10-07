@@ -47,9 +47,13 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.ConcurrentModificationException;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Vector;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 import java.util.prefs.Preferences;
 
 import javax.swing.BorderFactory;
@@ -58,6 +62,7 @@ import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
+import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -70,6 +75,7 @@ import javax.swing.JToggleButton;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.TitledBorder;
 import javax.swing.event.ChangeEvent;
@@ -177,6 +183,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private boolean selectionUpdate = false; // active updating is off
 	private boolean fitDone = false; // Keep track of whether fit data exists
 	private boolean fitRunning = false; // A fit is under way
+	private SwingWorker<List<DataSeries>, Void> fitWorker; // Fit in background
+	private final Map<Component, Boolean> enabledBeforeFit = new HashMap<>();
+	private boolean editingBeforeFit;
 
 	private final String impTitle;
 	private String oldImpTitle; // Stored in Prefs
@@ -318,6 +327,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buildSliderPanel();
 		buildButtonPanel();
 		buildSettingsPanel();
+		addToolTips();
 		dialogPanel = new JPanel();
 		dialogPanel.setBackground(Color.darkGray);
 		dialogPanel.setLayout(new BorderLayout());
@@ -526,7 +536,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		buttonPanel.add(buttonFit);
 		buttonOpenFolder = new JButton("Open Data Folder");
-		buttonOpenFolder.setToolTipText(savePath);
 		buttonPanel.add(buttonOpenFolder);
 		buttonClose = new JButton("Close");
 		buttonPanel.add(buttonClose);
@@ -675,6 +684,99 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		settingsPanel.add(new JLabel(), c2);
 	}
 
+	private static final String FIT_TIP =
+		"Fits the ladder lane, then every other lane, with the settings above.<br>" +
+			"Results go to the Results Display, the LOG and the data folder.";
+	private static final String STOP_TIP =
+		"Stops the fit within a few seconds; lanes already fitted are kept.";
+
+	/**
+	 * The hover tips of the controls. A parameter's tip is also on its label, and
+	 * on the spinner's text field, where the mouse usually is.
+	 */
+	private void addToolTips() {
+		setToolTip("Places equally sized, evenly spaced lanes,<br>" +
+			"set with Number of Lanes and the sliders below.", buttonAuto);
+		setToolTip("Draw each lane on the image with the rectangle tool.<br>" +
+			"Drag a lane to move or resize it; click inside it to delete it.<br>" +
+			"Suits bent or unevenly spaced lanes.", buttonManual);
+		setToolTip("For distinct bands: one peak per band found in each lane.",
+			buttonBands);
+		setToolTip("For smears, such as fragmented DNA: one peak per length<br>" +
+			"of the fragment distribution chosen below, placed using the ladder.",
+			buttonContinuum);
+
+		setToolTip("How many lanes to place across the image.", labelNLanes,
+			textNLanes);
+		setToolTip("Width of each lane, in pixels. The profile averages<br>" +
+			"the intensity across this width.", sliderW);
+		setToolTip("Height of each lane, in pixels.", sliderH);
+		setToolTip("Space between neighbouring lanes, in pixels.", sliderSp);
+		setToolTip("Distance of the first lane from the image's left edge, in " +
+			"pixels.", sliderHOff);
+		setToolTip("Distance of the lanes from the image's top edge, in pixels.",
+			sliderVOff);
+
+		setToolTip("Shape of the background under each lane, -1 to 15 (default " +
+			"2).<br>" + "-1: no background; 0: constant; 1: straight slope; 2: " +
+			"gentle curve.<br>" + "Higher degrees follow uneven backgrounds but " +
+			"can absorb broad bands.", labelDegBG, textDegBG);
+		setToolTip("Limit on the background's steepness, as its average slope<br>" +
+			"in gray values per pixel, 0 to 10 (default 10). 0 forces a flat " +
+			"background.", labelPolyDerivative, textPolyDerivative);
+		setToolTip("How much a band must stand out to be detected, as a " +
+			"fraction<br>" + "of the lane's intensity range, 0.01 to 1 (default " +
+			"0.1).<br>" + "Lower it to catch faint bands; raise it if noise is " +
+			"detected as bands.<br>" + "Used in Banded fits, and for the ladder " +
+			"lane in both fit types.", labelTolPK, textTolPK);
+		setToolTip("Continuum only. How far the fragments' fitted areas may<br>" +
+			"depart from the distribution's proportions, 0.001 to 1 (default " +
+			"0.1).<br>" + "Small values keep the distribution's shape; larger " +
+			"ones follow the data.", labelAreaDrift, textAreaDrift);
+		setToolTip("Continuum only. How far each fragment's width may depart<br>" +
+			"from the width expected from the ladder, as a factor, 1 to 5 " +
+			"(default 1).<br>" + "1 keeps the widths fixed; 2 allows half to " +
+			"double.", labelSDDrift, textSDDrift);
+
+		setToolTip("Marks the bands on the image: fitted in magenta,<br>" +
+			"guesses in blue, custom peaks in green.", chkBoxBands);
+		setToolTip("The lane with the size ladder. It's fitted first, and its<br>" +
+			"bands label the plots of every lane.", cmbBoxLadderLane);
+		setToolTip("The ladder's band sizes. After choosing it, you pick which<br>" +
+			"of its bands are visible in the ladder lane.", cmbBoxLadderType);
+		setToolTip("Continuum only. The fragment lengths expected in the " +
+			"sample,<br>" + "and how common each one is. More lengths make fits " +
+			"slower.", cmbBoxDist);
+		setToolTip("While on, click in a plot to add a custom peak there,<br>" +
+			"or near a green dot to remove it. Custom peaks are used<br>" +
+			"by the next fit, in addition to or in place of detected bands.",
+			buttonEditPeaks);
+		setToolTip("Removes the custom peaks from the lanes you choose.",
+			buttonResetCustomPeaks);
+
+		setToolTip(FIT_TIP, buttonFit);
+		setToolTip("Opens the folder with this image's results and saved " +
+			"state:<br>" + savePath, buttonOpenFolder);
+		setToolTip("Closes the plugin. Lanes, settings and custom peaks are " +
+			"saved<br>" + "and come back the next time you open this image.",
+			buttonClose);
+	}
+
+	/**
+	 * Sets a hover tip on components; on a spinner also on its text field, which
+	 * otherwise shows none
+	 */
+	private static void setToolTip(final String text,
+		final JComponent... components)
+	{
+		final String html = "<html>" + text + "</html>";
+		for (final JComponent c : components) {
+			c.setToolTipText(html);
+			if (c instanceof JSpinner) ((JSpinner.DefaultEditor) ((JSpinner) c)
+				.getEditor()).getTextField().setToolTipText(html);
+		}
+	}
+
 	/**
 	 * Sets the controls from the restored settings, before their listeners are added.
 	 */
@@ -710,7 +812,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		updateLadderLane();
 		updateLadderType();
 		cmbBoxDist.setSelectedIndex(savedState == null ? 0 : savedState.dist);
-		cmbBoxDist.setEnabled(continuum);
 		loadDistribution(false);
 
 		buttonEditPeaks.setEnabled(false);
@@ -1367,6 +1468,19 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/**
+	 * Greys out the controls the selected fit type doesn't use: Area Drift, SD
+	 * Drift and the fragment distribution are for Continuum fits only, and the
+	 * distribution also needs a ladder lane.
+	 */
+	private void updateFitTypeControls() {
+		final boolean continuum = buttonContinuum.isSelected();
+		for (final Component c : new Component[] { labelAreaDrift, textAreaDrift,
+			labelSDDrift, textSDDrift })
+			c.setEnabled(continuum);
+		cmbBoxDist.setEnabled(continuum && ladderLaneInt != noLadderLane);
+	}
+
 	private void updateLadderLane() {
 		if (cmbBoxLadderLane.getItemCount() != rois.size() + 1) {
 			if (ladderLaneInt > rois.size()) 
@@ -1388,6 +1502,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitter.setReferenceLane(ladderLaneInt);
 		plotter.setReferencePlot(ladderLaneInt);
 		prefs.putInt(LADDERLANEINT, ladderLaneInt);
+		updateFitTypeControls();
 	}
 
 	private void updateLadderType() {
@@ -1411,6 +1526,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private void cleanupAndClose() {
+		if (fitWorker != null) fitter.requestStop();
 		saveState();
 		// Remove Listeners on gel image and close plugin-associated windows in
 		// preparation for exit
@@ -1631,26 +1747,83 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	 * @return whether to go ahead
 	 */
 	private boolean confirmSlowFit() {
+		// The first time, the estimate is calibrated to this computer
+		statusServ.showStatus("Estimating the fit time...");
 		int most = 0;
 		double seconds = 0;
 		for (final int l : getAllLaneNumbers()) {
 			if (l == ladderLaneInt) continue;
 			final int n = fitter.fragmentsToFit(l);
 			most = Math.max(most, n);
-			seconds += FragmentDistribution.estimatedFitSeconds(n);
+			seconds += FitTimer.estimatedSeconds(n);
 		}
 		if (seconds <= SLOW_FIT_SECONDS) return true;
-		final String time = seconds < 90 ? Math.round(seconds) + " seconds"
-			: Math.round(seconds / 60) + " minutes";
+		final String time = FitTimer.format(seconds);
 		final GenericDialog gd = new GenericDialog("Slow Fit");
 		gd.addMessage("This Continuum fit has up to " + most +
 			" fragment lengths per lane,\nand could take roughly " + time +
-			". Gel Lanes Fit can't be stopped\nwhile it fits.\n \n" +
+			". It can be stopped with the Stop\nbutton.\n \n" +
 			"Fewer lengths fit much faster: for a Uniform distribution, use\n" +
 			"a coarser Every step or a narrower range.");
 		gd.setOKLabel("Fit Anyway");
 		gd.showDialog();
 		return gd.wasOKed();
+	}
+
+	/**
+	 * After the fit was stopped or failed: the sample lanes' partial results
+	 * are dropped, the ladder lane's fit is kept.
+	 *
+	 * @param error why the fit failed, or null if it was stopped
+	 */
+	private void fitStopped(final List<Integer> lanes, final Throwable error) {
+		for (final int l : lanes)
+			fitter.resetFit(l);
+		for (final int i : getAllLaneNumbers())
+			plotter.updatePlot(i);
+		fitRunning = false;
+		saveState();
+		if (error != null) log.error("The fit failed", error);
+		else log.info("The fit was stopped.");
+		if (!frame.isDisplayable()) return; // Closed while fitting
+		if (error != null) IJ.error("Gel Lanes Fit", "The fit failed: " + error +
+			"\nSee the Console (Window > Console) for details.");
+		else IJ.showMessage("Gel Lanes Fit", "The fit was stopped. The ladder" +
+			" lane's fit is kept.\nChange the fit settings if needed, and click Fit" +
+			" again.");
+	}
+
+	/**
+	 * While a fit runs in the background, Fit becomes Stop, and everything that
+	 * could change the fitter's data is disabled; afterwards each control gets
+	 * back the state it had.
+	 */
+	private void setFitting(final boolean on) {
+		final Component[] controls = { buttonAuto, buttonManual, textNLanes,
+			sliderW, sliderH, sliderSp, sliderHOff, sliderVOff, textDegBG,
+			textPolyDerivative, textTolPK, textAreaDrift, textSDDrift, buttonBands,
+			buttonContinuum, chkBoxBands, cmbBoxLadderLane, cmbBoxLadderType,
+			cmbBoxDist, buttonEditPeaks, buttonResetCustomPeaks };
+		if (on) {
+			enabledBeforeFit.clear();
+			for (final Component c : controls) {
+				enabledBeforeFit.put(c, c.isEnabled());
+				c.setEnabled(false);
+			}
+			// Clicks in the plots would add custom peaks while they're in use
+			editingBeforeFit = buttonEditPeaks.isSelected();
+			if (editingBeforeFit) setEditPeaks(false);
+			buttonFit.setText("Stop");
+			setToolTip(STOP_TIP, buttonFit);
+		}
+		else {
+			for (final Component c : controls)
+				c.setEnabled(enabledBeforeFit.getOrDefault(c, true));
+			if (editingBeforeFit) setEditPeaks(true);
+			buttonFit.setText("Fit");
+			setToolTip(FIT_TIP, buttonFit);
+			buttonFit.setEnabled(true);
+		}
 	}
 
 	/** Fits the ladder lane, then the other lanes with the current settings */
@@ -1747,7 +1920,47 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		for (final int i : getAllLaneNumbers()) {
 			if (i != ladderLaneInt) otherLanes.add(i);
 		}
-		fitted.addAll(fitter.doFit(otherLanes));
+		startFitting(otherLanes, fitted);
+	}
+
+	/**
+	 * Fits the sample lanes in the background, so that the window stays
+	 * responsive: Fit becomes Stop, and the controls that could change the
+	 * fitter's data are disabled until the fit ends.
+	 */
+	private void startFitting(final List<Integer> lanes,
+		final List<DataSeries> fitted)
+	{
+		setFitting(true);
+		fitWorker = new SwingWorker<List<DataSeries>, Void>() {
+
+			@Override
+			protected List<DataSeries> doInBackground() {
+				return fitter.doFit(lanes);
+			}
+
+			@Override
+			protected void done() {
+				fitWorker = null;
+				setFitting(false);
+				try {
+					fitted.addAll(get());
+					finishFit(fitted);
+				}
+				catch (final ExecutionException e) {
+					fitStopped(lanes, e.getCause() instanceof CancellationException
+						? null : e.getCause());
+				}
+				catch (final InterruptedException | CancellationException e) {
+					fitStopped(lanes, null);
+				}
+			}
+		};
+		fitWorker.execute();
+	}
+
+	/** Shows and saves the results, once all the lanes are fitted */
+	private void finishFit(final List<DataSeries> fitted) {
 		fitter.updateResultsTable(savePath);
 		fitDone = true;
 
@@ -1774,6 +1987,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// Buttons
 		// ----------------------------------------------------------------
 		if (e.getSource().equals(buttonFit)) {
+			if (fitWorker != null) { // The button is Stop while fitting
+				fitter.requestStop();
+				buttonFit.setText("Stopping...");
+				buttonFit.setEnabled(false);
+				return;
+			}
 			if (fitDone && !askFitReset()) return;
 			runFit();
 		}
@@ -1788,11 +2007,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		if (e.getSource().equals(buttonBands)) {
 			fitter.setFitMode(Fitter.bandMode);
-			cmbBoxDist.setEnabled(false);
+			updateFitTypeControls();
 		}
 		else if (e.getSource().equals(buttonContinuum)) {
 			fitter.setFitMode(Fitter.continuumMode);
-			cmbBoxDist.setEnabled(true);
+			updateFitTypeControls();
 		}
 
 		if (e.getSource().equals(buttonEditPeaks)) {
@@ -1891,12 +2110,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		if (laneInt == 0) {
 			ladderLaneInt = MainDialog.noLadderLane;
 			cmbBoxLadderType.setEnabled(false);
-			cmbBoxDist.setEnabled(false);
 		}
 		else {
 			ladderLaneInt = laneInt;
 			cmbBoxLadderType.setEnabled(true);
-			cmbBoxDist.setEnabled(true);
 		}
 		ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
 		updateLadderLane();
@@ -1995,6 +2212,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	@Override
 	public void mouseMoved(final MouseEvent e) {
+		if (fitWorker != null) return; // The lanes are being fitted
 		if (e.getSource() == imp.getCanvas()) {
 			if (rois.size() == 0 || plotter == null) return;
 			final int x = ((ImageCanvas) e.getSource()).offScreenX(e.getX());
@@ -2041,6 +2259,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	@Override
 	public void mouseClicked(final MouseEvent e) {
+		if (fitWorker != null) return; // The lanes are being fitted
 		if (e.getSource().equals(imp.getCanvas())) {
 			if (!auto && !roiSelected.equals("none") && !selectionUpdate) {
 				// Remove Roi
@@ -2075,6 +2294,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	@Override
 	public void mouseReleased(final MouseEvent e) {
+		if (fitWorker != null) { // The lanes are being fitted
+			selectionUpdate = false;
+			return;
+		}
 		// Modify Roi, mouseReleased not triggered when creating Roi
 		if (buttonManual.isSelected()) {
 			if (selectionUpdate) {
@@ -2121,6 +2344,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	@Override
 	public void mouseWheelMoved(final MouseWheelEvent e) {
+		if (fitWorker != null) return; // The lanes are being fitted
 		if (e.getSource() == imp.getCanvas() && imp.getImageStackSize() > 1) {
 			if (fitDone && !askFitReset()) return;
 			redoProfilePlots();
