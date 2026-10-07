@@ -1,13 +1,10 @@
-/**
- * Gel Lanes Fit
- * GelLanesFit.java
- * author: Rick Ziraldo, 2017
- * The /University of Texas at Dallas, Richardson, TX
- * http://www.utdallas.edu
+/*
+ * Gel Lanes Fit - MainDialog.java
+ * Author: Rick Ziraldo, 2017
+ * The University of Texas at Dallas, Richardson, TX
  *
- * The source code is maintained and made available on GitHub
- * https://github.com/rickud/gauss-curve-fit
- *
+ * Licensed under the GNU Affero General Public License v3.0; see LICENSE.
+ * Source: https://github.com/rickud/gel-lanes-fit
  */
 
 package gellanesfit;
@@ -42,9 +39,6 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.io.Serializable;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -62,7 +56,6 @@ import javax.swing.ButtonGroup;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
-import javax.swing.JFileChooser;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -114,10 +107,17 @@ import ij.gui.TextRoi;
 import ij.io.FileInfo;
 import ij.io.FileSaver;
 
+/**
+ * The plugin's main window, and the controller of an analysis: the lanes drawn
+ * on the image, the ladder and fit settings, the fit itself (run through
+ * {@link Fitter} and shown in the {@link Plotter}), custom peaks, and the saved
+ * state of the image (saved-state.bak in the image's data folder).
+ */
 class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	SeriesChangeListener, MouseMotionListener, MouseListener, MouseWheelListener,
 	WindowListener
 {
+	private static final long serialVersionUID = 1L;
 
 	@Parameter
 	private LogService log;
@@ -148,6 +148,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private static final String AUTO = "auto";
 	private static final String OLDIMPTITLE = "oldImpTitle";
 	private static final String SKIPFITWARNING = "skipFitWarning";
+
+	/** Width of the number fields, in characters */
+	private static final int SPINNER_COLUMNS = 5;
 
 	private final double SW = IJ.getScreenSize().getWidth();
 	private final double SH = IJ.getScreenSize().getHeight();
@@ -299,7 +302,27 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private void setupMainDialog() {
-		final int textWidth = 5;
+		readPreferences();
+		applySavedState();
+		buildModeButtons();
+		buildTopPanel();
+		buildSliderPanel();
+		buildButtonPanel();
+		buildSettingsPanel();
+		dialogPanel = new JPanel();
+		dialogPanel.setBackground(Color.darkGray);
+		dialogPanel.setLayout(new BorderLayout());
+		dialogPanel.add(topButtonsPanel, BorderLayout.NORTH);
+		dialogPanel.add(sliderPanel, BorderLayout.CENTER);
+		dialogPanel.add(settingsPanel, BorderLayout.EAST);
+		dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
+		setInitialState();
+		addListeners();
+		showWindow();
+	}
+
+	/** Reads the lane geometry and fit parameters from the preferences. */
+	private void readPreferences() {
 		iw = imp.getWidth();
 		ih = imp.getHeight();
 		// Default lane size/offset
@@ -352,7 +375,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			prefs.putInt(DHI, dhi);
 			prefs.putInt(EVERY, every);
 		}
+	}
 
+	/** The image's saved state, if any, overrides the preferences. */
+	private void applySavedState() {
 		// The saved state of this image overrides the preferences
 		loadState();
 		if (savedState != null) {
@@ -373,7 +399,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			dhi = savedState.dhi;
 			every = savedState.every;
 		}
+	}
 
+	/**
+	 * The Lane Selection (Automatic/Manual) and Fit Type (Banded/Continuum) buttons.
+	 */
+	private void buildModeButtons() {
 		ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
 		buttonPanelAutoManual = new JPanel();
 		buttonAuto = new JRadioButton("Automatic Rectangle Selection");
@@ -411,7 +442,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonPanelFitType.setBorder(new TitledBorder(BorderFactory
 			.createEtchedBorder(), "Fit Type", TitledBorder.LEADING,
 			TitledBorder.BELOW_TOP, new Font("Sans", Font.PLAIN, 11)));
+	}
 
+	/** Lays out the mode buttons at the top of the window. */
+	private void buildTopPanel() {
 		topButtonsPanel = new JPanel();
 		topButtonsPanel.setLayout(new GridBagLayout());
 		final GridBagConstraints c0 = new GridBagConstraints();
@@ -426,7 +460,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		c0.weightx = 0.0;
 		c0.anchor = GridBagConstraints.EAST;
 		topButtonsPanel.add(buttonPanelFitType, c0);
+	}
 
+	/** Number of Lanes and the sliders for automatic lanes. */
+	private void buildSliderPanel() {
 		sliderPanel = new JPanel();
 		lanesPanel = new JPanel();
 		lanesPanel.setLayout(new GridBagLayout());
@@ -437,7 +474,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textNLanes.setBorder(BorderFactory.createCompoundBorder(textNLanes
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textNLanes.getEditor()).getTextField().setColumns(
-			textWidth);
+			SPINNER_COLUMNS);
 
 		c1.gridx = 0;
 		c1.gridy = 0;
@@ -470,7 +507,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		sliderVOff = makeTitledSlider("Vertical Offset ( " + lvoff + " px )",
 			Color.black, 0, ih - 1, lvoff);
 		sliderPanel.add(sliderVOff);
+	}
 
+	/** The Fit, Open Data Folder and Close buttons. */
+	private void buildButtonPanel() {
 		buttonPanel = new JPanel();
 		buttonPanel.setLayout(new FlowLayout(FlowLayout.TRAILING));
 		buttonFit = new JButton("Fit");
@@ -481,7 +521,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonPanel.add(buttonOpenFolder);
 		buttonClose = new JButton("Close");
 		buttonPanel.add(buttonClose);
+	}
 
+	/**
+	 * The fit parameters, Show Bands, the ladder and distribution lists, and the custom peak buttons.
+	 */
+	private void buildSettingsPanel() {
 		// Settings Panel
 		settingsPanel = new JPanel();
 		settingsPanel.setLayout(new GridBagLayout());
@@ -503,7 +548,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textDegBG.setBorder(BorderFactory.createCompoundBorder(textDegBG
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textDegBG.getEditor()).getTextField().setColumns(
-			textWidth);
+			SPINNER_COLUMNS);
 
 		double minPolyDerivative = 0.00; double maxPolyDerivative = 10.0;
 		polyDerivative = polyDerivative < minPolyDerivative ? minPolyDerivative : polyDerivative;
@@ -514,7 +559,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			textPolyDerivative.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0,
 				2)));
 		((JSpinner.DefaultEditor) textPolyDerivative.getEditor()).getTextField()
-			.setColumns(textWidth);
+			.setColumns(SPINNER_COLUMNS);
 		
 		double minTolPK = 0.01; double maxTolPK = 1.00;
 		tolPK = tolPK < minTolPK ? minTolPK : tolPK;
@@ -523,7 +568,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textTolPK.setBorder(BorderFactory.createCompoundBorder(textTolPK
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textTolPK.getEditor()).getTextField().setColumns(
-			textWidth);
+			SPINNER_COLUMNS);
 
 		double minAreaDrift = 0.001; double maxAreaDrift = 1.00;
 		areaDrift = areaDrift < minAreaDrift ? minAreaDrift : areaDrift;
@@ -534,14 +579,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(textAreaDrift
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField()
-			.setColumns(textWidth);
+			.setColumns(SPINNER_COLUMNS);
 		textSDDrift = new JSpinner(new SpinnerNumberModel(sdDrift, 1.0, 5.0,
 			0.1));
 		textSDDrift.setEditor(new JSpinner.NumberEditor(textSDDrift, "###.#"));
 		textSDDrift.setBorder(BorderFactory.createCompoundBorder(textSDDrift
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
 		((JSpinner.DefaultEditor) textSDDrift.getEditor()).getTextField()
-			.setColumns(textWidth);
+			.setColumns(SPINNER_COLUMNS);
 
 		chkBoxBands = new JCheckBox("Show Bands");
 
@@ -619,15 +664,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		c2.gridheight = 1;
 		c2.weighty = 1.0;
 		settingsPanel.add(new JLabel(), c2);
+	}
 
-		dialogPanel = new JPanel();
-		dialogPanel.setBackground(Color.darkGray);
-		dialogPanel.setLayout(new BorderLayout());
-		dialogPanel.add(topButtonsPanel, BorderLayout.NORTH);
-		dialogPanel.add(sliderPanel, BorderLayout.CENTER);
-		dialogPanel.add(settingsPanel, BorderLayout.EAST);
-		dialogPanel.add(buttonPanel, BorderLayout.SOUTH);
-
+	/**
+	 * Sets the controls from the restored settings, before their listeners are added.
+	 */
+	private void setInitialState() {
 		// Initial status of all dialog components
 		final boolean stateLoaded = !savedRects.isEmpty() || ladder != null;
 		int ladderType = 0;
@@ -670,7 +712,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitter.setTolPK(tolPK);
 		fitter.setAreaDrift(areaDrift);
 		fitter.setSDDrift(sdDrift);
+	}
 
+	/** Listens to the image and to every control. */
+	private void addListeners() {
 		// Add this class to all components as listener here for easy reference
 		imp.getCanvas().addMouseMotionListener(this);
 		imp.getCanvas().addMouseListener(this);
@@ -699,7 +744,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		buttonFit.addActionListener(this);
 		buttonOpenFolder.addActionListener(this);
 		buttonClose.addActionListener(this);
+	}
 
+	/**
+	 * Shows the window, draws the lanes and profiles, and repeats the last fit if there was one.
+	 */
+	private void showWindow() {
 		frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 		frame.getContentPane().add(dialogPanel);
 		frame.setResizable(true);
@@ -855,12 +905,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private JSlider makeTitledSlider(final String string, final Color color,
-		final int minVal, final int maxVal, int val)
+		final int minVal, final int maxVal, final int val)
 	{
-		if (val < minVal) val = minVal;
-		if (val > maxVal) val = maxVal;
 		final JSlider slider = new JSlider(SwingConstants.HORIZONTAL, minVal,
-			maxVal, val);
+			maxVal, Math.min(Math.max(val, minVal), maxVal));
 		final TitledBorder tb = new TitledBorder(BorderFactory.createEtchedBorder(),
 			// empty,
 			"", TitledBorder.CENTER, TitledBorder.BELOW_TOP, new Font("Sans",
@@ -901,46 +949,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private void reDrawROIs(final ImagePlus imgPlus, final String roiName) {
-		if (!auto) {
-			// Housekeeping: Sort the rois based on POSITION and remove null
-			// elements
-			final Comparator<Roi> roiNameComparator = new Comparator<Roi>() {
-
-				@Override
-				public int compare(final Roi r1, final Roi r2) {
-					if (r1 == null && r2 == null) {
-						return 0;
-					}
-					if (r1 == null) {
-						return -1;
-					}
-					if (r2 == null) {
-						return 1;
-					}
-					final double xmin1 = r1.getXBase();
-					final double ymin1 = r1.getYBase();
-					final double xmin2 = r2.getXBase();
-					final double ymin2 = r2.getYBase();
-					final int compx = Double.compare(xmin1, xmin2);
-					if (compx != 0) {
-						return compx;
-					}
-					return Double.compare(ymin1, ymin2);
-				}
-			};
-
-			Collections.sort(rois, roiNameComparator);
-			// Rename Rois in order and remove null
-			final Iterator<Roi> roisIter = rois.iterator();
-			int nullIndex = 0;
-			while (roisIter.hasNext()) {
-				final Roi r = roisIter.next();
-				if (r == null) break;
-				r.setName("Lane " + (nullIndex + 1));
-				nullIndex++;
-			}
-			rois = new ArrayList<>(rois.subList(0, nullIndex));
-		}
+		if (!auto) sortAndRenameManualLanes();
 		final Overlay overlay = new Overlay();
 		final Iterator<Roi> roiIter = rois.iterator();
 		while (roiIter.hasNext()) {
@@ -980,44 +989,79 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			overlay.add(labelRoi);
 			if (buttonAuto.isSelected()) imgPlus.killRoi();
 			if (chkBoxBands.isSelected()) {
-				// Draw a tick where the bands are
-				for (final Peak p : fitter.getFittedPeaks(ln)) {
-					final double y = p.getMean();
-					final Roi band1 = new Line(x0, y, x0 + 10, y);
-					band1.setStrokeColor(MainDialog.fit);
-					band1.setStrokeWidth(1);
-					overlay.add(band1);
-					final Roi band2 = new Line(x0 + rw - 10, y, x0 + rw, y);
-					band2.setStrokeColor(MainDialog.fit);
-					band2.setStrokeWidth(1);
-					overlay.add(band2);
-				}
-				for (final Peak p : fitter.getGuessPeaks(ln)) {
-					final double y = p.getMean();
-					final Roi band1 = new Line(x0, y, x0 + 5, y);
-					band1.setStrokeColor(MainDialog.guess);
-					band1.setStrokeWidth(1);
-					overlay.add(band1);
-					final Roi band2 = new Line(x0 + rw - 5, y, x0 + rw, y);
-					band2.setStrokeColor(MainDialog.guess);
-					band2.setStrokeWidth(1);
-					overlay.add(band2);
-				}
-				for (final Peak p : fitter.getCustomPeaks(ln)) {
-					final double y = p.getMean();
-					final Roi band1 = new Line(x0, y, x0 + 5, y);
-					band1.setStrokeColor(MainDialog.custom);
-					band1.setStrokeWidth(1);
-					overlay.add(band1);
-					final Roi band2 = new Line(x0 + rw - 5, y, x0 + rw, y);
-					band2.setStrokeColor(MainDialog.custom);
-					band2.setStrokeWidth(1);
-					overlay.add(band2);
-				}
-
+				// Ticks at both edges of the lane where the bands are
+				addBandTicks(overlay, fitter.getFittedPeaks(ln), x0, rw, 10,
+					MainDialog.fit);
+				addBandTicks(overlay, fitter.getGuessPeaks(ln), x0, rw, 5,
+					MainDialog.guess);
+				addBandTicks(overlay, fitter.getCustomPeaks(ln), x0, rw, 5,
+					MainDialog.custom);
 			}
 		}
 		imgPlus.setOverlay(overlay);
+	}
+
+	/** Sorts the manual lanes from left to right and numbers them from 1 */
+	private void sortAndRenameManualLanes() {
+		// Housekeeping: Sort the rois based on POSITION and remove null
+		// elements
+		final Comparator<Roi> roiNameComparator = new Comparator<>() {
+
+			@Override
+			public int compare(final Roi r1, final Roi r2) {
+				if (r1 == null && r2 == null) {
+					return 0;
+				}
+				if (r1 == null) {
+					return -1;
+				}
+				if (r2 == null) {
+					return 1;
+				}
+				final double xmin1 = r1.getXBase();
+				final double ymin1 = r1.getYBase();
+				final double xmin2 = r2.getXBase();
+				final double ymin2 = r2.getYBase();
+				final int compx = Double.compare(xmin1, xmin2);
+				if (compx != 0) {
+					return compx;
+				}
+				return Double.compare(ymin1, ymin2);
+			}
+		};
+
+		Collections.sort(rois, roiNameComparator);
+		// Rename Rois in order and remove null
+		final Iterator<Roi> roisIter = rois.iterator();
+		int nullIndex = 0;
+		while (roisIter.hasNext()) {
+			final Roi r = roisIter.next();
+			if (r == null) break;
+			r.setName("Lane " + (nullIndex + 1));
+			nullIndex++;
+		}
+		rois = new ArrayList<>(rois.subList(0, nullIndex));
+	}
+
+	/**
+	 * Adds a tick of the given length at both edges of the lane at each peak's
+	 * position.
+	 */
+	private static void addBandTicks(final Overlay overlay,
+		final List<Peak> peaks, final double x0, final double rw,
+		final double length, final Color color)
+	{
+		for (final Peak p : peaks) {
+			final double y = p.getMean();
+			final Roi band1 = new Line(x0, y, x0 + length, y);
+			band1.setStrokeColor(color);
+			band1.setStrokeWidth(1);
+			overlay.add(band1);
+			final Roi band2 = new Line(x0 + rw - length, y, x0 + rw, y);
+			band2.setStrokeColor(color);
+			band2.setStrokeWidth(1);
+			overlay.add(band2);
+		}
 	}
 
 	private void resetAutoROIs() {
@@ -1098,7 +1142,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		plotter.resetData();
 
 		try {
-			// rois.parallelStream().forEach((r) -> {
 			for (final Roi r : rois) {
 				final int ln = Integer.parseInt(r.getName().substring(5));
 				final Rectangle rect = r.getBounds();
@@ -1115,7 +1158,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 					plotter.addDataSeries(d);
 					plotter.updatePlot(r);
 				}
-				// });
 			}
 			plotter.reloadTabs();
 		}
@@ -1124,11 +1166,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/** Reads a bundled fragment distribution; null if it can't be read */
 	private double[][] readDistFile(final String filename) {
-		String line = null;
-		final List<Integer> fragmentLength = new ArrayList<>();
-		final List<Integer> fragmentFrequency = new ArrayList<>();
-
 		final URL url = MainDialog.class.getClassLoader().getResource(filename);
 		if (url == null) {
 			IJ.error("Fragment Distribution", "The plugin does not contain " +
@@ -1139,38 +1178,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		try (BufferedReader buffer = new BufferedReader(new InputStreamReader(url
 			.openStream())))
 		{
-			while (true) {
-				line = buffer.readLine();
-				if (line == null) break;
-
-				final String[] words = line.split("\t");
-				try {
-					fragmentLength.add(Integer.parseInt(words[0].trim()));
-					fragmentFrequency.add(Integer.parseInt(words[1].trim()));
-				}
-				catch (final NumberFormatException e1) {
-					log.info("Invalid token: " + words[0].trim() + " " + words[1].trim());
-				}
-			}
-			buffer.close();
+			return FragmentDistribution.read(buffer, w -> log.info(filename + ": " +
+				w));
 		}
-		catch (final Exception e) {
-			e.printStackTrace();
+		catch (final IOException e) {
+			log.error("Could not read " + filename, e);
+			return null;
 		}
-		if (fragmentLength.size() != fragmentFrequency.size()) return null;
-		final double[][] out = new double[fragmentLength.size()][3];
-		int count = 0;
-		for (int i = 0; i < fragmentLength.size(); i++) {
-			out[i][0] = fragmentFrequency.get(i);
-			out[i][1] = fragmentLength.get(i);
-			out[i][2] = fragmentLength.get(i) * 607.4 + 157.9; // MW
-			count = count + fragmentFrequency.get(i);
-		}
-		for (int i = 0; i < fragmentLength.size(); i++) {
-			out[i][0] = out[i][0] / count;
-		}
-		// 3 columns: Relative Frequency, Length, MW
-		return out;
 	}
 
 	private void resetCustomPeaks(final int lane) {
@@ -1212,9 +1226,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		if (buttonContinuum.isSelected()) {
 			final JTabbedPane distributionsPane = new JTabbedPane();
-			Component[] c = logWindow.getContentPane().getComponents();
-//					(JRootPane) ((BorderLayout)
-//							logWindow.getLayout()).getLayoutComponent(BorderLayout.CENTER).get;
+			final Component[] c = logWindow.getContentPane().getComponents();
 
 			for (final int i : getAllLaneNumbers()) {
 				if (i != ladderLaneInt) {
@@ -1237,8 +1249,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			}
 			final JSplitPane sp = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT,
 				distributionsPane, c[0]);
-//			c = logWindow.getContentPane().getComponents();
-//			log.info(c.toString());
 			logWindow.getContentPane().add(sp);
 			final Dimension screenD = IJ.getScreenSize();
 			final Dimension dialogD = logWindow.getSize();
@@ -1290,32 +1300,20 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		savedRects = new ArrayList<>();
 		savedCustomPeaks = new ArrayList<>();
 		savedState = null;
-		final String file = "saved-state.bak";
-		final String fullPath = savePath + file;
+		final String fullPath = savePath + SavedStateFile.NAME;
 		log.info("Loading " + fullPath + " ...");
-		try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(
-			fullPath)))
-		{
-			try {
-				while (true) {
-					final Object o = ois.readObject();
-					if (o instanceof Rectangle) {
-						savedRects.add((Rectangle) o);
-					}
-					else if (o instanceof Ladder) {
-						ladder = (Ladder) o;
-						fitter.setLadder(ladder.getMolecularWeights());
-						if (cmbBoxLadderType != null) cmbBoxLadderType.setEnabled(true);
-					}
-					else if (o instanceof FitState) {
-						savedState = (FitState) o;
-						savedCustomPeaks = savedState.customPeaks;
-					}
-				}
+		try (FileInputStream in = new FileInputStream(fullPath)) {
+			final SavedStateFile file = SavedStateFile.read(in);
+			savedRects = file.lanes;
+			if (file.ladder != null) {
+				ladder = file.ladder;
+				fitter.setLadder(ladder.getMolecularWeights());
+				if (cmbBoxLadderType != null) cmbBoxLadderType.setEnabled(true);
 			}
-			catch (final Exception e) {
-				/* Exit */ }
-			ois.close();
+			if (file.state != null) {
+				savedState = file.state;
+				savedCustomPeaks = savedState.customPeaks;
+			}
 			// Old files have no FitState; the mode comes from the preferences
 			final boolean manual = savedState == null ? !auto : !savedState.auto;
 			if (manual) manualROIsFromSavedRects();
@@ -1329,31 +1327,21 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	private boolean saveState() {
 		if (restoring) return true;
-		final String file = "saved-state.bak";
-		final String fullPath = savePath + file;
+		final String fullPath = savePath + SavedStateFile.NAME;
 		new File(savePath).mkdirs();
 		log.info("Saving to " + fullPath + " ...");
-		try (ObjectOutputStream oos = new ObjectOutputStream(new FileOutputStream(
-			fullPath)))
-		{
-			// Keep the manual ROIs while in AUTO mode
-			if (!auto) {
-				savedRects = new ArrayList<>();
-				for (final Roi r : rois)
-					savedRects.add(r.getBounds());
-			}
-			for (final Rectangle r : savedRects)
-				oos.writeObject(r);
-			oos.writeObject(currentState());
-			if (ladder != null) {
-				// System.out.println(ladder.getClass());
-				oos.writeObject(ladder);
-			}
+		// Keep the manual ROIs while in AUTO mode
+		if (!auto) {
+			savedRects = new ArrayList<>();
+			for (final Roi r : rois)
+				savedRects.add(r.getBounds());
+		}
+		try (FileOutputStream out = new FileOutputStream(fullPath)) {
+			new SavedStateFile(savedRects, currentState(), ladder).write(out);
 			return true;
 		}
 		catch (final IOException e) {
-			log.error("ROI file not Found. Creating a new one.");
-			e.printStackTrace();
+			log.error("Could not save " + fullPath, e);
 			return false;
 		}
 	}
@@ -1727,43 +1715,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 
 		if (e.getSource().equals(buttonAuto)) {
-			if (!auto) { // NOT already AUTO
-				if (!saveState()) {
-					final String warn =
-						"When switching to AUTO mode, the current lane selections will be reset!";
-					if (!askUser(warn)) {
-						buttonManual.setSelected(true);
-						return;
-					}
-				}
-				auto = true;
-				prefs.putBoolean(AUTO, auto);
-			}
-			setSliderPanelEnabled(true);
-			resetAutoROIs();
-			reDrawROIs(imp, "none");
-			if (plotter == null || fitter == null) return;
-			resetFitterKeepCustomPeaks();
-			redoProfilePlots();
-			fitter.setInputData(plotter.getProfiles());
-			saveState();
+			switchToAutomaticLanes();
 		}
 
 		if (e.getSource().equals(buttonManual)) {
-			auto = false;
-			prefs.putBoolean(AUTO, auto);
-			setSliderPanelEnabled(false);
-			manualROIsFromSavedRects();
-			if (rois.size() == 0) { // Use the AUTO rois as a start
-				resetAutoROIs();
-				reDrawROIs(imp, "none");
-			}
-			if (plotter == null || fitter == null) return;
-			resetFitterKeepCustomPeaks();
-			reDrawROIs(imp, "none");
-			redoProfilePlots();
-			fitter.setInputData(plotter.getProfiles());
-			saveState();
+			switchToManualLanes();
 		}
 
 		if (e.getSource().equals(buttonBands)) {
@@ -1810,49 +1766,100 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// ComboBoxes
 		// -------------------------------------------------------------
 		if (e.getSource().equals(cmbBoxLadderLane)) {
-			//final String laneStr = cmbBoxLadderLane.getSelectedItem().toString();			
-			final int laneInt = cmbBoxLadderLane.getSelectedIndex();
-			if (laneInt == -1) return;
-			if (laneInt == 0) {
-				ladderLaneInt = MainDialog.noLadderLane;
-				cmbBoxLadderType.setEnabled(false);
-				cmbBoxDist.setEnabled(false);
-			}
-			else {
-				ladderLaneInt = laneInt;
-				cmbBoxLadderType.setEnabled(true);
-				cmbBoxDist.setEnabled(true);
-			}
-			ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
-			updateLadderLane();
-			saveState();
-			reDrawROIs(imp, "none");
+			ladderLaneChosen();
 		}
 
 		if (e.getSource().equals(cmbBoxLadderType)) {
-			final int type = cmbBoxLadderType.getSelectedIndex();
-			if (type != 0) {
-				final boolean loaded;
-				if (ladder == null) {
-					ladder = Ladder.create(type);
-					loaded = ladder != null;
-				}
-				else loaded = ladder.getType() == type || ladder.setType(type);
-
-				if (loaded) {
-					ladder.setRange(askLadderRange());
-					updateLadderType();
-				}
-				else {
-					// No custom ladder file loaded: go back to the previous selection
-					cmbBoxLadderType.setSelectedIndex(ladder == null ? 0 : ladder
-						.getType());
-				}
-			}
+			ladderTypeChosen();
 		}
 
 		if (e.getSource().equals(cmbBoxDist)) {
 			loadDistribution(true);
+		}
+	}
+
+	/** Automatic Rectangle Selection: equal lanes placed with the sliders. */
+	private void switchToAutomaticLanes() {
+		if (!auto) { // NOT already AUTO
+			if (!saveState()) {
+				final String warn =
+					"When switching to AUTO mode, the current lane selections will be reset!";
+				if (!askUser(warn)) {
+					buttonManual.setSelected(true);
+					return;
+				}
+			}
+			auto = true;
+			prefs.putBoolean(AUTO, auto);
+		}
+		setSliderPanelEnabled(true);
+		resetAutoROIs();
+		reDrawROIs(imp, "none");
+		if (plotter == null || fitter == null) return;
+		resetFitterKeepCustomPeaks();
+		redoProfilePlots();
+		fitter.setInputData(plotter.getProfiles());
+		saveState();
+	}
+
+	/** Manual Rectangle Selection: the lanes drawn on the image. */
+	private void switchToManualLanes() {
+		auto = false;
+		prefs.putBoolean(AUTO, auto);
+		setSliderPanelEnabled(false);
+		manualROIsFromSavedRects();
+		if (rois.size() == 0) { // Use the AUTO rois as a start
+			resetAutoROIs();
+			reDrawROIs(imp, "none");
+		}
+		if (plotter == null || fitter == null) return;
+		resetFitterKeepCustomPeaks();
+		reDrawROIs(imp, "none");
+		redoProfilePlots();
+		fitter.setInputData(plotter.getProfiles());
+		saveState();
+	}
+
+	/** A lane was chosen in Select Ladder Lane. */
+	private void ladderLaneChosen() {
+		final int laneInt = cmbBoxLadderLane.getSelectedIndex();
+		if (laneInt == -1) return;
+		if (laneInt == 0) {
+			ladderLaneInt = MainDialog.noLadderLane;
+			cmbBoxLadderType.setEnabled(false);
+			cmbBoxDist.setEnabled(false);
+		}
+		else {
+			ladderLaneInt = laneInt;
+			cmbBoxLadderType.setEnabled(true);
+			cmbBoxDist.setEnabled(true);
+		}
+		ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
+		updateLadderLane();
+		saveState();
+		reDrawROIs(imp, "none");
+	}
+
+	/** A ladder type was chosen: asks for its range, or its file. */
+	private void ladderTypeChosen() {
+		final int type = cmbBoxLadderType.getSelectedIndex();
+		if (type != 0) {
+			final boolean loaded;
+			if (ladder == null) {
+				ladder = Ladder.create(type);
+				loaded = ladder != null;
+			}
+			else loaded = ladder.getType() == type || ladder.setType(type);
+
+			if (loaded) {
+				ladder.setRange(askLadderRange());
+				updateLadderType();
+			}
+			else {
+				// No custom ladder file loaded: go back to the previous selection
+				cmbBoxLadderType.setSelectedIndex(ladder == null ? 0 : ladder
+					.getType());
+			}
 		}
 	}
 
@@ -1878,18 +1885,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				prefs.putInt(DHI, dhi);
 				prefs.putInt(EVERY, every);
 			}
-			final double[][] dist = new double[(dhi - dlo) / every + 1][3];
-			final double f = 1.0 / (dhi - dlo + 1);
-
-			for (int i = 0; i < dist.length; i++) {
-				dist[i][0] = f;
-				dist[i][1] = dhi - i * every;
-				dist[i][2] = dist[i][1] * 607.4 + 157.9; // MW;
-			}
-			fitter.setFragmentDistribution(dist);
+			fitter.setFragmentDistribution(FragmentDistribution.uniform(dlo, dhi,
+				every));
 		}
 		else {
-			final String filename = "sample-distributions/" + cmbBoxDist
+			final String filename = FragmentDistribution.FOLDER + cmbBoxDist
 				.getSelectedItem() + ".txt";
 			final double[][] dist = readDistFile(filename);
 			if (dist == null) cmbBoxDist.setSelectedIndex(0);
@@ -1994,7 +1994,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 					final Rectangle rN = roiNew.getBounds();
 					if (rN.getWidth() * rN.getHeight() > 100) {
 						if (roiNew.getName() != null) { // Existing ROI
-							// log.info("Modify Roi");
 							// Moving/Resizing a specific ROI
 							final Iterator<Roi> roisIter = rois.iterator();
 							while (roisIter.hasNext()) {
@@ -2073,176 +2072,4 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	public void windowDeactivated(final WindowEvent e) {
 		// Nothing to do
 	}
-}
-
-class Ladder implements Serializable {
-
-	// Pinned to the value computed before Ladder changed, so saved states still load
-	private static final long serialVersionUID = -3262235272790955773L;
-
-	private static final String[] hilo      = { "10 kbp", "8 kbp", "6 kbp", "4 kbp",
-		"3 kbp", "2 kbp", "1.55 kbp", "1.4 kbp", "1 kbp", "750 bp", "500 bp",
-		"400 bp", "300 bp", "200 bp", "100 bp", "50 bp" };
-	private static final String[] bp100     = { "1.5 kbp", "1.2 kbp", "1 kbp",
-		"900 bp", "800 bp", "700 bp", "600 bp", "500 bp", "400 bp", "300 bp",
-		"200 bp", "100 bp" };
-	private static final String[] quickload = { "48.5 kbp", "20 kbp", "15 kbp",
-			"10 kbp", "8 kbp", "6 kbp", "5 kbp", "4 kbp", "3 kbp", "2 kbp", 
-			"1.5 kbp",  "1 kbp",  "500 bp" };
-	private static final String[] tapestation = { "1.5 kbp", "1 kbp", "700 bp",
-			"500 bp", "400 bp", "300 bp", "200 bp", "100 bp",  "50 bp",  "25 bp" };
-	
-	private static final RealVector hilo_bp = new ArrayRealVector(new double[] {
-		10000, 8000, 6000, 4000, 3000, 2000, 1550, 1400, 1000, 750, 500, 400, 300,
-		200, 100, 50 });
-	private static final RealVector bp100_bp = new ArrayRealVector(new double[] {
-		1517, 1200, 1000, 900, 800, 700, 600, 500, 400, 300, 200, 100 });
-	private static final RealVector quickload_bp = new ArrayRealVector(new double[] {
-		48500, 20000, 15000, 10000, 8000, 6000, 5000, 4000, 3000, 2000, 1500, 1000, 500 });
-	private static final RealVector tapestation_bp = new ArrayRealVector(new double[] {
-			1500, 1000, 700, 500, 400, 300, 200, 100, 50, 25 });
-	private RealVector custom_bp = new ArrayRealVector();
-	
-	static final int HILO        = 1;
-	static final int BP100       = 2;
-	static final int QUICKLOAD   = 3;
-	static final int TAPESTATION = 4;
-	static final int CUSTOM      = 5;
-	
-	private int type;
-	private int[] ladderRange;
-	private String[] ladderStrings;
-
-	/**
-	 * Returns null if the type is CUSTOM and no ladder file could be loaded.
-	 */
-	static Ladder create(final int type) {
-		final Ladder ladder = new Ladder();
-		return ladder.setType(type) ? ladder : null;
-	}
-
-	/**
-	 * Asks for a text file listing one band size (bp) per line. Returns false,
-	 * leaving the ladder unchanged, if the user cancels or no sizes are found.
-	 */
-	private boolean askLadderFile() {
-		final JFileChooser fc = new JFileChooser();
-		if (fc.showOpenDialog(null) != JFileChooser.APPROVE_OPTION) return false;
-		final File file = fc.getSelectedFile();
-		RealVector bp = new ArrayRealVector();
-		try (BufferedReader buffer = new BufferedReader(new InputStreamReader(
-			new FileInputStream(file))))
-		{
-			String line;
-			while ((line = buffer.readLine()) != null) {
-				line = line.trim();
-				if (line.isEmpty()) continue;
-				try {
-					bp = bp.append(Integer.parseInt(line));
-				}
-				catch (final NumberFormatException e1) {
-					e1.printStackTrace();
-				}
-			}
-		}
-		catch (final IOException e) {
-			IJ.error("Custom Ladder", "Could not read " + file.getName() + ":\n" +
-				e.getMessage());
-			return false;
-		}
-		if (bp.getDimension() == 0) {
-			IJ.error("Custom Ladder", "No band sizes found in " + file.getName() +
-				".\nThe file should list one whole number of base pairs per line.");
-			return false;
-		}
-
-		custom_bp = bp;
-		ladderStrings = new String[custom_bp.getDimension()];
-		for (int w = 0; w < custom_bp.getDimension(); w++) {
-			final double bases = custom_bp.getEntry(w);
-			if (bases < 1000) {
-				ladderStrings[w] = (int) bases + " bp";
-			}
-			else {
-				ladderStrings[w] = bases / 1000 + " kbp";
-			}
-		}
-		return true;
-	}
-	
-	public RealVector getMolecularWeights() {
-		RealVector bp = new ArrayRealVector();
-		final int nel = ladderRange[1] - ladderRange[0] + 1;
-		if (this.type == HILO) {
-			bp = hilo_bp.getSubVector(ladderRange[0], nel);
-		}
-		else if (this.type == BP100) {
-			bp = bp100_bp.getSubVector(ladderRange[0], nel);
-		}
-		else if (this.type == QUICKLOAD) {
-			bp = quickload_bp.getSubVector(ladderRange[0], nel);
-		}
-		else if (this.type == TAPESTATION) {
-			bp = tapestation_bp.getSubVector(ladderRange[0], nel);
-		}
-		else if (this.type == CUSTOM) {
-			bp = custom_bp.getSubVector(ladderRange[0], nel);
-		}
-		final RealVector mw = bp.mapMultiply(607.4).mapAdd(157.9);
-		return mw;
-	}
-
-	public int[] getRange() {
-		return this.ladderRange;
-	}
-
-	public void setRange(final int[] ladderRange) {
-		this.ladderRange = ladderRange;
-	}
-
-	public String[] getStrings() {
-		return this.ladderStrings;
-	}
-
-	public int getType() {
-		return this.type;
-	}
-
-	/**
-	 * Returns false, leaving the ladder unchanged, if the type is CUSTOM and no
-	 * ladder file could be loaded.
-	 */
-	public boolean setType(final int type) {
-		if (type == CUSTOM && !askLadderFile()) return false;
-		this.type = type;
-
-		if (type == HILO) ladderStrings = hilo;
-		else if (type == BP100) ladderStrings = bp100;
-		else if (type == QUICKLOAD) ladderStrings = quickload;
-		else if (type == TAPESTATION) ladderStrings = tapestation;
-
-		ladderRange = new int[] { 0, ladderStrings.length - 1 };
-		return true;
-	}
-}
-
-/**
- * Fitting settings of an image, saved with its lanes and ladder so that the
- * last fit can be repeated when the image is opened again
- */
-class FitState implements Serializable {
-
-	private static final long serialVersionUID = 1L;
-
-	boolean auto;
-	int nLanes, lw, lh, lsp, lhoff, lvoff;
-	int ladderLane;
-	int degBG;
-	double polyDerivative, tolPK, areaDrift, sdDrift;
-	boolean continuum;
-	int dist; // index of the fragment distribution
-	int dlo, dhi, every;
-	List<Peak> customPeaks = new ArrayList<>();
-	boolean fitDone;
-	boolean showBands; // false when loading files saved before it was added
 }

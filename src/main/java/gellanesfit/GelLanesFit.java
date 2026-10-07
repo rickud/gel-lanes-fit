@@ -1,26 +1,17 @@
-/**
- * Gauss Fit
- * GelLanesFit.java
- * author: Rick Ziraldo, 2017
- * The /University of Texas at Dallas, Richardson, TX
- * http://www.utdallas.edu
+/*
+ * Gel Lanes Fit - GelLanesFit.java
+ * Author: Rick Ziraldo, 2017
+ * The University of Texas at Dallas, Richardson, TX
  *
- * Feature: Fitting of multiple Gaussian functions to intensity profiles along the gel lanes
- * Gel Lanes Fit is a tool for fitting gaussian profiles and estimating
- * the profile parameters on selected lanes in gel electrophoresis images.
- *
- * The GaussianArrayCurveFitter class is implemented using
- * Abstract classes from Apache Commons project
- *
- * The source code is maintained and made available on GitHub
- * https://github.com/rickud/gauss-curve-fit
- *
+ * Licensed under the GNU Affero General Public License v3.0; see LICENSE.
+ * Source: https://github.com/rickud/gel-lanes-fit
  */
 
 package gellanesfit;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.net.URL;
 import java.util.Enumeration;
@@ -48,7 +39,11 @@ import net.imagej.ImageJ;
 
 @Plugin(type = Command.class, headless = true,
 	menuPath = "Plugins>Gel Tools>Gel Lanes Fit")
-@SuppressWarnings("ucd")
+/**
+ * The Gel Lanes Fit command (Plugins › Gel Tools › Gel Lanes Fit): quantitative
+ * analysis of the lanes of a gel electrophoresis image. See the user guide in
+ * docs/user-guide.md.
+ */
 public class GelLanesFit implements Command {
 
 	@Parameter
@@ -66,7 +61,8 @@ public class GelLanesFit implements Command {
 	private String version;
 
 	/**
-	 * Initialization method
+	 * Opens the plugin on the current image: the main window, the Profiles
+	 * window and the fitter. Runs on the Swing event thread.
 	 */
 	public void init() {
 		final Preferences prefs = Preferences.userRoot().node(this.getClass()
@@ -94,6 +90,9 @@ public class GelLanesFit implements Command {
 		iwin.getCanvas().requestFocus();
 	}
 
+	/**
+	 * Starts the plugin once, building its windows on the Swing event thread.
+	 */
 	@Override
 	public void run() {
 		if (!setup) return;
@@ -120,9 +119,8 @@ public class GelLanesFit implements Command {
 			final Enumeration<URL> resources = getClass().getClassLoader()
 				.getResources("META-INF/MANIFEST.MF");
 			while (resources.hasMoreElements()) {
-				try {
-					final Manifest manifest = new Manifest(resources.nextElement()
-						.openStream());
+				try (InputStream in = resources.nextElement().openStream()) {
+					final Manifest manifest = new Manifest(in);
 					// check that this is your manifest and do what you need or get the
 					// next one
 					final Attributes a = manifest.getMainAttributes();
@@ -164,7 +162,6 @@ public class GelLanesFit implements Command {
 			ImageConverter ic = new ImageConverter(iPlus);
 			ic.convertToGray8();
 			iPlus.getProcessor().invert();
-			//iPlus.updateAndDraw();
 		}
 		final LUT[] lut = iPlus.getLuts();
 		iPlus.setLut(lut[0].createInvertedLut());

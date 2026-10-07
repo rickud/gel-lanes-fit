@@ -1,13 +1,10 @@
-/**
- * Gel Lanes Fit
- * GelLanesFit.java
- * author: Rick Ziraldo, 2017
- * The /University of Texas at Dallas, Richardson, TX
- * http://www.utdallas.edu
+/*
+ * Gel Lanes Fit - Plotter.java
+ * Author: Rick Ziraldo, 2017
+ * The University of Texas at Dallas, Richardson, TX
  *
- * The source code is maintained and made available on GitHub
- * https://github.com/rickud/gauss-curve-fit
- *
+ * Licensed under the GNU Affero General Public License v3.0; see LICENSE.
+ * Source: https://github.com/rickud/gel-lanes-fit
  */
 
 package gellanesfit;
@@ -47,6 +44,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -54,7 +52,6 @@ import javax.swing.JTabbedPane;
 import javax.swing.WindowConstants;
 import javax.swing.border.EmptyBorder;
 
-//import org.apache.batik.svggen.SVGGraphics2D;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.math3.analysis.UnivariateFunction;
 import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
@@ -94,13 +91,27 @@ import org.jfree.data.xy.XYSeriesCollection;
 import org.jfree.graphics2d.svg.SVGGraphics2D;
 import org.jfree.graphics2d.svg.SVGUtils;
 import org.scijava.Context;
+import org.scijava.log.LogService;
+import org.scijava.plugin.Parameter;
 
 import ij.IJ;
 import ij.ImagePlus;
 import ij.gui.ProfilePlot;
 import ij.gui.Roi;
 
+/**
+ * The Profiles window: one chart per lane, in tabs of four, with the lane's
+ * profile, the fitted background, peaks and fit, the custom peaks, and the
+ * ladder bands as labelled vertical markers. Clicks in a chart add or remove
+ * custom peaks in Edit Custom Peaks mode. Also saves the charts as PNG, PDF and
+ * SVG.
+ */
 class Plotter extends JFrame implements ChartMouseListener {
+
+	private static final long serialVersionUID = 1L;
+
+	@Parameter
+	private LogService log;
 
 	private final double SW = IJ.getScreenSize().getWidth();
 	private final double SH = IJ.getScreenSize().getHeight();
@@ -176,14 +187,22 @@ class Plotter extends JFrame implements ChartMouseListener {
 	 *
 	 * @param roi
 	 */
-	private DataSeries getLaneProfile(final Roi roi) {
+	/**
+	 * A lane's profile: the intensity averaged across the lane's width, row by
+	 * row. x is the row's distance from the top of the image, in pixels.
+	 *
+	 * @param imp the gel image
+	 * @param roi the lane, named "Lane n"
+	 * @return the profile, or null if the lane is less than 2 pixels tall
+	 */
+	static DataSeries laneProfile(final ImagePlus imp, final Roi roi) {
 		imp.setRoi(roi);
+		final RealVector profile = new ArrayRealVector(new ProfilePlot(imp, true)
+			.getProfile());
+		imp.killRoi();
+		if (profile.getDimension() < 2) return null;
 		final String name = roi.getName();
 		final int lane = Integer.parseInt(name.substring(5));
-		final ProfilePlot profileP = new ProfilePlot(imp, true); // get the profile
-		final RealVector profile = new ArrayRealVector(profileP.getProfile());
-		if (profile.getDimension() < 2) return null;
-		imp.killRoi();
 		final double y0 = roi.getBounds().getMinY();
 		final double[] y = new double[profile.getDimension()];
 		for (int p = 0; p < y.length; p++)
@@ -406,7 +425,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 	}
 
 	void updateProfile(final Roi roi) {
-		final DataSeries profile = getLaneProfile(roi);
+		final DataSeries profile = laneProfile(imp, roi);
 		// Assume plotsData, chartsMainPanel was reset
 		plotNumbers.add(profile.getLane());
 		plotsData.add(profile);
@@ -414,7 +433,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 		final String yLabel = "Grayscale Value";
 		final XYSeriesCollection dataset = new XYSeriesCollection();
 		XYPlot thePlot = new XYPlot();
-		profile.setKey(String.format("%d", DataSeries.PROFILE));
 		dataset.addSeries(profile);
 		boolean found = false;
 		for (final ChartPanel c : chartPanels) {
@@ -451,7 +469,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				}
 				catch (final RuntimeException ex) {
 					// Never let the label fit stop the chart from being painted
-					ex.printStackTrace();
+					log.error("Could not fit the plot range to the labels", ex);
 				}
 			});
 			chartPanels.add(chartPanel);
@@ -491,7 +509,6 @@ class Plotter extends JFrame implements ChartMouseListener {
 			final int plotNumber = Integer.parseInt(p.getChart().getTitle().getText()
 				.substring(5));
 			if (plotNumber == ln) {
-				int gcount = 0;
 				final JFreeChart c = p.getChart();
 				final XYPlot pl = c.getXYPlot();
 
@@ -514,76 +531,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				if (c.getXYPlot().getAnnotations() != null) c.getXYPlot()
 					.clearAnnotations();
 
-				// Plot the data series
-				final LegendItems legendItems = new LegendItems();
-//				double min = Integer.MAX_VALUE;
-//				double max = Integer.MIN_VALUE;
-				for (final DataSeries d : plotsData) {
-					if (d.getLane() == ln) {
-						if (d.getItemCount() > 0) {
-							final int k = d.getType();
-							String key = "";
-							if (k == DataSeries.GAUSS_BG) {
-								key = String.format("%d", k + gcount);
-								gcount++;
-							}
-							else {
-								key = String.format("%d", k);
-							}
-							d.setKey(key);
-							dataset.addSeries(d);
-							pl.setSeriesRenderingOrder(SeriesRenderingOrder.FORWARD);
-							final int seriesIdx = dataset.getSeriesIndex(key);
-							final XYLineAndShapeRenderer renderer =
-								(XYLineAndShapeRenderer) pl.getRenderer();
-							renderer.setSeriesShapesVisible(seriesIdx, false);
-							renderer.setSeriesLinesVisible(seriesIdx, true);
-
-							if (k == DataSeries.PROFILE) {
-								renderer.setSeriesPaint(seriesIdx, profileColor);
-								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Profile");
-								li.setFillPaint(d.getColor());
-								legendItems.add(li);
-							}
-							if (k == DataSeries.BACKGROUND) {
-								renderer.setSeriesPaint(seriesIdx, bgColor);
-								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Background");
-								li.setFillPaint(d.getColor());
-								legendItems.add(li);
-							}
-							if (k == DataSeries.GAUSS_BG) {
-								renderer.setSeriesPaint(seriesIdx, gaussColor);
-								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Peaks");
-								if (!legendItems.contains(li)) {
-									li.setFillPaint(d.getColor());
-									legendItems.add(li);
-								}
-							}
-							if (k == DataSeries.FITTED) {
-								renderer.setSeriesPaint(seriesIdx, fittedColor);
-								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Fit");
-								li.setFillPaint(d.getColor());
-								legendItems.add(li);
-							}
-							if (k == DataSeries.CUSTOMPEAKS) {
-								renderer.setSeriesPaint(seriesIdx, vMarkerEditPeakColor);
-								final Shape dot = new Ellipse2D.Double(0, 0, 6, 6);
-								renderer.setSeriesShape(seriesIdx, dot);
-								renderer.setSeriesShapesVisible(seriesIdx, true);
-								renderer.setSeriesLinesVisible(seriesIdx, false);
-								final LegendItem li = new LegendItem("Custom Peaks");
-								li.setFillPaint(d.getColor());
-								legendItems.add(li);
-							}
-//							if (d.getMaxY() > max) max = d.getMaxY();
-//							if (d.getMaxY() < min) min = d.getMinY();
-						}
-					}
-				}
+				final LegendItems legendItems = addSeries(ln, pl, dataset);
 				final Range domain = pl.getDomainAxis().getRange();
 				final Range range = pl.getRangeAxis().getRange();
 				c.getXYPlot().setDataset(dataset);
@@ -600,28 +548,100 @@ class Plotter extends JFrame implements ChartMouseListener {
 				pl.setFixedLegendItems(legendItems);
 				c.getLegend().setPosition(RectangleEdge.RIGHT);
 
-				// Plot vertical markers
-				for (final VerticalMarker m : verticalMarkers) {
-					if (m.getLane() == ln) {
-						final double height = c.getXYPlot().getRangeAxis().getUpperBound();
-						final double offset = 0;
-						final XYTextAnnotation label = new XYTextAnnotation(m.getName(), m
-							.getValue() - offset, height);
-						if (m.getType() == VerticalMarker.VMARK) {
-							label.setPaint(vMarkerColor);
-						}
-						else if (m.getType() == VerticalMarker.BMARK) {
-							label.setPaint(bMarkerColor);
-						}
-						label.setFont(labelFont);
-						label.setRotationAnchor(TextAnchor.BOTTOM_RIGHT);
-						label.setTextAnchor(TextAnchor.TOP_RIGHT);
-						label.setRotationAngle(-Math.PI / 2);
+				drawMarkers(c, ln, vMarkerColor);
+			}
+		}
+	}
 
-						c.getXYPlot().addAnnotation(label);
-						c.getXYPlot().addDomainMarker(m, Layer.BACKGROUND);
+	/**
+	 * Adds the lane's curves to the chart's dataset, styled by kind, and builds
+	 * the legend for them.
+	 */
+	private LegendItems addSeries(final int ln, final XYPlot pl,
+		final XYSeriesCollection dataset)
+	{
+		final LegendItems legendItems = new LegendItems();
+		for (final DataSeries d : plotsData) {
+			if (d.getLane() == ln) {
+				if (d.getItemCount() > 0) {
+					final int k = d.getType();
+					dataset.addSeries(d);
+					pl.setSeriesRenderingOrder(SeriesRenderingOrder.FORWARD);
+					final int seriesIdx = dataset.getSeriesIndex(d.getKey());
+					final XYLineAndShapeRenderer renderer =
+						(XYLineAndShapeRenderer) pl.getRenderer();
+					renderer.setSeriesShapesVisible(seriesIdx, false);
+					renderer.setSeriesLinesVisible(seriesIdx, true);
+
+					if (k == DataSeries.PROFILE) {
+						renderer.setSeriesPaint(seriesIdx, profileColor);
+						renderer.setSeriesStroke(seriesIdx, dataStroke);
+						final LegendItem li = new LegendItem("Profile");
+						li.setFillPaint(d.getColor());
+						legendItems.add(li);
+					}
+					if (k == DataSeries.BACKGROUND) {
+						renderer.setSeriesPaint(seriesIdx, bgColor);
+						renderer.setSeriesStroke(seriesIdx, dataStroke);
+						final LegendItem li = new LegendItem("Background");
+						li.setFillPaint(d.getColor());
+						legendItems.add(li);
+					}
+					if (k == DataSeries.GAUSS_BG) {
+						renderer.setSeriesPaint(seriesIdx, gaussColor);
+						renderer.setSeriesStroke(seriesIdx, dataStroke);
+						final LegendItem li = new LegendItem("Peaks");
+						if (!legendItems.contains(li)) {
+							li.setFillPaint(d.getColor());
+							legendItems.add(li);
+						}
+					}
+					if (k == DataSeries.FITTED) {
+						renderer.setSeriesPaint(seriesIdx, fittedColor);
+						renderer.setSeriesStroke(seriesIdx, dataStroke);
+						final LegendItem li = new LegendItem("Fit");
+						li.setFillPaint(d.getColor());
+						legendItems.add(li);
+					}
+					if (k == DataSeries.CUSTOMPEAKS) {
+						renderer.setSeriesPaint(seriesIdx, vMarkerEditPeakColor);
+						final Shape dot = new Ellipse2D.Double(0, 0, 6, 6);
+						renderer.setSeriesShape(seriesIdx, dot);
+						renderer.setSeriesShapesVisible(seriesIdx, true);
+						renderer.setSeriesLinesVisible(seriesIdx, false);
+						final LegendItem li = new LegendItem("Custom Peaks");
+						li.setFillPaint(d.getColor());
+						legendItems.add(li);
 					}
 				}
+			}
+		}
+		return legendItems;
+	}
+
+	/** Draws the lane's vertical markers, such as the ladder bands, with labels */
+	private void drawMarkers(final JFreeChart c, final int ln,
+		final Color vMarkerColor)
+	{
+		for (final VerticalMarker m : verticalMarkers) {
+			if (m.getLane() == ln) {
+				final double height = c.getXYPlot().getRangeAxis().getUpperBound();
+				final double offset = 0;
+				final XYTextAnnotation label = new XYTextAnnotation(m.getName(), m
+					.getValue() - offset, height);
+				if (m.getType() == VerticalMarker.VMARK) {
+					label.setPaint(vMarkerColor);
+				}
+				else if (m.getType() == VerticalMarker.BMARK) {
+					label.setPaint(bMarkerColor);
+				}
+				label.setFont(labelFont);
+				label.setRotationAnchor(TextAnchor.BOTTOM_RIGHT);
+				label.setTextAnchor(TextAnchor.TOP_RIGHT);
+				label.setRotationAngle(-Math.PI / 2);
+
+				c.getXYPlot().addAnnotation(label);
+				c.getXYPlot().addDomainMarker(m, Layer.BACKGROUND);
 			}
 		}
 	}
@@ -705,15 +725,15 @@ class Plotter extends JFrame implements ChartMouseListener {
 					(int) x, (int) y);
 			}
 			catch (final IOException e) {
-				e.printStackTrace();
+				log.error("Could not save " + plotfile + ".png", e);
 			}
 
-			try { // Save PDF
+			// Save PDF
+			try (FileOutputStream pdf = new FileOutputStream(plotfile + ".pdf")) {
 				final Rectangle ps = new Rectangle((float) x, (float) y);
 				final com.itextpdf.text.Document doc = new com.itextpdf.text.Document(
 					ps, 20, 20, 20, 20);
-				final PdfWriter writer = PdfWriter.getInstance(doc,
-					new FileOutputStream(plotfile + ".pdf"));
+				final PdfWriter writer = PdfWriter.getInstance(doc, pdf);
 				doc.open();
 				final PdfContentByte cb = writer.getDirectContent();
 				final PdfTemplate t = cb.createTemplate((float) x, (float) y);
@@ -725,7 +745,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				doc.close();
 			}
 			catch (DocumentException | IOException e) {
-				e.printStackTrace();
+				log.error("Could not save " + plotfile + ".pdf", e);
 			}
 
 			try { // Save SVG
@@ -735,7 +755,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				SVGUtils.writeToSVG(out, svgGen.getSVGElement());
 			}
 			catch (final IOException e) {
-				e.printStackTrace();
+				log.error("Could not save " + plotfile + ".svg", e);
 			}
 		}
 	}
@@ -825,7 +845,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 		}
 	}
 
+	/** A chart's legend, with one item per kind of curve. */
 	private class LegendItems extends LegendItemCollection {
+
+		private static final long serialVersionUID = 1L;
 
 		public LegendItems() {
 			super();
@@ -841,7 +864,10 @@ class Plotter extends JFrame implements ChartMouseListener {
 
 }
 
+/** A labelled vertical line on a lane's chart, such as a ladder band. */
 class VerticalMarker extends ValueMarker {
+
+	private static final long serialVersionUID = 1L;
 
 	// Possible types
 	final static int VMARK = 0; // Vertical Position
@@ -877,7 +903,21 @@ class VerticalMarker extends ValueMarker {
 	}
 }
 
+/**
+ * A curve on a lane's chart: the profile, the background, a peak, the fit, or
+ * the custom peaks. x is the position along the lane in pixels, y the
+ * intensity in gray values.
+ */
 class DataSeries extends XYSeries implements Comparable<DataSeries> {
+
+	private static final long serialVersionUID = 1L;
+
+	// Series in a chart's dataset need unique keys; they aren't displayed
+	private static final AtomicLong keys = new AtomicLong();
+
+	private static String uniqueKey(final int type) {
+		return type + "-" + keys.incrementAndGet();
+	}
 
 	private final String name; // Name for Legend
 	private final int lane; // Reference
@@ -894,7 +934,7 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 	public DataSeries(final String name, final int lane, final int type,
 		final RealVector x, final RealVector y, final Color color)
 	{
-		super(type);
+		super(uniqueKey(type));
 		this.name = name;
 		this.lane = lane;
 		this.type = type;
@@ -914,7 +954,7 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 		final RealVector x, final UnivariateFunction[] function,
 		final Color color)
 	{
-		super(type);
+		super(uniqueKey(type));
 		this.name = name;
 		this.lane = lane;
 		this.type = type;
@@ -936,7 +976,7 @@ class DataSeries extends XYSeries implements Comparable<DataSeries> {
 	public DataSeries(final String name, final int lane, final int type,
 		final RealVector x, final UnivariateFunction function, final Color color)
 	{
-		super(type);
+		super(uniqueKey(type));
 		this.name = name;
 		this.lane = lane;
 		this.type = type;
