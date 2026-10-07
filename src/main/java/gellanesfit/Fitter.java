@@ -388,7 +388,8 @@ class Fitter {
 		RealVector poly = new ArrayRealVector();
 		poly = poly.append(degBG).append(new ArrayRealVector(degBG + 1));
 
-		for (final DataSeries d : inputData) {
+		// The background starts at the lane's minimum; degree -1 has none
+		if (degBG >= 0) for (final DataSeries d : inputData) {
 			if (d.getLane() == lane) poly.setEntry(1, d.getMinY());
 		}
 		
@@ -527,8 +528,8 @@ class Fitter {
 		allFittedList.addAll(fittedPeaks);
 
 		// Create new DataSeries for Plotter
-		final PolynomialFunction bg = new PolynomialFunction(poly.getSubVector(1,
-			degBG + 1).toArray());
+		final PolynomialFunction bg = new PolynomialFunction(degBG < 0
+			? new double[] { 0 } : poly.getSubVector(1, degBG + 1).toArray());
 		output.add(new DataSeries("Background", lane, DataSeries.BACKGROUND, xvals,
 			bg, Plotter.bgColor));
 

@@ -63,6 +63,10 @@ public class ContinuumFitTest {
 	}
 
 	private Fitter fitContinuum() throws Exception {
+		return fitContinuum(2);
+	}
+
+	private Fitter fitContinuum(final int degBG) throws Exception {
 		final Ladder ladder = Ladder.create(Ladder.HILO);
 		ladder.setRange(LADDER_RANGE);
 		final RealVector mw = ladder.getMolecularWeights();
@@ -78,6 +82,7 @@ public class ContinuumFitTest {
 
 		final Fitter fitter = BandedFitTest.bandedFitter(context, TestProfiles
 			.profile(1, 50, ladderLane), TestProfiles.profile(2, 50, smear));
+		fitter.setDegBG(degBG);
 		fitter.setReferenceLane(1);
 		fitter.doFit(1);
 		assertEquals("all ladder bands found", mw.getDimension(), fitter
@@ -111,6 +116,13 @@ public class ContinuumFitTest {
 		final List<Peak> peaks = fitter.getFittedPeaks(2);
 		assertTrue("fragments in the lane", peaks.size() > 10);
 		Reference.check("continuum-smear", Reference.peaks(peaks));
+	}
+
+	@Test
+	public void fitsWithoutABackground() throws Exception {
+		// Polynomial Degree -1: no background (used to throw in doGuess)
+		final Fitter fitter = fitContinuum(-1);
+		assertTrue("fragments in the lane", fitter.getFittedPeaks(2).size() > 10);
 	}
 
 	@Test
