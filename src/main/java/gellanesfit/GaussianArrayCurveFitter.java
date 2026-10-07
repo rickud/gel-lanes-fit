@@ -806,71 +806,104 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		 */
 		@Override
 		public RealVector validate(final RealVector param) {
-			// Sort the parameter array the same way as the initial array
+			// Split the parameters up the same way as the starting guess
 			RealVector poly = new ArrayRealVector();
 			RealVector norm = new ArrayRealVector();
 			RealVector mean = new ArrayRealVector();
 			RealVector sd = new ArrayRealVector();
-			RealVector area = new ArrayRealVector();
-			PolynomialFunction p = new PolynomialFunction(new double[] { 0.0 });
-			if (deg != -1) { // no polynomial
-				poly = param.getSubVector(1, deg + 1);
-			}
-			// Gaussian parameters in order {Norm, Mean, Sigma}
+			if (deg != -1) poly = param.getSubVector(1, deg + 1);
 			for (int i = deg + 2; i < param.getDimension(); i += 3) {
 				norm = norm.append(param.getEntry(i));
 				mean = mean.append(param.getEntry(i + 1));
 				sd = sd.append(param.getEntry(i + 2));
 			}
 
-			// Polynomyal parameters
+			PolynomialFunction p = new PolynomialFunction(new double[] { 0.0 });
 			if (poly.getDimension() > 0) {
-				final double tolHigh = ytarget.getMinValue() * polyOffset;
-				final double tolLow = BACKGROUND_FLOOR * tolHigh;
+				final PolynomialFunction[] curve = new PolynomialFunction[1];
+				poly = constrainBackground(poly, curve);
+				p = curve[0];
+			}
+			constrainPeaks(norm, mean, sd, p);
+			if (fitMode == continuumMode) norm = constrainAreas(norm, sd);
 
-				p = new PolynomialFunction(poly.toArray());
-				PolynomialFunction p1 = p.polynomialDerivative();
-				double d1bg = new Mean().evaluate(xtarget.map(p1).toArray());
-				final RealVector coeffs0 = poly.getSubVector(0, 1);
-				RealVector coeffs1end = poly.getSubVector(1, poly.getDimension() - 1);
-				RealVector bg = xtarget.map(p);
-				
-				if (tolHigh - tolLow > 0.1) {
-					boolean tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() -
-						bg.getMinValue() > tolHigh - tolLow;
-					while (tooSteep) {
-						coeffs1end = coeffs1end.mapMultiplyToSelf(0.9);
-						poly = coeffs0.append(coeffs1end);
-						p = new PolynomialFunction(poly.toArray());
-						p1 = p.polynomialDerivative();
-						d1bg = new Mean().evaluate(xtarget.map(p1).toArray());
-						bg = xtarget.map(p);
-						tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() - bg
-							.getMinValue() > tolHigh - tolLow;
-					}
-				} else {
-					poly = coeffs0.append(new ArrayRealVector(deg));
-				}
-				
-				final boolean tooHigh = bg.getMaxValue() > tolHigh;
-				if (tooHigh) {
-					final double marginUpper = bg.getMaxValue() - tolHigh;
-					coeffs0.setEntry(0, coeffs0.getEntry(0) - (marginUpper < 1e-3
-						? 1e-3 : marginUpper));
+			RealVector out = new ArrayRealVector();
+			out = out.append(deg).append(poly);
+			for (int i = 0; i < iniSP.getMean().getDimension(); i++)
+				out = out.append(norm.getEntry(i)).append(mean.getEntry(i)).append(sd
+					.getEntry(i));
+			return out;
+		}
+
+		/**
+		 * Keeps the background's average slope within the Max Polynomial
+		 * Derivative, its spread within the band between its floor and ceiling,
+		 * and its level between them, by scaling down its non-constant terms and
+		 * shifting its constant term.
+		 *
+		 * @param poly the background's coefficients, constant first
+		 * @param curve receives the background curve the peak limits are
+		 *          measured from: the one before the level is shifted
+		 * @return the constrained coefficients
+		 */
+		private RealVector constrainBackground(RealVector poly,
+			final PolynomialFunction[] curve)
+		{
+			final double tolHigh = ytarget.getMinValue() * polyOffset;
+			final double tolLow = BACKGROUND_FLOOR * tolHigh;
+
+			PolynomialFunction p = new PolynomialFunction(poly.toArray());
+			PolynomialFunction p1 = p.polynomialDerivative();
+			double d1bg = new Mean().evaluate(xtarget.map(p1).toArray());
+			final RealVector coeffs0 = poly.getSubVector(0, 1);
+			RealVector coeffs1end = poly.getSubVector(1, poly.getDimension() - 1);
+			RealVector bg = xtarget.map(p);
+			
+			if (tolHigh - tolLow > 0.1) {
+				boolean tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() -
+					bg.getMinValue() > tolHigh - tolLow;
+				while (tooSteep) {
+					coeffs1end = coeffs1end.mapMultiplyToSelf(0.9);
 					poly = coeffs0.append(coeffs1end);
+					p = new PolynomialFunction(poly.toArray());
+					p1 = p.polynomialDerivative();
+					d1bg = new Mean().evaluate(xtarget.map(p1).toArray());
+					bg = xtarget.map(p);
+					tooSteep = (d1bg <= minD1 || d1bg > maxD1) || bg.getMaxValue() - bg
+						.getMinValue() > tolHigh - tolLow;
 				}
-
-				final boolean tooLow = bg.getMinValue() < tolLow;
-				if (tooLow) {
-					final double marginLower = tolLow - bg.getMinValue();
-					coeffs0.setEntry(0, coeffs0.getEntry(0) + (marginLower < 1e-3
-						? 1e-3 : marginLower));
-					poly = coeffs0.append(coeffs1end);
-				}
-
+			} else {
+				poly = coeffs0.append(new ArrayRealVector(deg));
+			}
+			
+			final boolean tooHigh = bg.getMaxValue() > tolHigh;
+			if (tooHigh) {
+				final double marginUpper = bg.getMaxValue() - tolHigh;
+				coeffs0.setEntry(0, coeffs0.getEntry(0) - (marginUpper < 1e-3
+					? 1e-3 : marginUpper));
+				poly = coeffs0.append(coeffs1end);
 			}
 
-			// Gaussian Parameters
+			final boolean tooLow = bg.getMinValue() < tolLow;
+			if (tooLow) {
+				final double marginLower = tolLow - bg.getMinValue();
+				coeffs0.setEntry(0, coeffs0.getEntry(0) + (marginLower < 1e-3
+					? 1e-3 : marginLower));
+				poly = coeffs0.append(coeffs1end);
+			}
+			curve[0] = p;
+			return poly;
+		}
+
+		/**
+		 * Keeps each peak near its starting position, its height between
+		 * {@link #MIN_HEIGHT} and {@link #MAX_HEIGHT} of the profile above the
+		 * background, and its width within the allowed factors of its starting
+		 * width. Changes the vectors in place.
+		 */
+		private void constrainPeaks(final RealVector norm, final RealVector mean,
+			final RealVector sd, final PolynomialFunction p)
+		{
 			int peakCount = iniSP.getMean().getDimension();
 			for (int i = 0; i < peakCount; i++) {
 				// Keep means close to the original guess
@@ -908,45 +941,44 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				if (sd.getEntry(i) > maxSD * iniSP.getSD().getEntry(i))
 					sd.setEntry(i, maxSD * iniSP.getSD().getEntry(i));
 			}
+		}
 
-			// Maintain initial AREA proportions between peaks
-			if (fitMode == continuumMode) {
-				final Variance varCalculator = new Variance();
-				final Mean meanCalculator = new Mean();
-				area = norm.ebeMultiply(sd).mapMultiply(FastMath.sqrt(2 * FastMath.PI));
-				final RealVector ratio = area.ebeDivide(iniSP.getArea());
-				double meanRatio = meanCalculator.evaluate(ratio.toArray());
-				double varRatio = varCalculator.evaluate(ratio.toArray());
-				double lowNorm = meanCalculator.evaluate(
-					ytarget.mapSubtract(ytarget.getMinValue()*polyOffset).toArray())*minN;
-				double sigma = FastMath.sqrt(FastMath.log(varRatio
-									/(meanRatio*meanRatio) + 1));
-				if (sigma > areaDrift) {
-					// Use a log-normal distribution with parameters mu, sigma
-					double mu = FastMath.log(meanRatio /
-						FastMath.sqrt(1 + varRatio/(meanRatio*meanRatio)));
-					sigma = areaDrift;
-					LogNormalDistribution logNormal = new LogNormalDistribution(random,
-						mu, sigma);
-					norm = new ArrayRealVector();
-					for (int i = 0; i < area.getDimension(); i++) {
-						norm = norm.append(logNormal.sample());
-					}
-					norm = norm.ebeMultiply(iniSP.getNorm());
+		/**
+		 * Continuum fits: when the spread of the fragments' fitted-to-expected
+		 * area ratios exceeds Area Drift, redraws the heights at random around
+		 * the expected proportions.
+		 *
+		 * @return the heights, redrawn or as they were
+		 */
+		private RealVector constrainAreas(RealVector norm, final RealVector sd) {
+			final Variance varCalculator = new Variance();
+			final Mean meanCalculator = new Mean();
+			final RealVector area = norm.ebeMultiply(sd).mapMultiply(FastMath.sqrt(2 *
+				FastMath.PI));
+			final RealVector ratio = area.ebeDivide(iniSP.getArea());
+			double meanRatio = meanCalculator.evaluate(ratio.toArray());
+			double varRatio = varCalculator.evaluate(ratio.toArray());
+			double lowNorm = meanCalculator.evaluate(
+				ytarget.mapSubtract(ytarget.getMinValue()*polyOffset).toArray())*minN;
+			double sigma = FastMath.sqrt(FastMath.log(varRatio
+								/(meanRatio*meanRatio) + 1));
+			if (sigma > areaDrift) {
+				// Use a log-normal distribution with parameters mu, sigma
+				double mu = FastMath.log(meanRatio /
+					FastMath.sqrt(1 + varRatio/(meanRatio*meanRatio)));
+				sigma = areaDrift;
+				LogNormalDistribution logNormal = new LogNormalDistribution(random,
+					mu, sigma);
+				norm = new ArrayRealVector();
+				for (int i = 0; i < area.getDimension(); i++) {
+					norm = norm.append(logNormal.sample());
 				}
-				double normMin = norm.getMinValue();
-				if (normMin < lowNorm) 
-					norm.mapMultiply(lowNorm/normMin);
-
+				norm = norm.ebeMultiply(iniSP.getNorm());
 			}
-
-			// Repackage parameter array
-			RealVector out = new ArrayRealVector();
-			out = out.append(deg).append(poly);
-			for (int i = 0; i < iniSP.getMean().getDimension(); i++)
-				out = out.append(norm.getEntry(i)).append(mean.getEntry(i)).append(sd
-					.getEntry(i));
-			return out;
+			double normMin = norm.getMinValue();
+			if (normMin < lowNorm) 
+				norm.mapMultiply(lowNorm/normMin);
+			return norm;
 		}
 	}
 }
