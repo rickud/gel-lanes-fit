@@ -59,7 +59,7 @@ Open your gel image, then choose **Plugins › Gel Tools › Gel Lanes Fit**. Th
 
 The lanes are drawn on the image as rectangles. For each lane, the plugin averages the intensity across the lane's width, row by row, which gives the lane's **profile**: intensity against distance down the gel. Distances are in pixels, measured from the top of the image.
 
-If you've analysed the image before, the plugin restores your lanes, ladder, settings and custom peaks, and repeats the last fit (see [Where your results are saved](#where-your-results-are-saved)).
+If you've analysed the image before, the plugin restores your lanes, ladder, settings and custom peaks, and repeats the last fit (see [Where your results are saved](#where-your-results-are-saved)). If the last fit never finished, because Fiji was closed or stopped while it ran, it isn't repeated, and a message says so.
 
 A typical analysis has five steps.
 
@@ -106,8 +106,10 @@ Click **Fit**. The plugin:
 
    then click **Fit** again.
 2. **Labels the ladder bands**, with their sizes, as dashed vertical lines on every lane's plot.
-3. **Fits all other lanes** with the chosen fit type.
+3. **Fits all other lanes** with the chosen fit type. For Continuum fits that would take long, it first asks whether to go ahead (see [Number of fragments and fitting time](#number-of-fragments-and-fitting-time)).
 4. **Shows and saves the results:** the curves in the plots, the **Results Display** table, the **LOG** summary, and the files in the data folder.
+
+While the lanes are being fitted, the window stays responsive: the status bar shows how many lanes are done and about how long the rest will take, and **Fit** becomes **Stop**. The settings, the lanes and the custom peaks can't be changed until the fit ends. Click **Stop** to end a fit that takes too long; it stops within a few seconds, keeps the ladder lane's fit, and drops the other lanes' partial results. Closing the plugin window also stops the fit.
 
 If you change the lanes or re-run a fit, the plugin warns that the current fit will be replaced. Tick **Don't show this again** to skip that warning in future.
 
@@ -230,7 +232,7 @@ my gel - Gel Lanes Fit/       ← its results
 The folder is created when you start the plugin on the image. `saved-state.bak` is updated whenever you change the lanes, the ladder or the custom peaks, run a fit, or close the plugin. The results table, summary, image copy and plots are written each time you run a fit.
 
 - Click **Open Data Folder** in the main window to open this folder in Finder or Explorer. Hovering over the button shows the full path.
-- The next time you open the same image, the plugin restores the lanes, ladder, settings and custom peaks from `saved-state.bak` and repeats the last fit.
+- The next time you open the same image, the plugin restores the lanes, ladder, settings and custom peaks from `saved-state.bak` and repeats the last fit. A fit that never finished isn't repeated: see [The last fit isn't repeated at startup](#the-last-fit-isnt-repeated-at-startup).
 - Results from versions before 1.0.8 were saved in `gel-lanes-fit/<image name without spaces>/` next to the image. The plugin moves that folder to the new name the first time you open the image, so your saved state carries over.
 - If the image has never been saved to disk, the folder is created in the Fiji installation folder instead.
 
@@ -277,10 +279,29 @@ Continuum fits need a **fragment distribution**: the fragment lengths expected i
 | Distribution | Description |
 |---|---|
 | **AciI-Lambda**, **AciI-Lambda4**, **AciI-Lambda3**, **AciI-Lambda2** | four approximations of the same fragment distribution, an AciI digest of lambda DNA (2 to 1,086 bp), made with decreasing numbers of fragment lengths: 206, 155, 138 and 103. Each length becomes one peak in the fit, so fewer lengths mean fewer peaks to fit. Fitting the same lanes with each variant shows whether a coarser approximation, with fewer fragment lengths, gives a poorer fit or not; compare the lanes' RMS in the LOG. |
-| **Uniform** | every length between a **Lower** and an **Upper** size, in steps of **Every** bp, all equally frequent; the plugin asks for the three values when you choose it |
+| **Uniform** | every length between a **Lower** and an **Upper** size, in steps of **Every** bp, all equally frequent; the plugin asks for the three values when you choose it, and shows how many lengths they give. A wide range with a small step makes fits slow; see below. |
 | **Ladder** | a fixed list of 22 sizes from 50 bp to 10 kbp (the Hi-Lo and 100bp band sizes), each once; it doesn't follow the ladder you selected |
 
 The distributions are tab-separated text files: a header line, then one line per fragment with its length in base pairs and its number of copies. Further columns are ignored. They're built into the plugin, so adding your own requires rebuilding it.
+
+#### Number of fragments and fitting time
+
+Each fragment length becomes one peak in the fit, with three values to adjust (height, position, width). The time a Continuum fit takes grows much faster than the number of fragments: twice as many fragments can take several times as long. For example, on the sample image `Long_5s.tif`:
+
+| Uniform distribution | Fragment lengths | Time per lane |
+|---|---|---|
+| 100 to 700 bp, every 20 bp | 31 | under a second |
+| 100 to 4,000 bp, every 20 bp | 196 | 10 to 40 seconds |
+
+A Uniform distribution has (**Upper** − **Lower**) ÷ **Every** + 1 lengths; its dialog shows the number as you type, and suggests a coarser step above 100. Only the fragments predicted to run within the lane, or within 20 % of its length beyond either end, are fitted, so lengths far outside the lane cost nothing.
+
+Once the ladder lane is fitted, the plugin counts the fragments each lane will have. If the whole fit could take more than about 30 seconds, it shows the estimate and asks before fitting: **Fit Anyway** goes ahead, **Cancel** keeps the ladder lane's fit so you can change the distribution. The estimate is adapted to your computer: the first time in a session, the plugin times a short test fit (well under a second) and scales the estimate by how fast it ran. It's still only an indication, since the time also depends on the lanes themselves; a fit that turns out slower than expected can be ended with **Stop**.
+
+To keep fits fast:
+
+- **Use a coarser step:** 100 to 4,000 bp every 50 bp gives 79 lengths, every 100 bp gives 40.
+- **Narrow the range** to the sizes the smear actually covers.
+- **Check whether a finer step helps:** fit the same lanes with two step sizes and compare their RMS in the LOG; if the finer step doesn't lower it, the coarser one is enough.
 
 ## Troubleshooting
 
@@ -342,6 +363,14 @@ Fiji's JavaScript scripting support needs a component that newer Java versions n
 - The **Console** shows the path on a line starting `Data folder:`.
 - On macOS, Finder may list the folder away from the image if the window is grouped or sorted by date, for example under **Today**. Choose **View › Use Groups** to turn grouping off, or sort by name.
 - Finder sometimes doesn't show a folder that was just created or renamed by another program until it refreshes. Go up a folder and back, or press ⇧⌘G and paste the path. If that doesn't help, relaunch Finder: hold ⌥ (Option), right-click the Finder icon in the Dock and choose **Relaunch**.
+
+### A Continuum fit takes a long time
+
+The fit time depends mostly on how many fragment lengths fall within the lanes. A Uniform distribution with a wide range and a small step can have hundreds, and then each lane can take tens of seconds. Click **Stop** to end the fit, then use a coarser **Every** step or a narrower range; see [Number of fragments and fitting time](#number-of-fragments-and-fitting-time).
+
+### The last fit isn't repeated at startup
+
+The plugin repeats the last fit when you open an image again, unless that fit never finished, for example because Fiji was closed, crashed, or was force-quit while a slow fit was running. Repeating it could get stuck the same way, so the plugin restores the lanes and settings, skips the fit, and shows a message. Check the fit settings, for example the number of fragment lengths of a Uniform distribution, and click **Fit**.
 
 ### "Cannot create the data folder" in the Console
 
