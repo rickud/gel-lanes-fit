@@ -1719,43 +1719,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 
 		if (e.getSource().equals(buttonAuto)) {
-			if (!auto) { // NOT already AUTO
-				if (!saveState()) {
-					final String warn =
-						"When switching to AUTO mode, the current lane selections will be reset!";
-					if (!askUser(warn)) {
-						buttonManual.setSelected(true);
-						return;
-					}
-				}
-				auto = true;
-				prefs.putBoolean(AUTO, auto);
-			}
-			setSliderPanelEnabled(true);
-			resetAutoROIs();
-			reDrawROIs(imp, "none");
-			if (plotter == null || fitter == null) return;
-			resetFitterKeepCustomPeaks();
-			redoProfilePlots();
-			fitter.setInputData(plotter.getProfiles());
-			saveState();
+			switchToAutomaticLanes();
 		}
 
 		if (e.getSource().equals(buttonManual)) {
-			auto = false;
-			prefs.putBoolean(AUTO, auto);
-			setSliderPanelEnabled(false);
-			manualROIsFromSavedRects();
-			if (rois.size() == 0) { // Use the AUTO rois as a start
-				resetAutoROIs();
-				reDrawROIs(imp, "none");
-			}
-			if (plotter == null || fitter == null) return;
-			resetFitterKeepCustomPeaks();
-			reDrawROIs(imp, "none");
-			redoProfilePlots();
-			fitter.setInputData(plotter.getProfiles());
-			saveState();
+			switchToManualLanes();
 		}
 
 		if (e.getSource().equals(buttonBands)) {
@@ -1802,48 +1770,100 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		// ComboBoxes
 		// -------------------------------------------------------------
 		if (e.getSource().equals(cmbBoxLadderLane)) {
-			final int laneInt = cmbBoxLadderLane.getSelectedIndex();
-			if (laneInt == -1) return;
-			if (laneInt == 0) {
-				ladderLaneInt = MainDialog.noLadderLane;
-				cmbBoxLadderType.setEnabled(false);
-				cmbBoxDist.setEnabled(false);
-			}
-			else {
-				ladderLaneInt = laneInt;
-				cmbBoxLadderType.setEnabled(true);
-				cmbBoxDist.setEnabled(true);
-			}
-			ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
-			updateLadderLane();
-			saveState();
-			reDrawROIs(imp, "none");
+			ladderLaneChosen();
 		}
 
 		if (e.getSource().equals(cmbBoxLadderType)) {
-			final int type = cmbBoxLadderType.getSelectedIndex();
-			if (type != 0) {
-				final boolean loaded;
-				if (ladder == null) {
-					ladder = Ladder.create(type);
-					loaded = ladder != null;
-				}
-				else loaded = ladder.getType() == type || ladder.setType(type);
-
-				if (loaded) {
-					ladder.setRange(askLadderRange());
-					updateLadderType();
-				}
-				else {
-					// No custom ladder file loaded: go back to the previous selection
-					cmbBoxLadderType.setSelectedIndex(ladder == null ? 0 : ladder
-						.getType());
-				}
-			}
+			ladderTypeChosen();
 		}
 
 		if (e.getSource().equals(cmbBoxDist)) {
 			loadDistribution(true);
+		}
+	}
+
+	/** Automatic Rectangle Selection: equal lanes placed with the sliders. */
+	private void switchToAutomaticLanes() {
+		if (!auto) { // NOT already AUTO
+			if (!saveState()) {
+				final String warn =
+					"When switching to AUTO mode, the current lane selections will be reset!";
+				if (!askUser(warn)) {
+					buttonManual.setSelected(true);
+					return;
+				}
+			}
+			auto = true;
+			prefs.putBoolean(AUTO, auto);
+		}
+		setSliderPanelEnabled(true);
+		resetAutoROIs();
+		reDrawROIs(imp, "none");
+		if (plotter == null || fitter == null) return;
+		resetFitterKeepCustomPeaks();
+		redoProfilePlots();
+		fitter.setInputData(plotter.getProfiles());
+		saveState();
+	}
+
+	/** Manual Rectangle Selection: the lanes drawn on the image. */
+	private void switchToManualLanes() {
+		auto = false;
+		prefs.putBoolean(AUTO, auto);
+		setSliderPanelEnabled(false);
+		manualROIsFromSavedRects();
+		if (rois.size() == 0) { // Use the AUTO rois as a start
+			resetAutoROIs();
+			reDrawROIs(imp, "none");
+		}
+		if (plotter == null || fitter == null) return;
+		resetFitterKeepCustomPeaks();
+		reDrawROIs(imp, "none");
+		redoProfilePlots();
+		fitter.setInputData(plotter.getProfiles());
+		saveState();
+	}
+
+	/** A lane was chosen in Select Ladder Lane. */
+	private void ladderLaneChosen() {
+		final int laneInt = cmbBoxLadderLane.getSelectedIndex();
+		if (laneInt == -1) return;
+		if (laneInt == 0) {
+			ladderLaneInt = MainDialog.noLadderLane;
+			cmbBoxLadderType.setEnabled(false);
+			cmbBoxDist.setEnabled(false);
+		}
+		else {
+			ladderLaneInt = laneInt;
+			cmbBoxLadderType.setEnabled(true);
+			cmbBoxDist.setEnabled(true);
+		}
+		ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
+		updateLadderLane();
+		saveState();
+		reDrawROIs(imp, "none");
+	}
+
+	/** A ladder type was chosen: asks for its range, or its file. */
+	private void ladderTypeChosen() {
+		final int type = cmbBoxLadderType.getSelectedIndex();
+		if (type != 0) {
+			final boolean loaded;
+			if (ladder == null) {
+				ladder = Ladder.create(type);
+				loaded = ladder != null;
+			}
+			else loaded = ladder.getType() == type || ladder.setType(type);
+
+			if (loaded) {
+				ladder.setRange(askLadderRange());
+				updateLadderType();
+			}
+			else {
+				// No custom ladder file loaded: go back to the previous selection
+				cmbBoxLadderType.setSelectedIndex(ladder == null ? 0 : ladder
+					.getType());
+			}
 		}
 	}
 
