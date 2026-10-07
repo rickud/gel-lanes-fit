@@ -114,6 +114,12 @@ public class ContinuumFitTest {
 	}
 
 	@Test
+	public void predictsTheNumberOfFragmentsToFit() throws Exception {
+		final Fitter fitter = fitContinuum();
+		assertEquals(fitter.getFittedPeaks(2).size(), fitter.fragmentsToFit(2));
+	}
+
+	@Test
 	public void repeatedFitsGiveTheSameResult() throws Exception {
 		assertEquals(Reference.peaks(fitContinuum().getFittedPeaks(2)), Reference
 			.peaks(fitContinuum().getFittedPeaks(2)));

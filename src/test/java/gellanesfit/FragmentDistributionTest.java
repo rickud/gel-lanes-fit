@@ -55,4 +55,20 @@ public class FragmentDistributionTest {
 		for (final double[] row : d)
 			assertEquals(1.0 / 601, row[FragmentDistribution.FREQUENCY], 1e-15);
 	}
+
+	@Test
+	public void uniformCountMatchesTheDistribution() {
+		assertEquals(31, FragmentDistribution.uniformCount(100, 700, 20));
+		assertEquals(196, FragmentDistribution.uniformCount(100, 4000, 20));
+		assertEquals(FragmentDistribution.uniform(100, 4000, 20).length,
+			FragmentDistribution.uniformCount(100, 4000, 20));
+	}
+
+	@Test
+	public void fitTimeEstimateGrowsSteeply() {
+		// The two measurements it's based on
+		assertEquals(0.3, FragmentDistribution.estimatedFitSeconds(31), 1e-9);
+		assertEquals(25, FragmentDistribution.estimatedFitSeconds(196), 3);
+		assertEquals(0, FragmentDistribution.estimatedFitSeconds(0), 0);
+	}
 }

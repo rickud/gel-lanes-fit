@@ -20,7 +20,9 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
+import java.awt.Label;
 import java.awt.Rectangle;
+import java.awt.TextField;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
@@ -148,6 +150,12 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private static final String AUTO = "auto";
 	private static final String OLDIMPTITLE = "oldImpTitle";
 	private static final String SKIPFITWARNING = "skipFitWarning";
+
+	/** Continuum fits estimated to take longer than this ask first, in s */
+	private static final double SLOW_FIT_SECONDS = 30;
+
+	/** The Uniform dialog suggests a coarser step above this many lengths */
+	private static final int SLOW_FRAGMENTS = 100;
 
 	/** Width of the number fields, in characters */
 	private static final int SPINNER_COLUMNS = 5;
@@ -1616,6 +1624,35 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/**
+	 * Continuum fits, once the ladder lane is fitted: asks before a fit
+	 * estimated to take more than {@link #SLOW_FIT_SECONDS}.
+	 *
+	 * @return whether to go ahead
+	 */
+	private boolean confirmSlowFit() {
+		int most = 0;
+		double seconds = 0;
+		for (final int l : getAllLaneNumbers()) {
+			if (l == ladderLaneInt) continue;
+			final int n = fitter.fragmentsToFit(l);
+			most = Math.max(most, n);
+			seconds += FragmentDistribution.estimatedFitSeconds(n);
+		}
+		if (seconds <= SLOW_FIT_SECONDS) return true;
+		final String time = seconds < 90 ? Math.round(seconds) + " seconds"
+			: Math.round(seconds / 60) + " minutes";
+		final GenericDialog gd = new GenericDialog("Slow Fit");
+		gd.addMessage("This Continuum fit has up to " + most +
+			" fragment lengths per lane,\nand could take roughly " + time +
+			". Gel Lanes Fit can't be stopped\nwhile it fits.\n \n" +
+			"Fewer lengths fit much faster: for a Uniform distribution, use\n" +
+			"a coarser Every step or a narrower range.");
+		gd.setOKLabel("Fit Anyway");
+		gd.showDialog();
+		return gd.wasOKed();
+	}
+
 	/** Fits the ladder lane, then the other lanes with the current settings */
 	private void runFit() {
 		if (ladderLaneInt == noLadderLane) {
@@ -1695,6 +1732,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			{
 				new MessageDialog(frame, "WARNING!",
 					"Fragment distribution not selected");
+				fitRunning = false;
+				saveState();
+				return;
+			}
+			if (!confirmSlowFit()) {
 				fitRunning = false;
 				saveState();
 				return;
@@ -1885,6 +1927,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/** The Uniform dialog's note on its number of fragment lengths */
+	private static String uniformCountText(final int lower, final int upper,
+		final int every)
+	{
+		if (every <= 0 || upper < lower) return "";
+		final int n = FragmentDistribution.uniformCount(lower, upper, every);
+		return n + " fragment lengths" + (n > SLOW_FRAGMENTS
+			? ": slow to fit, consider a coarser step" : "");
+	}
+
 	/** Sets the fitter's fragment distribution from the selection */
 	private void loadDistribution(final boolean ask) {
 		if (cmbBoxDist.getSelectedIndex() == 0) return;
@@ -1898,6 +1950,23 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				gd.addNumericField("Lower", dlo, 0, 5, "bp");
 				gd.addNumericField("Upper", dhi, 0, 5, "bp");
 				gd.addNumericField("Every", every, 0, 5, "bp");
+				// Padded: the label keeps the width it's laid out with
+				gd.addMessage(String.format("%-60s", uniformCountText(dlo, dhi,
+					every)));
+				final Label count = (Label) gd.getMessage();
+				@SuppressWarnings("unchecked")
+				final Vector<TextField> fields = gd.getNumericFields();
+				gd.addDialogListener((dialog, event) -> {
+					try {
+						count.setText(uniformCountText(Integer.parseInt(fields.get(0)
+							.getText().trim()), Integer.parseInt(fields.get(1).getText()
+								.trim()), Integer.parseInt(fields.get(2).getText().trim())));
+					}
+					catch (final NumberFormatException e) {
+						count.setText("");
+					}
+					return true;
+				});
 				gd.showDialog();
 				if (!gd.wasOKed()) return;
 				dlo = (int) gd.getNextNumber();
