@@ -470,19 +470,13 @@ class Fitter {
 		// Tolerance as percentage of the range
 		final double tolpk = tolPK * (yvals.getMaxValue() - yvals.getMinValue());
 
-		final WeightedObservedPoints obs = new WeightedObservedPoints();
-		for (int o = 0; o < xvals.getDimension(); o++)
-			obs.add(xvals.getEntry(o), yvals.getEntry(o));
+		final WeightedObservedPoints obs = observations(in);
 		ParameterGuesser pg = null;
 		if (fitMode == bandMode) {
 			pg = new GaussianArrayCurveFitter.ParameterGuesser(
 				obs.toList(), degBG, tolpk, polyOffset);
 		} else {
-			final RealMatrix distMatrix = new Array2DRowRealMatrix(
-				fragmentDistribution);
-			pg = new GaussianArrayCurveFitter.ParameterGuesser(
-				obs.toList(), degBG, tolpk, polyOffset, distMatrix, 
-				getFittedPeaks(ladderLane), ladder);
+			pg = continuumGuesser(obs, tolpk);
 			selectedFragments.set(lane - 1, 
 				pg.getUsedFragments(new double[] {xvals.getMinValue(), xvals.getMaxValue()}));
 		}
@@ -548,6 +542,39 @@ class Fitter {
 			.getEntry(lane - 1));
 		log.info(outStr);
 		return output;
+	}
+
+	/** A lane's profile as points to fit */
+	private static WeightedObservedPoints observations(final DataSeries in) {
+		final WeightedObservedPoints obs = new WeightedObservedPoints();
+		for (int o = 0; o < in.getX().getDimension(); o++)
+			obs.add(in.getX().getEntry(o), in.getY().getEntry(o));
+		return obs;
+	}
+
+	/** The Continuum guesser, based on the fitted ladder lane */
+	private ParameterGuesser continuumGuesser(final WeightedObservedPoints obs,
+		final double tolpk)
+	{
+		return new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(), degBG,
+			tolpk, polyOffset, new Array2DRowRealMatrix(fragmentDistribution),
+			getFittedPeaks(ladderLane), ladder);
+	}
+
+	/**
+	 * Continuum fits: how many fragment peaks a lane's fit will have. Needs the
+	 * fitted ladder lane, the ladder and the fragment distribution. The fit time
+	 * grows steeply with this number.
+	 */
+	public int fragmentsToFit(final int lane) {
+		for (final DataSeries in : inputData) {
+			if (in.getLane() != lane) continue;
+			final RealVector y = in.getY();
+			final double tolpk = tolPK * (y.getMaxValue() - y.getMinValue());
+			return continuumGuesser(observations(in), tolpk).guess().getMean()
+				.getDimension();
+		}
+		return 0;
 	}
 
 	/**

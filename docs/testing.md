@@ -44,6 +44,8 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 - [ ] **Banded fit:** click **Fit**. The ladder bands are labelled in every plot, the curves appear, and the Results Display, LOG and data folder files are created.
 - [ ] **Band count mismatch:** narrow the ladder range so it doesn't match and fit again. A warning shows both counts and nothing else is fitted.
 - [ ] **Continuum fit:** choose **Continuum**, then each distribution in turn (the AciI-Lambda ones, Ladder, and Uniform with its range dialog), and fit. The results table has Frequency, BP and MW columns, and the LOG shows Average Fragment Size and a tab per lane.
+- [ ] **Uniform dialog:** typing Lower, Upper and Every updates the number of fragment lengths under the fields, with a note above 100.
+- [ ] **Slow fit warning:** a Continuum fit with a Uniform distribution of a few hundred lengths asks before fitting; **Cancel** stops after the ladder lane, **Fit Anyway** fits.
 - [ ] **Fit warning:** with a fit shown, changing the lanes or fitting again shows the warning; **Don't show this again** stops it.
 
 ### Custom peaks and display

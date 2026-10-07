@@ -36,6 +36,17 @@ final class FragmentDistribution {
 	private FragmentDistribution() {}
 
 	/**
+	 * A rough estimate of how long a Continuum fit of one lane takes, in
+	 * seconds, from the number of fragment peaks it has. Measured on the
+	 * sample image: 31 fragments took about 0.3 s per lane and 196 about 25 s,
+	 * so the time grows roughly with the 2.4th power of the number. Computers
+	 * differ, so it's only an indication.
+	 */
+	static double estimatedFitSeconds(final int fragments) {
+		return 0.3 * Math.pow(fragments / 31.0, 2.4);
+	}
+
+	/**
 	 * Reads a distribution file: a header line, then one line per fragment
 	 * length with the length in bp and its number of copies, separated by a
 	 * tab. Further columns are ignored. The frequencies are normalized to add up
@@ -76,6 +87,11 @@ final class FragmentDistribution {
 		return out;
 	}
 
+	/** How many lengths {@link #uniform} gives for these values */
+	static int uniformCount(final int lower, final int upper, final int every) {
+		return (upper - lower) / every + 1;
+	}
+
 	/**
 	 * A uniform distribution: every length from {@code upper} down to
 	 * {@code lower}, in steps of {@code every} bp, all equally frequent.
@@ -89,7 +105,7 @@ final class FragmentDistribution {
 	static double[][] uniform(final int lower, final int upper,
 		final int every)
 	{
-		final double[][] dist = new double[(upper - lower) / every + 1][3];
+		final double[][] dist = new double[uniformCount(lower, upper, every)][3];
 		final double f = 1.0 / (upper - lower + 1);
 		for (int i = 0; i < dist.length; i++) {
 			dist[i][FREQUENCY] = f;
