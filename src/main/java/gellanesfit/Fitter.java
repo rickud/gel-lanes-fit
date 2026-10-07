@@ -145,15 +145,11 @@ class Fitter {
 	 * @param savePath the image's data folder, ending with a separator
 	 */
 	public void updateResultsTable(final String savePath) {
-		// Results Table Columns
-		final String[] headersB = { "Lane", "Band", "Distance", "Dist. G.",
-			"Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area" };
-		final String[] headersF = { "Lane", "Band", "Distance", "Dist. G.",
-			"Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area", "Frequency", "BP",
-			"MW" };
-		String[] headers = null;
-		if (fitMode == bandMode) headers = headersB;
-		else headers = headersF;
+		final String[] headers = fitMode == bandMode ? new String[] { "Lane",
+			"Band", "Distance", "Dist. G.", "Amplitude", "Amp. G.", "FWHM",
+			"FWHM G.", "Area" } : new String[] { "Lane", "Band", "Distance",
+				"Dist. G.", "Amplitude", "Amp. G.", "FWHM", "FWHM G.", "Area",
+				"Frequency", "BP", "MW" };
 		final ResultsTable rt = new ResultsTable();
 
 		for (final DataSeries d : inputData) {
@@ -162,127 +158,153 @@ class Fitter {
 			final List<Peak> fitted = getFittedPeaks(lane);
 			// Lanes not fitted yet, e.g. while only the ladder has been fitted
 			if (fitted.isEmpty()) continue;
-			RealVector areas = new ArrayRealVector();
 			if (guess.size() != fitted.size()) {
 				log.info("Data Size " + lane + " : " + guess.size() + ", " + fitted.size());
 			}
-
-			int band = 1;
-			RealVector means = new ArrayRealVector();
-			int listSize = (fitMode == continuumMode && lane != ladderLane) ? 
-				selectedFragments.get(lane - 1).size() : guess.size();
-			for (int p = 0; p < listSize; p++) {
-				final double n = fitted.get(p).getNorm();
-				final double m = fitted.get(p).getMean();
-				final double s = fitted.get(p).getSigma();
-				final double a = doIntegrate(d.getX(), n, m, s);
-				means = means.append(m);
-
-				final double n0 = guess.get(p).getNorm();
-				final double m0 = guess.get(p).getMean();
-				final double s0 = guess.get(p).getSigma();
-				areas = areas.append(a);
-
-				// Add values to Results Table
-				if (m>d.getMinX() && m< d.getMaxX()) {
-					rt.incrementCounter();
-					if (band == 1) {
-						rt.addValue(headers[0], "" + lane);
-					}
-					else {
-						rt.addValue(headers[0], "");
-					}
-					rt.addValue(headers[1], band);
-					rt.addValue(headers[2], String.format("%1$.1f", m));
-					rt.addValue(headers[3], String.format("%1$.1f", m0));
-					rt.addValue(headers[4], String.format("%1$.1f", n));
-					rt.addValue(headers[5], String.format("%1$.1f", n0));
-					rt.addValue(headers[6], String.format("%1$.2f", s * sd2FWHM));
-					rt.addValue(headers[7], String.format("%1$.2f", s0 * sd2FWHM));
-					rt.addValue(headers[8], String.format("%1$.1f", a));
-	
-					if (fitMode == continuumMode) {
-						if (lane == ladderLane) {
-							rt.addValue(headers[9], " - ");
-							rt.addValue(headers[10], " - ");
-							rt.addValue(headers[11], " - ");
-						}
-						else {
-							final double freq = fragmentDistribution[selectedFragments.get(
-								lane - 1).get(p)][0];
-							final double bp = fragmentDistribution[selectedFragments.get(lane -
-								1).get(p)][1];
-							final double mw = fragmentDistribution[selectedFragments.get(lane -
-								1).get(p)][2];
-							rt.addValue(headers[9], String.format("%1$.3f", freq));
-							rt.addValue(headers[10], String.format("%1$.0f", bp));
-							rt.addValue(headers[11], String.format("%1$.3f", mw));
-						}
-					}
-					band++;
-				}
-			}
-
-			if (fitMode == continuumMode && lane != ladderLane) {
-				RealVector bpSubarray = new ArrayRealVector();
-				RealVector wSubarray  = new ArrayRealVector();
-				final RealMatrix distMatrix = new Array2DRowRealMatrix(
-					fragmentDistribution);
-				final RealVector bpArray = distMatrix.getColumnVector(1);
-				final RealVector wArray  = distMatrix.getColumnVector(2);
-
-				for (final int i : selectedFragments.get(lane - 1)) {
-					bpSubarray = bpSubarray.append(bpArray.getEntry(i));
-					wSubarray  =  wSubarray.append( wArray.getEntry(i));
-				}
-				final double meanLength = new Mean().evaluate(
-					bpSubarray.toArray(), wSubarray.toArray());
-				final RealVector scaleFactor = areas.ebeMultiply(bpSubarray);
-				final double weighedMeanLength = new Mean().evaluate(bpSubarray
-					.toArray(), scaleFactor.toArray());
-				final double sdLength = FastMath.sqrt(new Variance().evaluate(bpSubarray
-					.toArray(), scaleFactor.toArray()));
-				statMatrix.setRow(lane - 1, new double[] { weighedMeanLength,
-					sdLength, meanLength });
-				final String info = String.format(
-					"Lane %1$d, Average length: %2$.2f(%3$.2f) %4$.2f", lane,
-					weighedMeanLength, sdLength, meanLength);
-
-				log.info(info);
-
-				// Update the fitted distribution list with appropriate scale
-				RealVector x = new ArrayRealVector();
-				RealVector y = new ArrayRealVector();
-				final Iterator<DataSeries> it = fittedDistributions.iterator();
-				while (it.hasNext()) {
-					final DataSeries dfit = it.next();
-					if (dfit.getLane() == lane) {
-						x = dfit.getX();
-						y = dfit.getY();
-						it.remove();
-					}
-				}
-
-				final WeightedObservedPoints obs = new WeightedObservedPoints();
-				for (int l = 0; l < bpSubarray.getDimension(); l++)
-					obs.add(means.getEntry(l), Math.log10(bpSubarray.getEntry(l)));
-
-				// First-degree polynomial fitter (line)
-				final PolynomialCurveFitter linfit = PolynomialCurveFitter.create(1);
-				final double[] coeffs = linfit.fit(obs.toList());
-				final UnivariateFunction f = new PolynomialFunction(coeffs);
-				x = x.map(f);
-				for (int i = 0; i < x.getDimension(); i++)
-					x.setEntry(i, new Pow().value(10, x.getEntry(i)));
-				y = y.ebeMultiply(x);
-				y = y.mapDivide(y.getMaxValue());
-				fittedDistributions.add(new DataSeries("Fit", lane, DataSeries.FITTED,
-					x, y, Plotter.fittedColor));
-			}
+			final RealVector[] areasAndMeans = addRows(rt, headers, d, guess,
+				fitted);
+			if (fitMode == continuumMode && lane != ladderLane) updateStatistics(lane,
+				areasAndMeans[0], areasAndMeans[1]);
 		}
 		rt.show("Results Display");
+		save(savePath, resultsText(rt, headers));
+	}
 
-		// Save Results Table
+	/**
+	 * Adds a row for each of the lane's bands or fragments that lies within
+	 * the lane.
+	 *
+	 * @return the areas and positions of all the lane's fitted peaks
+	 */
+	private RealVector[] addRows(final ResultsTable rt, final String[] headers,
+		final DataSeries d, final List<Peak> guess, final List<Peak> fitted)
+	{
+		final int lane = d.getLane();
+		RealVector areas = new ArrayRealVector();
+		int band = 1;
+		RealVector means = new ArrayRealVector();
+		int listSize = (fitMode == continuumMode && lane != ladderLane) ? 
+			selectedFragments.get(lane - 1).size() : guess.size();
+		for (int p = 0; p < listSize; p++) {
+			final double n = fitted.get(p).getNorm();
+			final double m = fitted.get(p).getMean();
+			final double s = fitted.get(p).getSigma();
+			final double a = doIntegrate(d.getX(), n, m, s);
+			means = means.append(m);
+
+			final double n0 = guess.get(p).getNorm();
+			final double m0 = guess.get(p).getMean();
+			final double s0 = guess.get(p).getSigma();
+			areas = areas.append(a);
+
+			// Add values to Results Table
+			if (m>d.getMinX() && m< d.getMaxX()) {
+				rt.incrementCounter();
+				if (band == 1) {
+					rt.addValue(headers[0], "" + lane);
+				}
+				else {
+					rt.addValue(headers[0], "");
+				}
+				rt.addValue(headers[1], band);
+				rt.addValue(headers[2], String.format("%1$.1f", m));
+				rt.addValue(headers[3], String.format("%1$.1f", m0));
+				rt.addValue(headers[4], String.format("%1$.1f", n));
+				rt.addValue(headers[5], String.format("%1$.1f", n0));
+				rt.addValue(headers[6], String.format("%1$.2f", s * sd2FWHM));
+				rt.addValue(headers[7], String.format("%1$.2f", s0 * sd2FWHM));
+				rt.addValue(headers[8], String.format("%1$.1f", a));
+
+				if (fitMode == continuumMode) {
+					if (lane == ladderLane) {
+						rt.addValue(headers[9], " - ");
+						rt.addValue(headers[10], " - ");
+						rt.addValue(headers[11], " - ");
+					}
+					else {
+						final double freq = fragmentDistribution[selectedFragments.get(
+							lane - 1).get(p)][0];
+						final double bp = fragmentDistribution[selectedFragments.get(lane -
+							1).get(p)][1];
+						final double mw = fragmentDistribution[selectedFragments.get(lane -
+							1).get(p)][2];
+						rt.addValue(headers[9], String.format("%1$.3f", freq));
+						rt.addValue(headers[10], String.format("%1$.0f", bp));
+						rt.addValue(headers[11], String.format("%1$.3f", mw));
+					}
+				}
+				band++;
+			}
+		}
+		return new RealVector[] { areas, means };
+	}
+
+	/**
+	 * Continuum fits: the lane's average fragment size and its standard
+	 * deviation, weighted by each fragment's area times its length, and the
+	 * fitted size distribution shown in the LOG, rescaled to base pairs.
+	 */
+	private void updateStatistics(final int lane, final RealVector areas,
+		final RealVector means)
+	{
+		RealVector bpSubarray = new ArrayRealVector();
+		RealVector wSubarray  = new ArrayRealVector();
+		final RealMatrix distMatrix = new Array2DRowRealMatrix(
+			fragmentDistribution);
+		final RealVector bpArray = distMatrix.getColumnVector(1);
+		final RealVector wArray  = distMatrix.getColumnVector(2);
+
+		for (final int i : selectedFragments.get(lane - 1)) {
+			bpSubarray = bpSubarray.append(bpArray.getEntry(i));
+			wSubarray  =  wSubarray.append( wArray.getEntry(i));
+		}
+		final double meanLength = new Mean().evaluate(
+			bpSubarray.toArray(), wSubarray.toArray());
+		final RealVector scaleFactor = areas.ebeMultiply(bpSubarray);
+		final double weighedMeanLength = new Mean().evaluate(bpSubarray
+			.toArray(), scaleFactor.toArray());
+		final double sdLength = FastMath.sqrt(new Variance().evaluate(bpSubarray
+			.toArray(), scaleFactor.toArray()));
+		statMatrix.setRow(lane - 1, new double[] { weighedMeanLength,
+			sdLength, meanLength });
+		final String info = String.format(
+			"Lane %1$d, Average length: %2$.2f(%3$.2f) %4$.2f", lane,
+			weighedMeanLength, sdLength, meanLength);
+
+		log.info(info);
+
+		// Update the fitted distribution list with appropriate scale
+		RealVector x = new ArrayRealVector();
+		RealVector y = new ArrayRealVector();
+		final Iterator<DataSeries> it = fittedDistributions.iterator();
+		while (it.hasNext()) {
+			final DataSeries dfit = it.next();
+			if (dfit.getLane() == lane) {
+				x = dfit.getX();
+				y = dfit.getY();
+				it.remove();
+			}
+		}
+
+		final WeightedObservedPoints obs = new WeightedObservedPoints();
+		for (int l = 0; l < bpSubarray.getDimension(); l++)
+			obs.add(means.getEntry(l), Math.log10(bpSubarray.getEntry(l)));
+
+		// First-degree polynomial fitter (line)
+		final PolynomialCurveFitter linfit = PolynomialCurveFitter.create(1);
+		final double[] coeffs = linfit.fit(obs.toList());
+		final UnivariateFunction f = new PolynomialFunction(coeffs);
+		x = x.map(f);
+		for (int i = 0; i < x.getDimension(); i++)
+			x.setEntry(i, new Pow().value(10, x.getEntry(i)));
+		y = y.ebeMultiply(x);
+		y = y.mapDivide(y.getMaxValue());
+		fittedDistributions.add(new DataSeries("Fit", lane, DataSeries.FITTED,
+			x, y, Plotter.fittedColor));
+	}
+
+	/** The results file's text: the table, then any Continuum averages */
+	private String resultsText(final ResultsTable rt, final String[] headers) {
 		String outText = "";
 		for (int cc = 0; cc < headers.length; cc++)
 			outText += headers[cc] + "\t";
@@ -303,7 +325,11 @@ class Fitter {
 				}
 			}
 		}
+		return outText;
+	}
 
+	/** Saves the results as "Fit of &lt;title&gt;.xls" in the data folder */
+	private void save(final String savePath, final String outText) {
 		final String file = "Fit of " + title + ".xls";
 		new File(savePath).mkdirs();
 		log.info("Saving to " + savePath + file + " ...");
@@ -317,8 +343,6 @@ class Fitter {
 			log.info("Exception", e);
 		}
 	}
-
-	
 
 	/**
 	 * The starting guess for a lane: the guesser's peaks, with the lane's custom
