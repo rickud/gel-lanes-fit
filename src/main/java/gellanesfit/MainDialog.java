@@ -949,46 +949,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	private void reDrawROIs(final ImagePlus imgPlus, final String roiName) {
-		if (!auto) {
-			// Housekeeping: Sort the rois based on POSITION and remove null
-			// elements
-			final Comparator<Roi> roiNameComparator = new Comparator<>() {
-
-				@Override
-				public int compare(final Roi r1, final Roi r2) {
-					if (r1 == null && r2 == null) {
-						return 0;
-					}
-					if (r1 == null) {
-						return -1;
-					}
-					if (r2 == null) {
-						return 1;
-					}
-					final double xmin1 = r1.getXBase();
-					final double ymin1 = r1.getYBase();
-					final double xmin2 = r2.getXBase();
-					final double ymin2 = r2.getYBase();
-					final int compx = Double.compare(xmin1, xmin2);
-					if (compx != 0) {
-						return compx;
-					}
-					return Double.compare(ymin1, ymin2);
-				}
-			};
-
-			Collections.sort(rois, roiNameComparator);
-			// Rename Rois in order and remove null
-			final Iterator<Roi> roisIter = rois.iterator();
-			int nullIndex = 0;
-			while (roisIter.hasNext()) {
-				final Roi r = roisIter.next();
-				if (r == null) break;
-				r.setName("Lane " + (nullIndex + 1));
-				nullIndex++;
-			}
-			rois = new ArrayList<>(rois.subList(0, nullIndex));
-		}
+		if (!auto) sortAndRenameManualLanes();
 		final Overlay overlay = new Overlay();
 		final Iterator<Roi> roiIter = rois.iterator();
 		while (roiIter.hasNext()) {
@@ -1028,44 +989,79 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			overlay.add(labelRoi);
 			if (buttonAuto.isSelected()) imgPlus.killRoi();
 			if (chkBoxBands.isSelected()) {
-				// Draw a tick where the bands are
-				for (final Peak p : fitter.getFittedPeaks(ln)) {
-					final double y = p.getMean();
-					final Roi band1 = new Line(x0, y, x0 + 10, y);
-					band1.setStrokeColor(MainDialog.fit);
-					band1.setStrokeWidth(1);
-					overlay.add(band1);
-					final Roi band2 = new Line(x0 + rw - 10, y, x0 + rw, y);
-					band2.setStrokeColor(MainDialog.fit);
-					band2.setStrokeWidth(1);
-					overlay.add(band2);
-				}
-				for (final Peak p : fitter.getGuessPeaks(ln)) {
-					final double y = p.getMean();
-					final Roi band1 = new Line(x0, y, x0 + 5, y);
-					band1.setStrokeColor(MainDialog.guess);
-					band1.setStrokeWidth(1);
-					overlay.add(band1);
-					final Roi band2 = new Line(x0 + rw - 5, y, x0 + rw, y);
-					band2.setStrokeColor(MainDialog.guess);
-					band2.setStrokeWidth(1);
-					overlay.add(band2);
-				}
-				for (final Peak p : fitter.getCustomPeaks(ln)) {
-					final double y = p.getMean();
-					final Roi band1 = new Line(x0, y, x0 + 5, y);
-					band1.setStrokeColor(MainDialog.custom);
-					band1.setStrokeWidth(1);
-					overlay.add(band1);
-					final Roi band2 = new Line(x0 + rw - 5, y, x0 + rw, y);
-					band2.setStrokeColor(MainDialog.custom);
-					band2.setStrokeWidth(1);
-					overlay.add(band2);
-				}
-
+				// Ticks at both edges of the lane where the bands are
+				addBandTicks(overlay, fitter.getFittedPeaks(ln), x0, rw, 10,
+					MainDialog.fit);
+				addBandTicks(overlay, fitter.getGuessPeaks(ln), x0, rw, 5,
+					MainDialog.guess);
+				addBandTicks(overlay, fitter.getCustomPeaks(ln), x0, rw, 5,
+					MainDialog.custom);
 			}
 		}
 		imgPlus.setOverlay(overlay);
+	}
+
+	/** Sorts the manual lanes from left to right and numbers them from 1 */
+	private void sortAndRenameManualLanes() {
+		// Housekeeping: Sort the rois based on POSITION and remove null
+		// elements
+		final Comparator<Roi> roiNameComparator = new Comparator<>() {
+
+			@Override
+			public int compare(final Roi r1, final Roi r2) {
+				if (r1 == null && r2 == null) {
+					return 0;
+				}
+				if (r1 == null) {
+					return -1;
+				}
+				if (r2 == null) {
+					return 1;
+				}
+				final double xmin1 = r1.getXBase();
+				final double ymin1 = r1.getYBase();
+				final double xmin2 = r2.getXBase();
+				final double ymin2 = r2.getYBase();
+				final int compx = Double.compare(xmin1, xmin2);
+				if (compx != 0) {
+					return compx;
+				}
+				return Double.compare(ymin1, ymin2);
+			}
+		};
+
+		Collections.sort(rois, roiNameComparator);
+		// Rename Rois in order and remove null
+		final Iterator<Roi> roisIter = rois.iterator();
+		int nullIndex = 0;
+		while (roisIter.hasNext()) {
+			final Roi r = roisIter.next();
+			if (r == null) break;
+			r.setName("Lane " + (nullIndex + 1));
+			nullIndex++;
+		}
+		rois = new ArrayList<>(rois.subList(0, nullIndex));
+	}
+
+	/**
+	 * Adds a tick of the given length at both edges of the lane at each peak's
+	 * position.
+	 */
+	private static void addBandTicks(final Overlay overlay,
+		final List<Peak> peaks, final double x0, final double rw,
+		final double length, final Color color)
+	{
+		for (final Peak p : peaks) {
+			final double y = p.getMean();
+			final Roi band1 = new Line(x0, y, x0 + length, y);
+			band1.setStrokeColor(color);
+			band1.setStrokeWidth(1);
+			overlay.add(band1);
+			final Roi band2 = new Line(x0 + rw - length, y, x0 + rw, y);
+			band2.setStrokeColor(color);
+			band2.setStrokeWidth(1);
+			overlay.add(band2);
+		}
 	}
 
 	private void resetAutoROIs() {
