@@ -812,7 +812,6 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		updateLadderLane();
 		updateLadderType();
 		cmbBoxDist.setSelectedIndex(savedState == null ? 0 : savedState.dist);
-		cmbBoxDist.setEnabled(continuum);
 		loadDistribution(false);
 
 		buttonEditPeaks.setEnabled(false);
@@ -1469,6 +1468,19 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/**
+	 * Greys out the controls the selected fit type doesn't use: Area Drift, SD
+	 * Drift and the fragment distribution are for Continuum fits only, and the
+	 * distribution also needs a ladder lane.
+	 */
+	private void updateFitTypeControls() {
+		final boolean continuum = buttonContinuum.isSelected();
+		for (final Component c : new Component[] { labelAreaDrift, textAreaDrift,
+			labelSDDrift, textSDDrift })
+			c.setEnabled(continuum);
+		cmbBoxDist.setEnabled(continuum && ladderLaneInt != noLadderLane);
+	}
+
 	private void updateLadderLane() {
 		if (cmbBoxLadderLane.getItemCount() != rois.size() + 1) {
 			if (ladderLaneInt > rois.size()) 
@@ -1490,6 +1502,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitter.setReferenceLane(ladderLaneInt);
 		plotter.setReferencePlot(ladderLaneInt);
 		prefs.putInt(LADDERLANEINT, ladderLaneInt);
+		updateFitTypeControls();
 	}
 
 	private void updateLadderType() {
@@ -1994,11 +2007,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		if (e.getSource().equals(buttonBands)) {
 			fitter.setFitMode(Fitter.bandMode);
-			cmbBoxDist.setEnabled(false);
+			updateFitTypeControls();
 		}
 		else if (e.getSource().equals(buttonContinuum)) {
 			fitter.setFitMode(Fitter.continuumMode);
-			cmbBoxDist.setEnabled(true);
+			updateFitTypeControls();
 		}
 
 		if (e.getSource().equals(buttonEditPeaks)) {
@@ -2097,12 +2110,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		if (laneInt == 0) {
 			ladderLaneInt = MainDialog.noLadderLane;
 			cmbBoxLadderType.setEnabled(false);
-			cmbBoxDist.setEnabled(false);
 		}
 		else {
 			ladderLaneInt = laneInt;
 			cmbBoxLadderType.setEnabled(true);
-			cmbBoxDist.setEnabled(true);
 		}
 		ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
 		updateLadderLane();
