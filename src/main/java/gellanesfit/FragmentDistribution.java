@@ -39,8 +39,9 @@ final class FragmentDistribution {
 	 * A rough estimate of how long a Continuum fit of one lane takes, in
 	 * seconds, from the number of fragment peaks it has. Measured on the
 	 * sample image: 31 fragments took about 0.3 s per lane and 196 about 25 s,
-	 * so the time grows roughly with the 2.4th power of the number. Computers
-	 * differ, so it's only an indication.
+	 * so the time grows roughly with the 2.4th power of the number. This is
+	 * for the computer it was measured on; {@link FitTimer} adapts it to the
+	 * one the plugin runs on.
 	 */
 	static double estimatedFitSeconds(final int fragments) {
 		return 0.3 * Math.pow(fragments / 31.0, 2.4);

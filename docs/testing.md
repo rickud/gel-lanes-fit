@@ -46,7 +46,7 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 - [ ] **Continuum fit:** choose **Continuum**, then each distribution in turn (the AciI-Lambda ones, Ladder, and Uniform with its range dialog), and fit. The results table has Frequency, BP and MW columns, and the LOG shows Average Fragment Size and a tab per lane.
 - [ ] **Uniform dialog:** typing Lower, Upper and Every updates the number of fragment lengths under the fields, with a note above 100.
 - [ ] **Slow fit warning:** a Continuum fit with a Uniform distribution of a few hundred lengths asks before fitting, mentioning the Stop button; **Cancel** stops after the ladder lane, **Fit Anyway** fits.
-- [ ] **Stop:** during a slow fit, the window stays responsive, the status bar shows the progress, and **Fit** reads **Stop**; the settings, lane edits and Edit Custom Peaks are disabled. Clicking **Stop** ends the fit within a few seconds with a message; the ladder lane's fit is kept and the controls are as before. Fitting again then works normally.
+- [ ] **Stop:** during a slow fit, the window stays responsive, the status bar shows the lanes fitted and the estimated time left, and **Fit** reads **Stop**; the settings, lane edits and Edit Custom Peaks are disabled. Clicking **Stop** ends the fit within a few seconds with a message; the ladder lane's fit is kept and the controls are as before. Fitting again then works normally.
 - [ ] **Closing during a fit:** closing the plugin window while a fit runs stops it.
 - [ ] **Fit warning:** with a fit shown, changing the lanes or fitting again shows the warning; **Don't show this again** stops it.
 

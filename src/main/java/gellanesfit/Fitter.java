@@ -431,6 +431,8 @@ class Fitter {
 					"The fit was stopped");
 				out.addAll(doFit(d.getLane()));
 				statusServ.showProgress(++done, in.size());
+				statusServ.showStatus(progressMessage(done, in.size(), sw.getTime() /
+					1000.0));
 			}
 		}
 		finally {
@@ -548,6 +550,23 @@ class Fitter {
 			.getEntry(lane - 1));
 		log.info(outStr);
 		return output;
+	}
+
+	/**
+	 * The status bar message after each fitted lane, with the time left
+	 * estimated from the lanes fitted so far.
+	 *
+	 * @param done lanes fitted so far
+	 * @param total lanes to fit
+	 * @param elapsed seconds since the fit started
+	 */
+	static String progressMessage(final int done, final int total,
+		final double elapsed)
+	{
+		final String fitted = "Fitted " + done + " of " + total + " lanes";
+		if (done >= total) return fitted;
+		return fitted + ", about " + FitTimer.format(elapsed / done * (total -
+			done)) + " left";
 	}
 
 	/**

@@ -1640,17 +1640,18 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	 * @return whether to go ahead
 	 */
 	private boolean confirmSlowFit() {
+		// The first time, the estimate is calibrated to this computer
+		statusServ.showStatus("Estimating the fit time...");
 		int most = 0;
 		double seconds = 0;
 		for (final int l : getAllLaneNumbers()) {
 			if (l == ladderLaneInt) continue;
 			final int n = fitter.fragmentsToFit(l);
 			most = Math.max(most, n);
-			seconds += FragmentDistribution.estimatedFitSeconds(n);
+			seconds += FitTimer.estimatedSeconds(n);
 		}
 		if (seconds <= SLOW_FIT_SECONDS) return true;
-		final String time = seconds < 90 ? Math.round(seconds) + " seconds"
-			: Math.round(seconds / 60) + " minutes";
+		final String time = FitTimer.format(seconds);
 		final GenericDialog gd = new GenericDialog("Slow Fit");
 		gd.addMessage("This Continuum fit has up to " + most +
 			" fragment lengths per lane,\nand could take roughly " + time +
