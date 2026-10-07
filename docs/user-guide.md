@@ -109,7 +109,7 @@ Click **Fit**. The plugin:
 3. **Fits all other lanes** with the chosen fit type. For Continuum fits that would take long, it first asks whether to go ahead (see [Number of fragments and fitting time](#number-of-fragments-and-fitting-time)).
 4. **Shows and saves the results:** the curves in the plots, the **Results Display** table, the **LOG** summary, and the files in the data folder.
 
-While the lanes are being fitted, the window stays responsive: the status bar shows the progress, and **Fit** becomes **Stop**. The settings, the lanes and the custom peaks can't be changed until the fit ends. Click **Stop** to end a fit that takes too long; it stops within a few seconds, keeps the ladder lane's fit, and drops the other lanes' partial results. Closing the plugin window also stops the fit.
+While the lanes are being fitted, the window stays responsive: the status bar shows how many lanes are done and about how long the rest will take, and **Fit** becomes **Stop**. The settings, the lanes and the custom peaks can't be changed until the fit ends. Click **Stop** to end a fit that takes too long; it stops within a few seconds, keeps the ladder lane's fit, and drops the other lanes' partial results. Closing the plugin window also stops the fit.
 
 If you change the lanes or re-run a fit, the plugin warns that the current fit will be replaced. Tick **Don't show this again** to skip that warning in future.
 
@@ -295,7 +295,7 @@ Each fragment length becomes one peak in the fit, with three values to adjust (h
 
 A Uniform distribution has (**Upper** − **Lower**) ÷ **Every** + 1 lengths; its dialog shows the number as you type, and suggests a coarser step above 100. Only the fragments predicted to run within the lane, or within 20 % of its length beyond either end, are fitted, so lengths far outside the lane cost nothing.
 
-Once the ladder lane is fitted, the plugin counts the fragments each lane will have. If the whole fit could take more than about 30 seconds, it shows the estimate and asks before fitting: **Fit Anyway** goes ahead, **Cancel** keeps the ladder lane's fit so you can change the distribution. The estimate is only an indication, since computers differ. A fit that turns out slower than expected can be ended with **Stop**.
+Once the ladder lane is fitted, the plugin counts the fragments each lane will have. If the whole fit could take more than about 30 seconds, it shows the estimate and asks before fitting: **Fit Anyway** goes ahead, **Cancel** keeps the ladder lane's fit so you can change the distribution. The estimate is adapted to your computer: the first time in a session, the plugin times a short test fit (well under a second) and scales the estimate by how fast it ran. It's still only an indication, since the time also depends on the lanes themselves; a fit that turns out slower than expected can be ended with **Stop**.
 
 To keep fits fast:
 
