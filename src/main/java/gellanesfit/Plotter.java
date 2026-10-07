@@ -531,63 +531,7 @@ class Plotter extends JFrame implements ChartMouseListener {
 				if (c.getXYPlot().getAnnotations() != null) c.getXYPlot()
 					.clearAnnotations();
 
-				// Plot the data series
-				final LegendItems legendItems = new LegendItems();
-				for (final DataSeries d : plotsData) {
-					if (d.getLane() == ln) {
-						if (d.getItemCount() > 0) {
-							final int k = d.getType();
-							dataset.addSeries(d);
-							pl.setSeriesRenderingOrder(SeriesRenderingOrder.FORWARD);
-							final int seriesIdx = dataset.getSeriesIndex(d.getKey());
-							final XYLineAndShapeRenderer renderer =
-								(XYLineAndShapeRenderer) pl.getRenderer();
-							renderer.setSeriesShapesVisible(seriesIdx, false);
-							renderer.setSeriesLinesVisible(seriesIdx, true);
-
-							if (k == DataSeries.PROFILE) {
-								renderer.setSeriesPaint(seriesIdx, profileColor);
-								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Profile");
-								li.setFillPaint(d.getColor());
-								legendItems.add(li);
-							}
-							if (k == DataSeries.BACKGROUND) {
-								renderer.setSeriesPaint(seriesIdx, bgColor);
-								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Background");
-								li.setFillPaint(d.getColor());
-								legendItems.add(li);
-							}
-							if (k == DataSeries.GAUSS_BG) {
-								renderer.setSeriesPaint(seriesIdx, gaussColor);
-								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Peaks");
-								if (!legendItems.contains(li)) {
-									li.setFillPaint(d.getColor());
-									legendItems.add(li);
-								}
-							}
-							if (k == DataSeries.FITTED) {
-								renderer.setSeriesPaint(seriesIdx, fittedColor);
-								renderer.setSeriesStroke(seriesIdx, dataStroke);
-								final LegendItem li = new LegendItem("Fit");
-								li.setFillPaint(d.getColor());
-								legendItems.add(li);
-							}
-							if (k == DataSeries.CUSTOMPEAKS) {
-								renderer.setSeriesPaint(seriesIdx, vMarkerEditPeakColor);
-								final Shape dot = new Ellipse2D.Double(0, 0, 6, 6);
-								renderer.setSeriesShape(seriesIdx, dot);
-								renderer.setSeriesShapesVisible(seriesIdx, true);
-								renderer.setSeriesLinesVisible(seriesIdx, false);
-								final LegendItem li = new LegendItem("Custom Peaks");
-								li.setFillPaint(d.getColor());
-								legendItems.add(li);
-							}
-						}
-					}
-				}
+				final LegendItems legendItems = addSeries(ln, pl, dataset);
 				final Range domain = pl.getDomainAxis().getRange();
 				final Range range = pl.getRangeAxis().getRange();
 				c.getXYPlot().setDataset(dataset);
@@ -604,28 +548,100 @@ class Plotter extends JFrame implements ChartMouseListener {
 				pl.setFixedLegendItems(legendItems);
 				c.getLegend().setPosition(RectangleEdge.RIGHT);
 
-				// Plot vertical markers
-				for (final VerticalMarker m : verticalMarkers) {
-					if (m.getLane() == ln) {
-						final double height = c.getXYPlot().getRangeAxis().getUpperBound();
-						final double offset = 0;
-						final XYTextAnnotation label = new XYTextAnnotation(m.getName(), m
-							.getValue() - offset, height);
-						if (m.getType() == VerticalMarker.VMARK) {
-							label.setPaint(vMarkerColor);
-						}
-						else if (m.getType() == VerticalMarker.BMARK) {
-							label.setPaint(bMarkerColor);
-						}
-						label.setFont(labelFont);
-						label.setRotationAnchor(TextAnchor.BOTTOM_RIGHT);
-						label.setTextAnchor(TextAnchor.TOP_RIGHT);
-						label.setRotationAngle(-Math.PI / 2);
+				drawMarkers(c, ln, vMarkerColor);
+			}
+		}
+	}
 
-						c.getXYPlot().addAnnotation(label);
-						c.getXYPlot().addDomainMarker(m, Layer.BACKGROUND);
+	/**
+	 * Adds the lane's curves to the chart's dataset, styled by kind, and builds
+	 * the legend for them.
+	 */
+	private LegendItems addSeries(final int ln, final XYPlot pl,
+		final XYSeriesCollection dataset)
+	{
+		final LegendItems legendItems = new LegendItems();
+		for (final DataSeries d : plotsData) {
+			if (d.getLane() == ln) {
+				if (d.getItemCount() > 0) {
+					final int k = d.getType();
+					dataset.addSeries(d);
+					pl.setSeriesRenderingOrder(SeriesRenderingOrder.FORWARD);
+					final int seriesIdx = dataset.getSeriesIndex(d.getKey());
+					final XYLineAndShapeRenderer renderer =
+						(XYLineAndShapeRenderer) pl.getRenderer();
+					renderer.setSeriesShapesVisible(seriesIdx, false);
+					renderer.setSeriesLinesVisible(seriesIdx, true);
+
+					if (k == DataSeries.PROFILE) {
+						renderer.setSeriesPaint(seriesIdx, profileColor);
+						renderer.setSeriesStroke(seriesIdx, dataStroke);
+						final LegendItem li = new LegendItem("Profile");
+						li.setFillPaint(d.getColor());
+						legendItems.add(li);
+					}
+					if (k == DataSeries.BACKGROUND) {
+						renderer.setSeriesPaint(seriesIdx, bgColor);
+						renderer.setSeriesStroke(seriesIdx, dataStroke);
+						final LegendItem li = new LegendItem("Background");
+						li.setFillPaint(d.getColor());
+						legendItems.add(li);
+					}
+					if (k == DataSeries.GAUSS_BG) {
+						renderer.setSeriesPaint(seriesIdx, gaussColor);
+						renderer.setSeriesStroke(seriesIdx, dataStroke);
+						final LegendItem li = new LegendItem("Peaks");
+						if (!legendItems.contains(li)) {
+							li.setFillPaint(d.getColor());
+							legendItems.add(li);
+						}
+					}
+					if (k == DataSeries.FITTED) {
+						renderer.setSeriesPaint(seriesIdx, fittedColor);
+						renderer.setSeriesStroke(seriesIdx, dataStroke);
+						final LegendItem li = new LegendItem("Fit");
+						li.setFillPaint(d.getColor());
+						legendItems.add(li);
+					}
+					if (k == DataSeries.CUSTOMPEAKS) {
+						renderer.setSeriesPaint(seriesIdx, vMarkerEditPeakColor);
+						final Shape dot = new Ellipse2D.Double(0, 0, 6, 6);
+						renderer.setSeriesShape(seriesIdx, dot);
+						renderer.setSeriesShapesVisible(seriesIdx, true);
+						renderer.setSeriesLinesVisible(seriesIdx, false);
+						final LegendItem li = new LegendItem("Custom Peaks");
+						li.setFillPaint(d.getColor());
+						legendItems.add(li);
 					}
 				}
+			}
+		}
+		return legendItems;
+	}
+
+	/** Draws the lane's vertical markers, such as the ladder bands, with labels */
+	private void drawMarkers(final JFreeChart c, final int ln,
+		final Color vMarkerColor)
+	{
+		for (final VerticalMarker m : verticalMarkers) {
+			if (m.getLane() == ln) {
+				final double height = c.getXYPlot().getRangeAxis().getUpperBound();
+				final double offset = 0;
+				final XYTextAnnotation label = new XYTextAnnotation(m.getName(), m
+					.getValue() - offset, height);
+				if (m.getType() == VerticalMarker.VMARK) {
+					label.setPaint(vMarkerColor);
+				}
+				else if (m.getType() == VerticalMarker.BMARK) {
+					label.setPaint(bMarkerColor);
+				}
+				label.setFont(labelFont);
+				label.setRotationAnchor(TextAnchor.BOTTOM_RIGHT);
+				label.setTextAnchor(TextAnchor.TOP_RIGHT);
+				label.setRotationAngle(-Math.PI / 2);
+
+				c.getXYPlot().addAnnotation(label);
+				c.getXYPlot().addDomainMarker(m, Layer.BACKGROUND);
 			}
 		}
 	}
