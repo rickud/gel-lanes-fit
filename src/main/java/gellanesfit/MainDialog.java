@@ -322,6 +322,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private void setupMainDialog() {
 		readPreferences();
 		applySavedState();
+		keepLanesOnImage(null); // e.g. a Space saved too large for the lanes
 		buildModeButtons();
 		buildTopPanel();
 		buildSliderPanel();
@@ -1595,56 +1596,36 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final List<Object> fitDisruptors = new ArrayList<>(Arrays.asList(sliderW,
 			sliderH, sliderSp, sliderHOff, sliderVOff, textNLanes));
 
+		// Changes made here to keep the controls in step, not by the user
+		if (syncingLaneControls) return;
 		if (fitDisruptors.contains(o)) {
 			if (fitDone && !askFitReset()) {
-				textNLanes.setValue(nLanes);
+				syncLaneControls(); // back to the lanes as they are
 				return;
 			}
 		}
-		// ROI SLIDERS
-		if (o == sliderW) {
-			lw = sliderW.getValue();
-			prefs.putInt(LW, lw);
-			final String str = "Width ( " + lw + " px )";
-			setSliderTitle(sliderW, str);
-			sliderUpdate();
-		}
-		else if (o == sliderH) {
-			lh = sliderH.getValue();
-			prefs.putInt(LH, lh);
-			final String str = "Height ( " + lh + " px )";
-			setSliderTitle(sliderH, str);
-			sliderUpdate();
-		}
-		else if (o == sliderSp) {
-			lsp = sliderSp.getValue();
-			prefs.putInt(LSP, lsp);
-			final String str = "Spacing ( " + lsp + " px )";
-			setSliderTitle(sliderSp, str);
-			sliderUpdate();
-		}
-		else if (o == sliderHOff) {
-			lhoff = sliderHOff.getValue();
-			prefs.putInt(LHOFF, lhoff);
-			final String str = "Horizontal Offset ( " + lhoff + " px )";
-			setSliderTitle(sliderHOff, str);
-			sliderUpdate();
-		}
-		else if (o == sliderVOff) {
-			lvoff = sliderVOff.getValue();
-			prefs.putInt(LVOFF, lvoff);
-			final String str = "Vertical Offset ( " + lvoff + " px )";
-			setSliderTitle(sliderVOff, str);
-			sliderUpdate();
-		}
-		// SPINNERS
-		if (o == textNLanes) {
-			nLanes = (int) textNLanes.getModel().getValue();
+		// ROI SLIDERS and Number of Lanes
+		if (o == sliderW) lw = sliderW.getValue();
+		else if (o == sliderH) lh = sliderH.getValue();
+		else if (o == sliderSp) lsp = sliderSp.getValue();
+		else if (o == sliderHOff) lhoff = sliderHOff.getValue();
+		else if (o == sliderVOff) lvoff = sliderVOff.getValue();
+		else if (o == textNLanes) nLanes = (int) textNLanes.getModel().getValue();
+		if (fitDisruptors.contains(o)) {
+			keepLanesOnImage(o);
+			syncLaneControls();
 			prefs.putInt(NLANES, nLanes);
-			ladderLaneInt = ladderLaneInt <= nLanes ? ladderLaneInt : noLadderLane;
-			ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
+			prefs.putInt(LW, lw);
+			prefs.putInt(LH, lh);
+			prefs.putInt(LSP, lsp);
+			prefs.putInt(LHOFF, lhoff);
+			prefs.putInt(LVOFF, lvoff);
+			if (o == textNLanes) {
+				ladderLaneInt = ladderLaneInt <= nLanes ? ladderLaneInt : noLadderLane;
+				ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
+			}
 			sliderUpdate();
-			updateLadderLane();
+			if (o == textNLanes) updateLadderLane();
 		}
 		else if (o == textDegBG) {
 			degBG = (int) textDegBG.getModel().getValue();
@@ -1670,6 +1651,51 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			sdDrift = (double) textSDDrift.getModel().getValue();
 			fitter.setSDDrift(sdDrift);
 			prefs.putDouble(SDDRIFT, sdDrift);
+		}
+	}
+
+	/**
+	 * Keeps the automatic lanes on the image (see {@link AutoLanes#keepOnImage})
+	 *
+	 * @param changed the control changed, or null when restoring settings
+	 */
+	private void keepLanesOnImage(final Object changed) {
+		final AutoLanes.Changed c = changed == sliderW ? AutoLanes.Changed.WIDTH
+			: changed == sliderH ? AutoLanes.Changed.HEIGHT : changed == sliderSp
+				? AutoLanes.Changed.SPACE : changed == sliderHOff
+					? AutoLanes.Changed.H_OFFSET : changed == sliderVOff
+						? AutoLanes.Changed.V_OFFSET : changed == textNLanes
+							? AutoLanes.Changed.COUNT : AutoLanes.Changed.NONE;
+		final AutoLanes lanes = new AutoLanes(nLanes, lw, lh, lsp, lhoff, lvoff);
+		lanes.keepOnImage(iw, ih, c);
+		lw = lanes.width;
+		lh = lanes.height;
+		lsp = lanes.space;
+		lhoff = lanes.hOffset;
+		lvoff = lanes.vOffset;
+	}
+
+	/** True while the lane controls are being set to match the lanes */
+	private boolean syncingLaneControls = false;
+
+	/** Sets Number of Lanes and the sliders, and their titles, to the lanes */
+	private void syncLaneControls() {
+		syncingLaneControls = true;
+		try {
+			textNLanes.setValue(nLanes);
+			sliderW.setValue(lw);
+			sliderH.setValue(lh);
+			sliderSp.setValue(lsp);
+			sliderHOff.setValue(lhoff);
+			sliderVOff.setValue(lvoff);
+			setSliderTitle(sliderW, "Width ( " + lw + " px )");
+			setSliderTitle(sliderH, "Height ( " + lh + " px )");
+			setSliderTitle(sliderSp, "Space ( " + lsp + " px )");
+			setSliderTitle(sliderHOff, "Horizontal Offset ( " + lhoff + " px )");
+			setSliderTitle(sliderVOff, "Vertical Offset ( " + lvoff + " px )");
+		}
+		finally {
+			syncingLaneControls = false;
 		}
 	}
 
