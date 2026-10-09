@@ -25,8 +25,6 @@ class FitState implements Serializable {
 	int ladderLane;
 	int degBG;
 	double polyDerivative, tolPK, sdDrift;
-	/** No longer used: Continuum fits use smoothness instead */
-	double areaDrift;
 	/** Continuum fits' smoothness; null in files saved before it was added */
 	Double smoothness;
 	boolean continuum;

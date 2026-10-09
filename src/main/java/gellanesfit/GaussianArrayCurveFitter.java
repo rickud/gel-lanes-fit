@@ -379,18 +379,11 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				yvals = yvals.append(points[o].getY());
 			}
 			
-			final double minX = xvals.getMinValue();
-			final double maxX = xvals.getMaxValue();
-			final double minY = yvals.getMinValue();
-			final double maxY = yvals.getMinValue();
-			final double slope = (maxY - minY) / (maxX - minX);
-			final double p0 = minY - slope * minX;
-			
-			
-			RealVector polyG = new ArrayRealVector(deg + 1);
-			if (deg >= 0) 
-				polyG.setEntry(0,p0);
-			
+			// A flat background at the lane's minimum. Fitter replaces it with its
+			// own; it's only used when a fit is started without a start point
+			final RealVector polyG = new ArrayRealVector(deg + 1);
+			if (deg >= 0) polyG.setEntry(0, yvals.getMinValue());
+
 			if (fitMode == bandMode) return guessBands(points, xvals, yvals, polyG,
 				tolpk);
 			if (fitMode == continuumMode) return guessFragments(xvals, yvals, polyG);

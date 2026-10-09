@@ -43,9 +43,9 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 - [ ] **Ladder:** pick the ladder lane (its plot turns light blue), a ladder type, and a range in the Ladder Range dialog, also with the bands picked in reverse order.
 - [ ] **Banded fit:** click **Fit**. The ladder bands are labelled in every plot, the curves appear, and the Results Display, LOG and data folder files are created.
 - [ ] **Band count mismatch:** narrow the ladder range so it doesn't match and fit again. A warning shows both counts and nothing else is fitted.
-- [ ] **Continuum fit:** choose **Continuum**, then each distribution in turn (the AciI-Lambda ones, Ladder, and Uniform with its range dialog), and fit. The results table has Frequency, BP and MW columns, and the LOG shows Average Fragment Size and a tab per lane.
-- [ ] **Fit type controls:** with **Banded**, Area Drift and SD Drift (labels and fields) and the distribution list are greyed out; **Continuum** enables them, the distribution list only once a ladder lane is chosen. Restarting the plugin keeps this right for the saved fit type.
-- [ ] **Uniform dialog:** typing Lower, Upper and Every updates the number of fragment lengths under the fields, with a note above 100.
+- [ ] **Continuum fit:** choose **Continuum**, then each distribution in turn (the AciI-Lambda ones, Ladder, Uniform and Log Spaced), and fit. The results table has Frequency, BP and MW columns, and the LOG shows Average Fragment Size and a tab per lane.
+- [ ] **Fit type controls:** with **Banded**, Smoothness and SD Drift (labels and fields) and the distribution list are greyed out; **Continuum** enables them, the distribution list only once a ladder lane is chosen. Restarting the plugin keeps this right for the saved fit type.
+- [ ] **Uniform dialog:** **Set by** switches between **Number of peaks** and **Spacing**, enabling only the chosen field. The note under the fields shows the peaks per lane (with Spacing, as a range once a fit has run), with a note above 100. The fit covers each lane from bottom to top.
 - [ ] **Log Spaced distribution:** choose **Continuum** and **Log Spaced**. The dialog asks for the number of fragments (150) and shows the time per lane as you type. The fit covers each lane from bottom to top, follows the smear closely, and the fitted areas change smoothly from peak to peak.
 - [ ] **Smoothness:** with Log Spaced, fit at Smoothness 0, 10 and 100. At 0 the fitted areas (the red peaks) zig-zag from one fragment to the next; at 10 and above they change smoothly. The LOG lists the Smoothness used, and the value comes back after a restart.
 - [ ] **Slow fit warning:** a Continuum fit with a Uniform distribution of a few hundred lengths asks before fitting, mentioning the Stop button; **Cancel** stops after the ladder lane, **Fit Anyway** fits.
@@ -60,7 +60,7 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 - [ ] **Show Bands:** marks the bands on the image (magenta fitted, blue guesses, green custom) and keeps its state.
 - [ ] **Plots:** zoom with a dragged box; toggling edit mode, fitting and editing peaks keep the zoom. Dragging up and to the left resets the view, with the ladder labels clear of the curves.
 - [ ] **Open Data Folder:** opens the image's data folder.
-- [ ] **Hover tips:** resting the mouse on each control, parameter label and parameter field shows a tip; disabled ones (Area Drift and SD Drift in Banded mode) too. During a fit, the Stop button's tip describes Stop, and Fit's comes back afterwards; Open Data Folder's tip shows the folder's path.
+- [ ] **Hover tips:** resting the mouse on each control, parameter label and parameter field shows a tip; disabled ones (Smoothness and SD Drift in Banded mode) too. During a fit, the Stop button's tip describes Stop, and Fit's comes back afterwards; Open Data Folder's tip shows the folder's path.
 
 ### Saved state
 
