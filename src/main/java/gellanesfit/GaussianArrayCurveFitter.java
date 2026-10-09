@@ -30,7 +30,6 @@ import org.apache.commons.math3.analysis.function.Log10;
 import org.apache.commons.math3.analysis.interpolation.LinearInterpolator;
 import org.apache.commons.math3.analysis.polynomials.PolynomialFunction;
 import org.apache.commons.math3.analysis.polynomials.PolynomialSplineFunction;
-import org.apache.commons.math3.distribution.LogNormalDistribution;
 import org.apache.commons.math3.exception.DimensionMismatchException;
 import org.apache.commons.math3.exception.NotStrictlyPositiveException;
 import org.apache.commons.math3.exception.NullArgumentException;
@@ -49,10 +48,7 @@ import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.DiagonalMatrix;
 import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.linear.RealVector;
-import org.apache.commons.math3.random.RandomGenerator;
-import org.apache.commons.math3.random.Well19937c;
 import org.apache.commons.math3.stat.descriptive.moment.Mean;
-import org.apache.commons.math3.stat.descriptive.moment.Variance;
 import org.apache.commons.math3.util.FastMath;
 
 /**
@@ -74,15 +70,12 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		new GaussianArray.Parametric();
 	private static final int bandMode = 0;
 	private static final int continuumMode = 1;
-	private static final long RANDOM_SEED = 20170213L;
 
 	// Limits of the fit. Positions, heights and widths are relative to the
 	// starting guess unless noted.
 
 	/** Banded: a band may move this fraction of the distance to its neighbour */
 	private static final double BAND_POSITION_DRIFT = 0.8;
-	/** Continuum: a fragment may move this fraction of the fragment spacing */
-	private static final double FRAGMENT_POSITION_DRIFT = 0.1;
 	/** Lowest peak height, as a fraction of the profile above the background */
 	private static final double MIN_HEIGHT = 0.01;
 	/** Highest peak height, as a multiple of the profile above the background */
@@ -133,9 +126,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	private BooleanSupplier stopCheck = () -> false;
 	/** Maximum number of iterations of the optimization algorithm. */
 	private final int maxIter;
-	private final int fitMode;
 	private final int deg;
-	private final double peakTol, areaDrift, sdDrift, polyDerivative, polyOffset;
+	private final double peakTol, polyDerivative, polyOffset;
 
 	/**
 	 * Constructor used by the factory methods.
@@ -145,19 +137,15 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * @param maxIter Maximum number of iterations of the optimization algorithm.
 	 */
 	private GaussianArrayCurveFitter(final SortedParameters initialGuess,
-		final int maxIter, final int fitMode, final int deg,
-		final double polyDerivative, final double peakTol,
-		final double polyOffset, final double areaDrift, final double sdDrift)
+		final int maxIter, final int deg, final double polyDerivative,
+		final double polyOffset, final double peakTol)
 	{
 		this.initialGuess = initialGuess;
 		this.maxIter = maxIter;
-		this.fitMode = fitMode;
 		this.deg = deg;
 		this.polyDerivative = polyDerivative;
-		this.peakTol = peakTol;
 		this.polyOffset = polyOffset;
-		this.areaDrift = areaDrift;
-		this.sdDrift = sdDrift;
+		this.peakTol = peakTol;
 	}
 
 	/**
@@ -165,21 +153,19 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * {@link #withStartPoint(SortedParameters)}, usually from a
 	 * {@link ParameterGuesser}. The number of iterations isn't limited.
 	 *
-	 * @param fitMode Fitter.bandMode or Fitter.continuumMode
 	 * @param deg degree of the background polynomial
 	 * @param polyDerivative limit on the background's average slope
 	 * @param polyOffset ceiling of the background, as a fraction of the lane's
 	 *          lowest intensity
 	 * @param peakTol Peak Tolerance, in gray values
-	 * @param areaDrift Area Drift (Continuum fits)
-	 * @param sdDrift SD Drift (Continuum fits)
 	 * @return a curve fitter
 	 */
-	static GaussianArrayCurveFitter create(final int fitMode, final int deg,
-		final double polyDerivative, final double polyOffset, final double peakTol, final double areaDrift, final double sdDrift)
+	static GaussianArrayCurveFitter create(final int deg,
+		final double polyDerivative, final double polyOffset,
+		final double peakTol)
 	{
-		return new GaussianArrayCurveFitter(null, Integer.MAX_VALUE, fitMode, deg,
-			polyDerivative, polyOffset, peakTol, areaDrift, sdDrift);
+		return new GaussianArrayCurveFitter(null, Integer.MAX_VALUE, deg,
+			polyDerivative, polyOffset, peakTol);
 	}
 
 	/**
@@ -189,8 +175,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	 * @return a new instance.
 	 */
 	GaussianArrayCurveFitter withStartPoint(final SortedParameters newStart) {
-		return new GaussianArrayCurveFitter(newStart, maxIter, fitMode, deg,
-			polyDerivative, polyOffset, peakTol, areaDrift, sdDrift);
+		return new GaussianArrayCurveFitter(newStart, maxIter, deg,
+			polyDerivative, polyOffset, peakTol);
 	}
 
 	/**
@@ -228,8 +214,8 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			: new ParameterGuesser(observations, deg, peakTol, 1.0).guess();
 
 		final GaussianArrayParameterValidator parValid =
-			new GaussianArrayParameterValidator(fitMode, startPoint, xx, target,
-				polyDerivative, polyOffset, areaDrift, sdDrift, stopCheck);
+			new GaussianArrayParameterValidator(startPoint, xx, target,
+				polyDerivative, polyOffset, stopCheck);
 
 		return new LeastSquaresBuilder().parameterValidator(parValid)
 			.maxEvaluations(Integer.MAX_VALUE).maxIterations(maxIter).lazyEvaluation(
@@ -748,56 +734,42 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 		ParameterValidator
 	{
 
-		private final int fitMode;
 		private final SortedParameters iniSP;
 		private final RealVector xtarget;
 		private final RealVector ytarget;
 
 		private final int deg;
 
-		private final double areaDrift;
 		private RealVector maxMeanDiff = new ArrayRealVector();
 
-		private final double maxX, minX, margin;
+		private final double maxX, minX;
 		private final double minN;
-		private double minSD;
-		private double maxSD;
 		private final double minD1;
 		private final double maxD1;
 		private final double polyOffset;
 		private final PolynomialSplineFunction profile;
 		private final BooleanSupplier stopCheck;
-		// Fixed seed: the same data always gives the same Continuum fit
-		private final RandomGenerator random = new Well19937c(RANDOM_SEED);
 
-		private GaussianArrayParameterValidator(final int fitMode,
-			final SortedParameters iniSP, final double[] xtarget,
-			final double[] ytarget, final double polyDerivative, final double polyOffset,
-			final double areaDrift, final double sdDrift,
+		private GaussianArrayParameterValidator(final SortedParameters iniSP,
+			final double[] xtarget, final double[] ytarget,
+			final double polyDerivative, final double polyOffset,
 			final BooleanSupplier stopCheck)
 		{
 			this.stopCheck = stopCheck;
 
-			this.fitMode = fitMode;
 			this.iniSP = iniSP;
 			this.xtarget = new ArrayRealVector(xtarget);
 			this.ytarget = new ArrayRealVector(ytarget);
 			this.deg = iniSP.getDeg();
-			this.areaDrift = areaDrift;
 
 			this.polyOffset = polyOffset; // proportion of the profile value
-			if (fitMode == GaussianArrayCurveFitter.continuumMode)
-				this.margin = (this.xtarget.getMaxValue() - this.xtarget
-					.getMinValue()) * CONTINUUM_MARGIN;
-			else this.margin = 0.0;
-			minX = this.xtarget.getMinValue() - margin;
-			maxX = this.xtarget.getMaxValue() + margin;
+			minX = this.xtarget.getMinValue();
+			maxX = this.xtarget.getMaxValue();
 
 			maxD1 = polyDerivative;
 			minD1 = -polyDerivative;
 			this.profile = new LinearInterpolator().interpolate(xtarget, ytarget);
-			final double mds = fitMode == continuumMode ? FRAGMENT_POSITION_DRIFT
-				: BAND_POSITION_DRIFT;
+			final double mds = BAND_POSITION_DRIFT;
 			if (iniSP.getMean().getDimension() > 1) {
 				maxMeanDiff = iniSP.getMean().getSubVector(1, iniSP.getMean().getDimension() - 1).subtract(
 					iniSP.getMean().getSubVector(0, iniSP.getMean().getDimension() - 1)).map(new Abs())
@@ -810,21 +782,12 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			}
 
 			minN = MIN_HEIGHT;
-
-			minSD = BAND_MIN_WIDTH;
-			maxSD = BAND_MAX_WIDTH;
-			if (fitMode == continuumMode) { // controllable from interface
-				minSD = 1/sdDrift;
-				maxSD = sdDrift;
-			}
 		}
 
 		/**
 		 * Pulls the parameters back within the fit's limits: the background's slope,
-		 * level and spread; each peak's position, height and width relative to its
-		 * starting guess; and, for Continuum fits, the areas' departure from the
-		 * distribution's proportions (Area Drift), by redrawing them when it's
-		 * exceeded.
+		 * level and spread; and each peak's position, height and width relative
+		 * to its starting guess.
 		 */
 		@Override
 		public RealVector validate(final RealVector param) {
@@ -849,7 +812,6 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				p = curve[0];
 			}
 			constrainPeaks(norm, mean, sd, p);
-			if (fitMode == continuumMode) norm = constrainAreas(norm, sd);
 
 			RealVector out = new ArrayRealVector();
 			out = out.append(deg).append(poly);
@@ -960,49 +922,11 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 				if (ni > maxNi) 
 					norm.setEntry(i, maxNi);
 
-				if (sd.getEntry(i) < minSD * iniSP.getSD().getEntry(i))
-					sd.setEntry(i, minSD * iniSP.getSD().getEntry(i));
-				if (sd.getEntry(i) > maxSD * iniSP.getSD().getEntry(i))
-					sd.setEntry(i, maxSD * iniSP.getSD().getEntry(i));
+				if (sd.getEntry(i) < BAND_MIN_WIDTH * iniSP.getSD().getEntry(i))
+					sd.setEntry(i, BAND_MIN_WIDTH * iniSP.getSD().getEntry(i));
+				if (sd.getEntry(i) > BAND_MAX_WIDTH * iniSP.getSD().getEntry(i))
+					sd.setEntry(i, BAND_MAX_WIDTH * iniSP.getSD().getEntry(i));
 			}
-		}
-
-		/**
-		 * Continuum fits: when the spread of the fragments' fitted-to-expected
-		 * area ratios exceeds Area Drift, redraws the heights at random around
-		 * the expected proportions.
-		 *
-		 * @return the heights, redrawn or as they were
-		 */
-		private RealVector constrainAreas(RealVector norm, final RealVector sd) {
-			final Variance varCalculator = new Variance();
-			final Mean meanCalculator = new Mean();
-			final RealVector area = norm.ebeMultiply(sd).mapMultiply(FastMath.sqrt(2 *
-				FastMath.PI));
-			final RealVector ratio = area.ebeDivide(iniSP.getArea());
-			double meanRatio = meanCalculator.evaluate(ratio.toArray());
-			double varRatio = varCalculator.evaluate(ratio.toArray());
-			double lowNorm = meanCalculator.evaluate(
-				ytarget.mapSubtract(ytarget.getMinValue()*polyOffset).toArray())*minN;
-			double sigma = FastMath.sqrt(FastMath.log(varRatio
-								/(meanRatio*meanRatio) + 1));
-			if (sigma > areaDrift) {
-				// Use a log-normal distribution with parameters mu, sigma
-				double mu = FastMath.log(meanRatio /
-					FastMath.sqrt(1 + varRatio/(meanRatio*meanRatio)));
-				sigma = areaDrift;
-				LogNormalDistribution logNormal = new LogNormalDistribution(random,
-					mu, sigma);
-				norm = new ArrayRealVector();
-				for (int i = 0; i < area.getDimension(); i++) {
-					norm = norm.append(logNormal.sample());
-				}
-				norm = norm.ebeMultiply(iniSP.getNorm());
-			}
-			double normMin = norm.getMinValue();
-			if (normMin < lowNorm) 
-				norm.mapMultiply(lowNorm/normMin);
-			return norm;
 		}
 	}
 }

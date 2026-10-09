@@ -45,7 +45,6 @@ public class BandedFitTest {
 		fitter.setDegBG(2);
 		fitter.setPolyDerivative(10);
 		fitter.setTolPK(0.1);
-		fitter.setAreaDrift(0.1);
 		fitter.setSDDrift(1.0);
 		fitter.setFitMode(Fitter.bandMode);
 		fitter.setInputData(new ArrayList<>(Arrays.asList(lanes)));

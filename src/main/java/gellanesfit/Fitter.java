@@ -86,7 +86,7 @@ class Fitter {
 	private static final double BACKGROUND_CEILING = 0.98;
 
 	private int degBG;
-	private double tolPK, areaDrift, sdDrift, polyDerivative, polyOffset;
+	private double tolPK, sdDrift, polyDerivative, polyOffset;
 	private int fitMode = bandMode;
 	private int ladderLane = MainDialog.noLadderLane;
 	private double[] ladder; // MW, Dalton
@@ -535,9 +535,8 @@ class Fitter {
 			fitRms = r.rms;
 		}
 		else {
-			final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(
-				fitMode, deg, polyDerivative, offset, tolpk, areaDrift, sdDrift)
-				.withStartPoint(firstGuess);
+			final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(deg,
+				polyDerivative, offset, tolpk).withStartPoint(firstGuess);
 			cf.setStopCheck(() -> stopRequested);
 			final LeastSquaresProblem problem = cf.getProblem(obs.toList());
 			final LeastSquaresOptimizer.Optimum optimum = cf.getOptimizer().optimize(
@@ -1040,13 +1039,6 @@ class Fitter {
 		this.tolPK = tolPK;
 	}
 
-	/**
-	 * Area Drift: how far Continuum fits may depart from the distribution's
-	 * proportions.
-	 */
-	public void setAreaDrift(final double areaDrift) {
-		this.areaDrift = areaDrift;
-	}
 	/**
 	 * SD Drift: how far Continuum fits' widths may depart from the ladder-based
 	 * widths, as a factor.

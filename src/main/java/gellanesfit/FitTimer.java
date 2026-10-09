@@ -101,8 +101,8 @@ final class FitTimer {
 		}
 		final SortedParameters start = new SortedParameters(new ArrayRealVector(
 			new double[] { 9, 0, 0 }), norm, mean, sd);
-		final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(
-			Fitter.bandMode, 2, 10, 0.98, 5, 0.1, 1.0).withStartPoint(start);
+		final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(2, 10,
+			0.98, 5).withStartPoint(start);
 		cf.getOptimizer().optimize(cf.getProblem(obs));
 	}
 }
