@@ -1,6 +1,6 @@
 # Gel Lanes Fit
 
-Gel Lanes Fit is a [Fiji](https://fiji.sc) (ImageJ) plugin for quantitative analysis of gel electrophoresis images. It takes an intensity profile along each lane, fits it with Gaussian peaks on a polynomial background, and uses a size ladder as reference: **Banded** fits for distinct bands, **Continuum** fits for smears such as fragmented or tagmented DNA.
+Gel Lanes Fit is a [Fiji](https://fiji.sc) (ImageJ) plugin for quantitative analysis of gel electrophoresis images. It takes an intensity profile along each lane, fits it with Gaussian peaks on a background, and uses a size ladder as reference: **Banded** fits for distinct bands, **Continuum** fits for smears such as fragmented or tagmented DNA.
 
 ## User guide
 

@@ -1,6 +1,6 @@
 # Gel Lanes Fit user guide
 
-Gel Lanes Fit is a Fiji (ImageJ) plugin for quantitative analysis of gel electrophoresis images. It takes a line profile from each lane, fits Gaussian peaks and a polynomial background to it, and sizes the bands against a ladder lane.
+Gel Lanes Fit is a Fiji (ImageJ) plugin for quantitative analysis of gel electrophoresis images. It takes a line profile from each lane, fits Gaussian peaks and a background to it, and sizes the bands against a ladder lane: distinct bands one by one, or a smear as a distribution of fragment sizes.
 
 ## Contents
 
@@ -71,6 +71,8 @@ Choose how lanes are placed at the top of the main window:
   - **Width** and **Height** of each lane, in pixels;
   - **Space** between lanes;
   - **Horizontal Offset** and **Vertical Offset** of the first lane from the image's top-left corner.
+
+  The lanes always stay on the image: each slider stops when the last lane reaches the image's edge, and if you ask for more lanes than fit, they get narrower and closer together.
 - **Manual Rectangle Selection** lets you draw each lane yourself, which suits bent or unevenly spaced lanes:
   - **Add a lane:** draw a rectangle on the image with ImageJ's rectangle tool.
   - **Move or resize a lane:** drag it or its handles.
@@ -92,12 +94,14 @@ The list then shows the chosen range, for example `Hi-Lo [1.4 kbp - 750 bp]`. To
 
 ### 3. Choose the fit type and parameters
 
-- **Fit Type:** **Banded** for distinct bands, or **Continuum** for smears such as fragmented or tagmented DNA. For Continuum, also choose a **fragment distribution** in the list below the ladder. [The two fit types](#the-two-fit-types) explains the difference.
+- **Fit Type:** **Banded** for distinct bands, or **Continuum** for smears such as fragmented or tagmented DNA. For Continuum, also choose a **fragment distribution** in the list below the ladder; **Log Spaced** is a good start for a smear of unknown sizes. [The two fit types](#the-two-fit-types) explains the difference.
 - **Parameters:** the defaults are a good start. [Fit parameters](#fit-parameters) explains what each one does and when to change it.
 
 ### 4. Run the fit
 
-Click **Fit**. The plugin:
+Click **Fit**. If some lanes are outside the image, for example manual lanes drawn past its edge, the plugin names them first: **Fit the Others** fits the lanes on the image. If the ladder lane is outside the image, there's nothing to fit until you move it back.
+
+The plugin then:
 
 1. **Fits the ladder lane first**, always with the Banded method. It must find exactly as many bands as the ladder range contains. If it doesn't, it stops and shows how many bands it detected and how many the range has. To fix it:
    - lower **Peak Tolerance** to detect weaker bands, or raise it to ignore noise;
@@ -130,7 +134,7 @@ In **Continuum** fits, each custom peak replaces the closest fragment position i
 
 ## The two fit types
 
-Both fit types model each lane's profile as a **background** (a polynomial, see **Polynomial Degree**) plus a sum of **Gaussian peaks**, and adjust them until they match the profile as closely as possible. They differ in where the peaks come from.
+Both fit types model each lane's profile as a **background** plus a sum of **Gaussian peaks**, and adjust them until they match the profile as closely as possible. They differ in where the peaks come from, what may change in the fit, and the background: a polynomial for Banded fits (see **Polynomial Degree**), a flat level for Continuum fits.
 
 ### Banded
 
@@ -144,12 +148,12 @@ For gels with **distinct bands**.
 
 For lanes where DNA runs as a **smear**, a continuous range of fragment sizes, such as fragmented, digested or tagmented DNA. It estimates the size distribution of the fragments in each lane.
 
-- **Fragment distribution:** you choose a list of fragment lengths with their relative frequencies, the sizes you expect in the sample (see [Fragment distributions](#fragment-distributions)).
-- **Starting guess:** each fragment length gets one Gaussian:
+- **Fragment distribution:** you choose the fragment lengths to fit, either a fixed list with relative frequencies, or lengths that cover each lane from bottom to top (**Uniform** and **Log Spaced**); see [Fragment distributions](#fragment-distributions).
+- **Background:** a flat level at 98 % of the lane's lowest intensity. A smear's information is in the smear itself, and there's nothing to base a background shape on, so it isn't fitted. (The ladder lane keeps its polynomial background, since it's fitted as bands.)
+- **Peaks:** each fragment length gets one Gaussian:
   - **Position** is predicted from the ladder. Between ladder bands, migration distance is interpolated linearly against the logarithm of the fragment's molecular weight, and extrapolated beyond the first and last band. Fragments predicted up to 20 % beyond either end of the lane are included, so that bands at the edges fit properly.
-  - **Width** is interpolated from the widths of the ladder bands.
-  - **Height** comes from the profile at that position, scaled by the fragment's frequency in the distribution.
-- **Fitting:** positions may shift by up to 10 % of the spacing between neighbouring fragments. Widths stay within the range set by **SD Drift**. The areas may depart from the distribution's proportions only as far as **Area Drift** allows.
+  - **Width** follows the widths of the ladder bands, along a straight line fitted to them; beyond the ladder, it stays at the nearest band's value.
+- **Fitting:** the peaks keep their order and spacing. For the whole lane, the fit may shift the positions (up to 5 % of the lane length), stretch them (up to 5 %), and widen or narrow all the peaks together (within **SD Drift**). With those set, each peak's **area** is fitted, never below zero. A **smoothness** penalty keeps neighbouring fragments' areas alike unless the profile changes sharply there, so the fitted distribution doesn't zig-zag (see **Smoothness**). The fit is judged against the profile's noise, which the plugin estimates from the profile itself.
 - **Results:** one row per fragment with its length (**BP**), molecular weight (**MW**) and frequency in the distribution. The **LOG** adds each lane's **Average Fragment Size** ± its standard deviation, and a plot of the fitted size distribution per lane.
 
 Molecular weights are computed for double-stranded DNA as MW = 607.4 × bp + 157.9 Da.
@@ -160,11 +164,11 @@ The parameters are in the main window. They're saved with each image, and the la
 
 | Parameter | Range (default) | Used in | What it does |
 |---|---|---|---|
-| **Polynomial Degree** | −1 to 15 (2) | both | Shape of the background under each lane. **−1**: no background. **0**: a constant offset. **1**: a straight slope. **2**: a gentle curve. Higher degrees follow uneven backgrounds more closely but can absorb broad bands, so raise it only when the background clearly isn't smooth. The background is always kept below the lane's lowest intensity, so it can't take over signal. |
-| **Max Polynomial Derivative** (grayvalue/px) | 0 to 10 (10) | both | Limit on how steep the background may be, as its average slope in gray values per pixel. If the fitted background is steeper, its slope is reduced until it's within the limit. Lower it when the background should be nearly flat; **0** forces a flat background. |
+| **Polynomial Degree** | −1 to 15 (2) | Banded, and the ladder lane in both | Shape of the background under each lane. **−1**: no background. **0**: a constant offset. **1**: a straight slope. **2**: a gentle curve. Higher degrees follow uneven backgrounds more closely but can absorb broad bands, so raise it only when the background clearly isn't smooth. The background is always kept below the lane's lowest intensity, so it can't take over signal. Continuum lanes use a flat background instead. |
+| **Max Polynomial Derivative** (grayvalue/px) | 0 to 10 (10) | Banded, and the ladder lane in both | Limit on how steep the background may be, as its average slope in gray values per pixel. If the fitted background is steeper, its slope is reduced until it's within the limit. Lower it when the background should be nearly flat; **0** forces a flat background. |
 | **Peak Tolerance** (fraction) | 0.01 to 1 (0.1) | Banded, and the ladder lane in both | How much a band must stand out to be detected, as a fraction of the lane's intensity range: a band's peak must rise above the dips on both sides by more than this fraction. **0.05** means 5 % of the range. Lower it to catch faint bands; raise it if noise is detected as bands. |
-| **Area Drift** | 0.001 to 1 (0.1) | Continuum | How far the fragments' fitted areas may depart from the proportions in the fragment distribution. It limits the spread of the ratio *fitted area / expected area* across the fragments, measured as the standard deviation of its logarithm. Small values keep the result close to the distribution's shape; larger values let the fit follow the data. When a fit exceeds the limit, the areas are re-drawn at random around the expected proportions, so Continuum results can differ slightly between runs. |
-| **SD Drift** | 1 to 5 (1) | Continuum | How far each fragment's width may depart from the width expected from the ladder bands: between *expected ÷ SD Drift* and *expected × SD Drift*. **1** keeps the widths fixed at the ladder-based values; **2** allows half to double. Raise it if bands in the sample lanes are clearly wider or narrower than in the ladder. |
+| **Smoothness** | 0 to 1000 (10) | Continuum | How strongly neighbouring fragments' areas are kept alike. The fit pays a penalty for every change in the areas from one fragment to the next, relative to the distribution's proportions, so a sharp change only survives where the profile has one. **0** lets each area follow the data alone, which tends to zig-zag; **10** gives a smooth distribution that still follows the smear's features; higher values smooth more. The fit to the profile hardly changes between these values; the shape of the fitted distribution does. |
+| **SD Drift** | 1 to 5 (1) | Continuum | How much the fit may widen or narrow all of a lane's fragment peaks together, from the widths of the ladder bands: between *ladder ÷ SD Drift* and *ladder × SD Drift*. **1** keeps the ladder's widths. It matters when the distribution has few lengths, far apart: wider peaks then fill the gaps between them (on the sample image, 40 Log Spaced fragments fit with an RMS of 0.24 to 0.35 at **1**, and 0.01 to 0.03 at **3**). With many lengths, such as Log Spaced at 150, it makes no difference. |
 
 The **LOG** window lists the parameters used for each fit, next to the results.
 
@@ -175,7 +179,7 @@ Each lane's plot shows:
 | Curve | Colour | Meaning |
 |---|---|---|
 | Profile | black | the lane's measured intensity |
-| Background | blue | the fitted polynomial background |
+| Background | blue | the fitted polynomial background; the flat background in Continuum lanes |
 | Peaks | red | each fitted Gaussian, drawn on top of the background |
 | Fit | orange | background plus all peaks; it should follow the profile |
 | Custom peaks | green dots | your custom peaks |
@@ -201,10 +205,10 @@ After a fit, three places show the results:
   | Amplitude | fitted peak height above the background, in gray values |
   | FWHM | fitted band width (full width at half maximum), in pixels |
   | Area | band area, the peak integrated over the lane; it's proportional to the amount of material in the band |
-  | Dist. G., Amp. G., FWHM G. | the starting guesses for Distance, Amplitude and FWHM, for comparison |
+  | Dist. G., Amp. G., FWHM G. | where the fit started from, for comparison. For Continuum fits, Dist. G. and FWHM G. are the positions and widths predicted from the ladder, and Amp. G. the starting heights: the profile's level at each fragment, shared out among overlapping fragments. |
   | Frequency, BP, MW | Continuum only: the fragment's relative frequency in the distribution, its length in base pairs and its molecular weight. They're shown as "-" for the ladder lane. |
 
-  For Continuum fits, the file also lists each lane's mean fragment size and standard deviation at the end.
+  For Continuum fits, the file ends with each lane's mean fragment size and standard deviation, in base pairs, under the heading **Mean (bp)** and **Standard Deviation (bp)**.
 - **LOG**, also saved as `<image>_log.html`:
   - the fit type and parameters;
   - each lane's **RMS**, the typical difference between the fit and the profile as a fraction of the lane's intensity range (lower is better);
@@ -279,29 +283,36 @@ Continuum fits need a **fragment distribution**: the fragment lengths expected i
 | Distribution | Description |
 |---|---|
 | **AciI-Lambda**, **AciI-Lambda4**, **AciI-Lambda3**, **AciI-Lambda2** | four approximations of the same fragment distribution, an AciI digest of lambda DNA (2 to 1,086 bp), made with decreasing numbers of fragment lengths: 206, 155, 138 and 103. Each length becomes one peak in the fit, so fewer lengths mean fewer peaks to fit. Fitting the same lanes with each variant shows whether a coarser approximation, with fewer fragment lengths, gives a poorer fit or not; compare the lanes' RMS in the LOG. |
-| **Uniform** | every length between a **Lower** and an **Upper** size, in steps of **Every** bp, all equally frequent; the plugin asks for the three values when you choose it, and shows how many lengths they give. A wide range with a small step makes fits slow; see below. |
+| **Log Spaced** | lengths that cover each lane from its bottom to its top, evenly spaced in log(bp), all equally frequent. Small fragments get more lengths than large ones, and since fragments run roughly by the log of their size, the peaks end up roughly evenly spaced along the lane. The plugin asks for the **Number of fragments** (150 by default) and shows the expected time per lane. The best choice for a smear of unknown sizes. |
+| **Uniform** | lengths that cover each lane from its bottom to its top, evenly spaced in bp, all equally frequent. Set by **Number of peaks** (30 by default) or by **Spacing** in bp; the dialog shows the number of peaks per lane. Large fragments run close together, so with even bp steps the top of the lane gets many peaks and the bottom few; see below. |
 | **Ladder** | a fixed list of 22 sizes from 50 bp to 10 kbp (the Hi-Lo and 100bp band sizes), each once; it doesn't follow the ladder you selected |
 
-The distributions are tab-separated text files: a header line, then one line per fragment with its length in base pairs and its number of copies. Further columns are ignored. They're built into the plugin, so adding your own requires rebuilding it.
+For **Uniform** and **Log Spaced**, each lane's size range comes from the fitted ladder: the sizes at the lane's bottom and top edges, extrapolated beyond the ladder's first and last bands where needed. Each lane gets its own lengths, and its results list them.
+
+The fixed distributions are tab-separated text files: a header line, then one line per fragment with its length in base pairs and its number of copies. Further columns are ignored. They're built into the plugin, so adding your own requires rebuilding it.
 
 #### Number of fragments and fitting time
 
-Each fragment length becomes one peak in the fit, with three values to adjust (height, position, width). The time a Continuum fit takes grows much faster than the number of fragments: twice as many fragments can take several times as long. For example, on the sample image `Long_5s.tif`:
+Each fragment length becomes one peak in the fit. For a smooth fit of a smear, the peaks should overlap: about one band width apart (one standard deviation of the ladder's bands) or closer. Peaks much further apart than that leave gaps, and the fit looks like a comb. On the sample image `Long_5s.tif`, whose smears run from about 60 bp to 16 kbp:
 
-| Uniform distribution | Fragment lengths | Time per lane |
-|---|---|---|
-| 100 to 700 bp, every 20 bp | 31 | under a second |
-| 100 to 4,000 bp, every 20 bp | 196 | 10 to 40 seconds |
+| Distribution | Fragments | Fit (RMS) | Time per lane |
+|---|---|---|---|
+| Log Spaced | 40 | 0.24 to 0.35, a comb | under a second |
+| Log Spaced | 80 | 0.07 to 0.11 | under a second |
+| Log Spaced | 150 | 0.004 to 0.009 | about 2 seconds |
+| Log Spaced | 200 | 0.004 to 0.008 | about 4 seconds |
+| Log Spaced | 300 | 0.006 to 0.008 | about 17 seconds |
+| Uniform (even bp steps) | 200 | 0.09 to 0.11 | about 3 seconds |
 
-A Uniform distribution has (**Upper** − **Lower**) ÷ **Every** + 1 lengths; its dialog shows the number as you type, and suggests a coarser step above 100. Only the fragments predicted to run within the lane, or within 20 % of its length beyond either end, are fitted, so lengths far outside the lane cost nothing.
+Past about 150 fragments, the fit hardly improves while the time grows steeply. Uniform needs many more peaks for the same fit, because even bp steps crowd them at the top of the lane and leave the bottom sparse.
 
 Once the ladder lane is fitted, the plugin counts the fragments each lane will have. If the whole fit could take more than about 30 seconds, it shows the estimate and asks before fitting: **Fit Anyway** goes ahead, **Cancel** keeps the ladder lane's fit so you can change the distribution. The estimate is adapted to your computer: the first time in a session, the plugin times a short test fit (well under a second) and scales the estimate by how fast it ran. It's still only an indication, since the time also depends on the lanes themselves; a fit that turns out slower than expected can be ended with **Stop**.
 
-To keep fits fast:
+To choose the number of fragments:
 
-- **Use a coarser step:** 100 to 4,000 bp every 50 bp gives 79 lengths, every 100 bp gives 40.
-- **Narrow the range** to the sizes the smear actually covers.
-- **Check whether a finer step helps:** fit the same lanes with two step sizes and compare their RMS in the LOG; if the finer step doesn't lower it, the coarser one is enough.
+- **Start with Log Spaced at 150.** Compare the lanes' RMS in the LOG with a smaller number; if it barely changes, the smaller number is enough.
+- **If the fit looks like a comb,** the peaks are too far apart: use more fragments, or raise **SD Drift** so the peaks can widen to fill the gaps.
+- **Only the fragments within the lane count:** fragments predicted to run within the lane, or within 20 % of its length beyond either end, are fitted; lengths far outside the lane cost nothing.
 
 ## Troubleshooting
 
@@ -366,11 +377,23 @@ Fiji's JavaScript scripting support needs a component that newer Java versions n
 
 ### A Continuum fit takes a long time
 
-The fit time depends mostly on how many fragment lengths fall within the lanes. A Uniform distribution with a wide range and a small step can have hundreds, and then each lane can take tens of seconds. Click **Stop** to end the fit, then use a coarser **Every** step or a narrower range; see [Number of fragments and fitting time](#number-of-fragments-and-fitting-time).
+The fit time depends mostly on how many fragment lengths fall within the lanes. Above about 200 per lane, each lane can take tens of seconds. Click **Stop** to end the fit, then choose fewer fragments (Log Spaced) or fewer peaks or a wider spacing (Uniform); see [Number of fragments and fitting time](#number-of-fragments-and-fitting-time).
+
+### A Continuum fit looks like a comb
+
+The fitted curve has regular ripples where the smear is smooth: the fragment peaks are further apart than the bands are wide. Use more fragments, for example Log Spaced at 150, or raise **SD Drift** to let the peaks widen. See [Number of fragments and fitting time](#number-of-fragments-and-fitting-time).
+
+### The fitted size distribution zig-zags
+
+Neighbouring fragments alternate between large and small areas. Raise **Smoothness** (10 is the default; try 100). The fit to the profile stays about the same.
 
 ### The last fit isn't repeated at startup
 
-The plugin repeats the last fit when you open an image again, unless that fit never finished, for example because Fiji was closed, crashed, or was force-quit while a slow fit was running. Repeating it could get stuck the same way, so the plugin restores the lanes and settings, skips the fit, and shows a message. Check the fit settings, for example the number of fragment lengths of a Uniform distribution, and click **Fit**.
+The plugin repeats the last fit when you open an image again, unless that fit never finished, for example because Fiji was closed, crashed, or was force-quit while a slow fit was running. Repeating it could get stuck the same way, so the plugin restores the lanes and settings, skips the fit, and shows a message. Check the fit settings, for example the number of fragments of the distribution, and click **Fit**.
+
+### Lanes outside the image
+
+When you click **Fit**, a message names lanes that are outside the image: they have no profile, so they can't be fitted. Automatic lanes can't leave the image any more; this applies to manual lanes drawn past its edge, or lanes saved by an older version. Move or resize those lanes onto the image, or click **Fit the Others** to fit the rest.
 
 ### "Cannot create the data folder" in the Console
 

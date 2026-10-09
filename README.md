@@ -2,10 +2,10 @@
 
 Gel Lanes Fit is a [Fiji](https://fiji.sc) (ImageJ) plugin for quantitative analysis of gel electrophoresis images.
 
-It takes an intensity profile along each lane and fits it with Gaussian peaks on a polynomial background, with a size ladder as reference:
+It takes an intensity profile along each lane and fits it with Gaussian peaks on a background, with a size ladder as reference:
 
 - **Lanes:** placed automatically, equally sized and spaced, or drawn one by one for bent or uneven lanes.
-- **Two fit types:** **Banded**, for gels with distinct bands, reports each band's position, height, width and area. **Continuum**, for smears such as fragmented or tagmented DNA, estimates each lane's fragment size distribution and average fragment size against the ladder.
+- **Two fit types:** **Banded**, for gels with distinct bands, reports each band's position, height, width and area. **Continuum**, for smears such as fragmented or tagmented DNA, estimates each lane's fragment size distribution and average fragment size against the ladder, as a smooth series of fragment peaks that cover the lane.
 - **Ladders:** built-in Hi-Lo, 100bp, Quick-Load and Tapestation ladders, or your own from a text file.
 - **Custom peaks:** add or remove bands by clicking on a lane's plot, then fit again.
 - **Results:** a results table, a fit summary, and each lane's plot as PNG, PDF and SVG, saved in a folder next to the image.
@@ -24,7 +24,7 @@ The plugin is in **Plugins › Gel Tools › Gel Lanes Fit**. The [user guide](d
 1. Open a gel image in Fiji and choose **Plugins › Gel Tools › Gel Lanes Fit**.
 2. Place the lanes: **Automatic Rectangle Selection** with the sliders, or **Manual Rectangle Selection** to draw them.
 3. Pick the ladder lane, the ladder type and the range of ladder bands visible in it.
-4. Choose **Banded** or **Continuum** (and a fragment distribution for Continuum), then click **Fit**.
+4. Choose **Banded** or **Continuum** (and a fragment distribution for Continuum; **Log Spaced** is a good start for a smear), then click **Fit**.
 5. Check the fit in the Profiles window, add custom peaks where needed and fit again. Click **Open Data Folder** to see the saved results.
 
 ## Documentation
