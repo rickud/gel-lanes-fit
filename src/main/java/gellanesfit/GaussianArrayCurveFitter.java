@@ -241,10 +241,9 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	/** {@inheritDoc} */
 	@Override
 	protected LeastSquaresOptimizer getOptimizer() {
-		return new LevenbergMarquardtOptimizer()
-			.withCostRelativeTolerance(1e-18)
-			.withOrthoTolerance(1e-18)
-			.withParameterRelativeTolerance(1e-15);
+		// The library's default tolerances; tighter ones, below what double
+		// precision can resolve, make a converged fit throw instead of stopping
+		return new LevenbergMarquardtOptimizer();
 	}
 
 	/**
@@ -1177,7 +1176,8 @@ class GaussianArray implements UnivariateDifferentiableFunction {
 			RealVector poly = new ArrayRealVector();
 
 			final int gaussStart = degPoly + 2;
-			out = out.append(1.0);
+			// The degree is fixed: the fit must not change it
+			out = out.append(0.0);
 			for (int pp = 1; pp < gaussStart; pp++)
 				poly = poly.append(param[pp]);
 			poly = new ArrayRealVector(new PolynomialFunction.Parametric().gradient(x,
