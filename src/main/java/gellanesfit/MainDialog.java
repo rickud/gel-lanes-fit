@@ -720,10 +720,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		setToolTip("Shape of the background under each lane, -1 to 15 (default " +
 			"2).<br>" + "-1: no background; 0: constant; 1: straight slope; 2: " +
 			"gentle curve.<br>" + "Higher degrees follow uneven backgrounds but " +
-			"can absorb broad bands.", labelDegBG, textDegBG);
+			"can absorb broad bands.<br>" + "In Continuum fits, only for the ladder " +
+			"lane; the other lanes get a flat background<br>" + "at 98 % of their " +
+			"lowest intensity.", labelDegBG, textDegBG);
 		setToolTip("Limit on the background's steepness, as its average slope<br>" +
 			"in gray values per pixel, 0 to 10 (default 10). 0 forces a flat " +
-			"background.", labelPolyDerivative, textPolyDerivative);
+			"background.<br>" + "In Continuum fits, only for the ladder lane.",
+			labelPolyDerivative, textPolyDerivative);
 		setToolTip("How much a band must stand out to be detected, as a " +
 			"fraction<br>" + "of the lane's intensity range, 0.01 to 1 (default " +
 			"0.1).<br>" + "Lower it to catch faint bands; raise it if noise is " +

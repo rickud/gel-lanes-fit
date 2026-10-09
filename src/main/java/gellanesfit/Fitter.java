@@ -351,8 +351,12 @@ class Fitter {
 	 * The starting guess for a lane: the guesser's peaks, with the lane's custom
 	 * peaks replacing the closest guessed peak (in Banded mode, only when within
 	 * {@link #peakDistanceTol} pixels) or added to it.
+	 *
+	 * @param deg the background's degree, -1 for none
 	 */
-	private SortedParameters doGuess(final int lane, final ParameterGuesser pg) {
+	private SortedParameters doGuess(final int lane, final ParameterGuesser pg,
+		final int deg)
+	{
 		// Guess a set of peaks a set of peaks
 		SortedParameters guess = pg.guess();
 		List<Peak> peaks = arrayToPeaks(lane, guess.getParameters());
@@ -386,10 +390,10 @@ class Fitter {
 		}
 		allGuessList.addAll(peaks);
 		RealVector poly = new ArrayRealVector();
-		poly = poly.append(degBG).append(new ArrayRealVector(degBG + 1));
+		poly = poly.append(deg).append(new ArrayRealVector(deg + 1));
 
 		// The background starts at the lane's minimum; degree -1 has none
-		if (degBG >= 0) for (final DataSeries d : inputData) {
+		if (deg >= 0) for (final DataSeries d : inputData) {
 			if (d.getLane() == lane) poly.setEntry(1, d.getMinY());
 		}
 		
@@ -465,6 +469,13 @@ class Fitter {
 	 * Fits a lane's profile: guesses the peaks, fits them with the background, and
 	 * stores the guessed and fitted peaks and the lane's RMS. Continuum fits use
 	 * the fitted peaks of the reference (ladder) lane.
+	 * <p>
+	 * Banded fits fit a polynomial background with the peaks. Continuum fits
+	 * use a flat background at {@link #polyOffset} of the lane's minimum: a
+	 * smear's information is in the smear itself, and there's nothing to base
+	 * a background shape on. It's subtracted before fitting, so only the
+	 * fragments are fitted.
+	 * </p>
 	 */
 	private List<DataSeries> doFit(final DataSeries in) {
 		final int lane = in.getLane();
@@ -478,19 +489,25 @@ class Fitter {
 		// Tolerance as percentage of the range
 		final double tolpk = tolPK * (yvals.getMaxValue() - yvals.getMinValue());
 
-		final WeightedObservedPoints obs = observations(in);
+		final boolean continuum = fitMode == continuumMode;
+		final double flatBG = continuum ? flatBackground(yvals) : 0;
+		final int deg = continuum ? -1 : degBG;
+		// What's left to fit once a flat background is taken off
+		final double offset = continuum ? 0 : polyOffset;
+
+		final WeightedObservedPoints obs = observations(in, flatBG);
 		ParameterGuesser pg = null;
-		if (fitMode == bandMode) {
+		if (!continuum) {
 			pg = new GaussianArrayCurveFitter.ParameterGuesser(
-				obs.toList(), degBG, tolpk, polyOffset);
+				obs.toList(), deg, tolpk, offset);
 		} else {
 			pg = continuumGuesser(obs, tolpk);
 			selectedFragments.set(lane - 1, 
 				pg.getUsedFragments(new double[] {xvals.getMinValue(), xvals.getMaxValue()}));
 		}
-		final SortedParameters firstGuess = doGuess(lane, pg);
+		final SortedParameters firstGuess = doGuess(lane, pg, deg);
 		final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(fitMode,
-			degBG, polyDerivative, polyOffset, tolpk, areaDrift, sdDrift).withStartPoint(firstGuess);
+			deg, polyDerivative, offset, tolpk, areaDrift, sdDrift).withStartPoint(firstGuess);
 		cf.setStopCheck(() -> stopRequested);
 		final LeastSquaresProblem problem = cf.getProblem(obs.toList());
 
@@ -502,9 +519,11 @@ class Fitter {
 		RealVector norms = new ArrayRealVector();
 		RealVector means = new ArrayRealVector();
 		RealVector sds = new ArrayRealVector();
-		final RealVector poly = fitted.getSubVector(0, degBG + 2);
+		// The background as degree and coefficients, the flat one if Continuum
+		final RealVector poly = continuum ? new ArrayRealVector(new double[] { 0,
+			flatBG }) : fitted.getSubVector(0, deg + 2);
 
-		for (int b = degBG + 2; b < fitted.getDimension(); b += 3) {
+		for (int b = deg + 2; b < fitted.getDimension(); b += 3) {
 			// Fitted Peaks
 			final double n = fitted.getEntry(b);
 			final double m = fitted.getEntry(b + 1);
@@ -518,8 +537,9 @@ class Fitter {
 		allFittedList.addAll(fittedPeaks);
 
 		// Create new DataSeries for Plotter
-		final PolynomialFunction bg = new PolynomialFunction(degBG < 0
-			? new double[] { 0 } : poly.getSubVector(1, degBG + 1).toArray());
+		final PolynomialFunction bg = new PolynomialFunction(poly.getDimension() < 2
+			? new double[] { 0 } : poly.getSubVector(1, poly.getDimension() - 1)
+				.toArray());
 		output.add(new DataSeries("Background", lane, DataSeries.BACKGROUND, xvals,
 			bg, Plotter.bgColor));
 
@@ -580,19 +600,27 @@ class Fitter {
 	}
 
 	/** A lane's profile as points to fit */
-	private static WeightedObservedPoints observations(final DataSeries in) {
+	private static WeightedObservedPoints observations(final DataSeries in,
+		final double background)
+	{
 		final WeightedObservedPoints obs = new WeightedObservedPoints();
 		for (int o = 0; o < in.getX().getDimension(); o++)
-			obs.add(in.getX().getEntry(o), in.getY().getEntry(o));
+			obs.add(in.getX().getEntry(o), in.getY().getEntry(o) - background);
 		return obs;
+	}
+
+	/** Continuum fits' flat background: {@link #polyOffset} of the minimum */
+	private double flatBackground(final RealVector y) {
+		return polyOffset * y.getMinValue();
 	}
 
 	/** The Continuum guesser, based on the fitted ladder lane */
 	private ParameterGuesser continuumGuesser(final WeightedObservedPoints obs,
 		final double tolpk)
 	{
-		return new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(), degBG,
-			tolpk, polyOffset, new Array2DRowRealMatrix(fragmentDistribution),
+		// The flat background is already off the observations
+		return new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(), -1,
+			tolpk, 0, new Array2DRowRealMatrix(fragmentDistribution),
 			getFittedPeaks(ladderLane), ladder);
 	}
 
@@ -606,7 +634,8 @@ class Fitter {
 			if (in.getLane() != lane) continue;
 			final RealVector y = in.getY();
 			final double tolpk = tolPK * (y.getMaxValue() - y.getMinValue());
-			return continuumGuesser(observations(in), tolpk).guess().getMean()
+			return continuumGuesser(observations(in, flatBackground(y)), tolpk)
+				.guess().getMean()
 				.getDimension();
 		}
 		return 0;
@@ -630,6 +659,9 @@ class Fitter {
 			"</td></tr>";
 		s += "<tr> <td>Maximum Polynomial Derivative</td><td>" + polyDerivative +
 			"</td></tr>";
+		if (fitMode == continuumMode) s +=
+			"<tr> <td>Background</td> <td>flat, " + Math.round(polyOffset * 100) +
+			" % of each lane's minimum (the ladder lane: polynomial)</td></tr>";
 		s += "<tr> <td>Area Drift Limit</td>             <td>" + areaDrift +
 			"</td></tr>";
 		s += "<tr> <td>SD Drift Limit</td>             <td>" + sdDrift +

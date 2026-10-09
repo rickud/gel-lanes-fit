@@ -44,6 +44,9 @@ public class ContinuumFitTest {
 		context.dispose();
 	}
 
+	/** The smear lane's profile, set by fitContinuum */
+	private double[] smear;
+
 	/** Hi-Lo bands 1 kbp to 100 bp: indexes 8 to 14 */
 	private static final int[] LADDER_RANGE = { 8, 14 };
 
@@ -77,7 +80,7 @@ public class ContinuumFitTest {
 		final double[] ladderLane = TestProfiles.values(50, 450, 10, 0,
 			ladderBands);
 		// A smear centred around 300 bp
-		final double[] smear = TestProfiles.values(50, 450, 10, 0, band(120,
+		smear = TestProfiles.values(50, 450, 10, 0, band(120,
 			position(300 * 607.4 + 157.9), 40));
 
 		final Fitter fitter = BandedFitTest.bandedFitter(context, TestProfiles
@@ -123,6 +126,22 @@ public class ContinuumFitTest {
 		// Polynomial Degree -1: no background (used to throw in doGuess)
 		final Fitter fitter = fitContinuum(-1);
 		assertTrue("fragments in the lane", fitter.getFittedPeaks(2).size() > 10);
+	}
+
+	@Test
+	public void usesAFlatBackgroundBelowTheLanesMinimum() throws Exception {
+		final Fitter fitter = fitContinuum();
+		final List<DataSeries> curves = fitter.doFit(2);
+		double laneMin = Double.MAX_VALUE;
+		for (final double v : smear)
+			laneMin = Math.min(laneMin, v);
+		for (final DataSeries d : curves)
+			if (d.getType() == DataSeries.BACKGROUND) {
+				final RealVector bg = d.getY();
+				assertEquals("98 % of the minimum", 0.98 * laneMin, bg.getMinValue(),
+					1e-9);
+				assertEquals("flat", bg.getMinValue(), bg.getMaxValue(), 0);
+			}
 	}
 
 	@Test
