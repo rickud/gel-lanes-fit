@@ -690,7 +690,9 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 	
 		/**
 		 * Predicts fragment widths from a straight line fitted to the ladder bands'
-		 * widths against their positions.
+		 * widths against their positions. Beyond the ladder, the width stays at
+		 * the line's value at the nearest band: extended further, the line can
+		 * reach zero or below.
 		 * @param y ladder band positions, as left reversed by
 		 *          {@link #interpolateDisplacement}
 		 * @param sd ladder band standard deviations, top band first
@@ -707,14 +709,20 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			// First-degree polynomial fitter (line)
 			final PolynomialCurveFitter linfit = PolynomialCurveFitter.create(1);
 			final double[] coeffs = linfit.fit(obs.toList());
-			final UnivariateFunction f = new PolynomialFunction(coeffs);
+			final UnivariateFunction line = new PolynomialFunction(coeffs);
+			final double first = FastMath.min(y[0], y[y.length - 1]);
+			final double last = FastMath.max(y[0], y[y.length - 1]);
+			final UnivariateFunction f = x -> line.value(FastMath.max(first, FastMath
+				.min(last, x)));
 			final RealVector sdi = new ArrayRealVector(yi).map(f);
 			return sdi.toArray();
 		}
 
 		/**
-		 * Indexes of the distribution's fragments predicted to run within the given
-		 * range of positions.
+		 * Indexes of the distribution's fragments in the guess for a lane with the
+		 * given range of positions: those predicted to run within it, or within
+		 * {@link #CONTINUUM_MARGIN} of its length beyond either end, as in
+		 * {@link #guessFragments}. The fitted peaks are in the same order.
 		 */
 		public List<Integer> getUsedFragments(double[] xrange) {
 			final double[] meanLadder = new double[ladderPeaks.size()];
@@ -723,7 +731,7 @@ class GaussianArrayCurveFitter extends AbstractCurveFitter {
 			}
 			List<Integer> out = new ArrayList<>(); 
 			final double[] means = interpolateDisplacement(meanLadder, ladderMW, distMatrix.getColumnVector(2));
-			double margin = 0.0;
+			final double margin = (xrange[1] - xrange[0]) * CONTINUUM_MARGIN;
 			for (int i = 0; i < means.length; i++) {
 				if (means[i] > xrange[0] - margin && means[i] < xrange[1] + margin) out.add(i);
 			}

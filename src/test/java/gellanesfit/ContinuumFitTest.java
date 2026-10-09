@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealVector;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -142,6 +143,88 @@ public class ContinuumFitTest {
 					1e-9);
 				assertEquals("flat", bg.getMinValue(), bg.getMaxValue(), 0);
 			}
+	}
+
+	@Test
+	public void uniformCoversTheLaneFromBottomToTop() throws Exception {
+		final Fitter fitter = fitContinuum();
+		// The synthetic ladder: 1 kbp at x = 100, 250 px per decade of MW
+		final double[] range = fitter.sizeRange(new ArrayRealVector(new double[] {
+			50, 450 }));
+		assertEquals("top of the lane", basePairsAt(50), range[1], 0.01 *
+			range[1]);
+		assertEquals("bottom of the lane", basePairsAt(450), range[0], 0.01 *
+			range[0]);
+
+		fitter.setUniformDistribution(25, 0);
+		fitter.resetFit(2); // as before every fit in the plugin
+		fitter.doFit(2);
+		final List<Peak> guess = fitter.getGuessPeaks(2);
+		assertEquals(25, guess.size());
+		assertEquals("first peak at the top", 50, guess.get(0).getMean(), 1);
+		assertEquals("last peak at the bottom", 450, guess.get(24).getMean(), 1);
+
+		fitter.setUniformDistribution(0, 100);
+		assertEquals("at most 100 bp apart", FragmentDistribution.uniformCount(
+			range[0], range[1], 100), fitter.fragmentsToFit(2));
+	}
+
+	@Test
+	public void widthsStayPositiveBeyondTheLadder() throws Exception {
+		// Bands widening steeply down the gel: the line through their widths
+		// is below zero at the top of the lane
+		final Ladder ladder = Ladder.create(Ladder.HILO);
+		ladder.setRange(LADDER_RANGE);
+		final RealVector mw = ladder.getMolecularWeights();
+		final double[][] ladderBands = new double[mw.getDimension()][];
+		for (int i = 0; i < ladderBands.length; i++) {
+			final double x = position(mw.getEntry(i));
+			ladderBands[i] = band(100, x, 1.5 + 0.025 * (x - 100));
+		}
+		final Fitter fitter = BandedFitTest.bandedFitter(context, TestProfiles
+			.profile(1, 50, TestProfiles.values(50, 450, 10, 0, ladderBands)),
+			TestProfiles.profile(2, 50, TestProfiles.values(50, 450, 10, 0, band(
+				120, 250, 60))));
+		fitter.setReferenceLane(1);
+		fitter.doFit(1);
+		assertEquals(mw.getDimension(), fitter.getFittedPeaks(1).size());
+		fitter.setLadder(mw);
+		fitter.setFitMode(Fitter.continuumMode);
+		fitter.setUniformDistribution(25, 0);
+		fitter.doFit(2); // used to throw: a negative width at the top
+		for (final Peak p : fitter.getGuessPeaks(2))
+			assertTrue("width at " + p.getMean(), p.getSigma() > 1);
+	}
+
+	/** The size of a fragment at a position of the synthetic ladder, in bp */
+	private static double basePairsAt(final double x) {
+		return Ladder.basePairs(Math.pow(10, Math.log10(1000 * 607.4 + 157.9) -
+			(x - 100) / 250));
+	}
+
+	@Test
+	public void resultsLabelEachFragmentWithItsOwnLength() throws Exception {
+		// Fragments beyond the lane's ends are fitted too; the rows must still
+		// pair each fitted peak with its own length
+		final Fitter fitter = fitContinuum();
+		fitter.setUniformDistribution(25, 0);
+		fitter.resetFit(2); // as before every fit in the plugin
+		fitter.doFit(2);
+		final String dir = folder.getRoot().getAbsolutePath() + File.separator;
+		fitter.updateResultsTable(dir);
+		final List<String> rows = Files.readAllLines(new File(dir +
+			"Fit of test.xls").toPath());
+		int checked = 0;
+		for (final String row : rows) {
+			final String[] cols = row.split("\t");
+			if (cols.length < 11 || !cols[10].trim().matches("[0-9.]+")) continue;
+			final double guessPosition = Double.parseDouble(cols[3]);
+			final double bp = Double.parseDouble(cols[10]);
+			assertEquals("length of the fragment guessed at " + guessPosition,
+				basePairsAt(guessPosition), bp, 0.02 * bp + 1);
+			checked++;
+		}
+		assertTrue("rows checked", checked > 10);
 	}
 
 	@Test

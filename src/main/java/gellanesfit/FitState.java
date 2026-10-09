@@ -27,7 +27,13 @@ class FitState implements Serializable {
 	double polyDerivative, tolPK, areaDrift, sdDrift;
 	boolean continuum;
 	int dist; // index of the fragment distribution
-	int dlo, dhi, every;
+	/**
+	 * Uniform distribution: set by the spacing {@code every} in bp, or else by
+	 * the number of lengths {@code uniformCount} (0 in files saved before it
+	 * was added: use the default)
+	 */
+	boolean uniformBySpacing;
+	int every, uniformCount;
 	List<Peak> customPeaks = new ArrayList<>();
 	boolean fitDone;
 	/**

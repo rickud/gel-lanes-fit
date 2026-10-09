@@ -16,8 +16,10 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CancellationException;
 
 import org.apache.commons.lang3.time.StopWatch;
@@ -88,6 +90,14 @@ class Fitter {
 	private int ladderLane = MainDialog.noLadderLane;
 	private double[] ladder; // MW, Dalton
 	private double[][] fragmentDistribution; // MW, Dalton; relative frequency
+	/**
+	 * Uniform distribution: its number of lengths, or else (when 0) the
+	 * largest spacing between them in bp; both 0 when it isn't Uniform
+	 */
+	private int uniformCount;
+	private double uniformSpacing;
+	/** The distribution each Continuum lane was fitted with */
+	private final Map<Integer, double[][]> laneDistributions = new HashMap<>();
 	private List<List<Integer>> selectedFragments;
 	private final String title; // for the datafile, main image's title
 	private List<DataSeries> inputData;
@@ -225,12 +235,11 @@ class Fitter {
 						rt.addValue(headers[11], " - ");
 					}
 					else {
-						final double freq = fragmentDistribution[selectedFragments.get(
-							lane - 1).get(p)][0];
-						final double bp = fragmentDistribution[selectedFragments.get(lane -
-							1).get(p)][1];
-						final double mw = fragmentDistribution[selectedFragments.get(lane -
-							1).get(p)][2];
+						final double[] row = laneDistributions.get(lane)[selectedFragments
+							.get(lane - 1).get(p)];
+						final double freq = row[FragmentDistribution.FREQUENCY];
+						final double bp = row[FragmentDistribution.LENGTH];
+						final double mw = row[FragmentDistribution.MW];
 						rt.addValue(headers[9], String.format("%1$.3f", freq));
 						rt.addValue(headers[10], String.format("%1$.0f", bp));
 						rt.addValue(headers[11], String.format("%1$.3f", mw));
@@ -252,8 +261,8 @@ class Fitter {
 	{
 		RealVector bpSubarray = new ArrayRealVector();
 		RealVector wSubarray  = new ArrayRealVector();
-		final RealMatrix distMatrix = new Array2DRowRealMatrix(
-			fragmentDistribution);
+		final RealMatrix distMatrix = new Array2DRowRealMatrix(laneDistributions
+			.get(lane));
 		final RealVector bpArray = distMatrix.getColumnVector(1);
 		final RealVector wArray  = distMatrix.getColumnVector(2);
 
@@ -501,7 +510,9 @@ class Fitter {
 			pg = new GaussianArrayCurveFitter.ParameterGuesser(
 				obs.toList(), deg, tolpk, offset);
 		} else {
-			pg = continuumGuesser(obs, tolpk);
+			final double[][] dist = distribution(xvals);
+			laneDistributions.put(lane, dist);
+			pg = continuumGuesser(obs, tolpk, dist);
 			selectedFragments.set(lane - 1, 
 				pg.getUsedFragments(new double[] {xvals.getMinValue(), xvals.getMaxValue()}));
 		}
@@ -616,12 +627,79 @@ class Fitter {
 
 	/** The Continuum guesser, based on the fitted ladder lane */
 	private ParameterGuesser continuumGuesser(final WeightedObservedPoints obs,
-		final double tolpk)
+		final double tolpk, final double[][] dist)
 	{
 		// The flat background is already off the observations
 		return new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(), -1,
-			tolpk, 0, new Array2DRowRealMatrix(fragmentDistribution),
-			getFittedPeaks(ladderLane), ladder);
+			tolpk, 0, new Array2DRowRealMatrix(dist), getFittedPeaks(ladderLane),
+			ladder);
+	}
+
+	/**
+	 * The fragment distribution for a lane with these positions: the chosen
+	 * one, or for Uniform, lengths covering the lane from its bottom to its top
+	 * (see {@link #sizeRange}).
+	 */
+	private double[][] distribution(final RealVector x) {
+		if (uniformCount == 0 && uniformSpacing == 0) return fragmentDistribution;
+		final double[] range = sizeRange(x);
+		final int count = uniformCount > 0 ? uniformCount : FragmentDistribution
+			.uniformCount(range[0], range[1], uniformSpacing);
+		return FragmentDistribution.uniform(range[0], range[1], count);
+	}
+
+	/**
+	 * The fragment lengths at the bottom and the top of a lane with these
+	 * positions, in bp, from the fitted ladder: its log molecular weight is
+	 * interpolated linearly between the ladder bands and extrapolated beyond
+	 * them, as the Continuum guess does to place fragments. At least 1 bp.
+	 */
+	double[] sizeRange(final RealVector x) {
+		final List<Peak> bands = getFittedPeaks(ladderLane);
+		final int n = Math.min(bands.size(), ladder.length);
+		if (n < 2) throw new IllegalStateException(
+			"The ladder lane needs at least 2 fitted bands");
+		final double[] pos = new double[n];
+		final double[] logMW = new double[n];
+		for (int i = 0; i < n; i++) { // top band first
+			pos[i] = bands.get(i).getMean();
+			logMW[i] = Math.log10(ladder[i]);
+		}
+		final double top = Ladder.basePairs(Math.pow(10, interpolate(pos, logMW, x
+			.getMinValue())));
+		final double bottom = Ladder.basePairs(Math.pow(10, interpolate(pos,
+			logMW, x.getMaxValue())));
+		return new double[] { Math.max(1, Math.min(bottom, top)), Math.max(1, Math
+			.max(bottom, top)) };
+	}
+
+	/**
+	 * A Uniform distribution set by spacing: the fewest and the most lengths a
+	 * sample lane gets, or null until the ladder lane is fitted.
+	 */
+	int[] uniformCounts(final double spacing) {
+		if (ladder == null || getFittedPeaks(ladderLane).size() < 2) return null;
+		int fewest = Integer.MAX_VALUE;
+		int most = 0;
+		for (final DataSeries d : inputData) {
+			if (d.getLane() == ladderLane) continue;
+			final double[] range = sizeRange(d.getX());
+			final int n = FragmentDistribution.uniformCount(range[0], range[1],
+				spacing);
+			fewest = Math.min(fewest, n);
+			most = Math.max(most, n);
+		}
+		return most == 0 ? null : new int[] { fewest, most };
+	}
+
+	/** Linear interpolation, and extrapolation from the end segments */
+	private static double interpolate(final double[] xs, final double[] ys,
+		final double x)
+	{
+		int i = 0;
+		while (i < xs.length - 2 && x > xs[i + 1])
+			i++;
+		return ys[i] + (ys[i + 1] - ys[i]) * (x - xs[i]) / (xs[i + 1] - xs[i]);
 	}
 
 	/**
@@ -634,8 +712,8 @@ class Fitter {
 			if (in.getLane() != lane) continue;
 			final RealVector y = in.getY();
 			final double tolpk = tolPK * (y.getMaxValue() - y.getMinValue());
-			return continuumGuesser(observations(in, flatBackground(y)), tolpk)
-				.guess().getMean()
+			return continuumGuesser(observations(in, flatBackground(y)), tolpk,
+				distribution(in.getX())).guess().getMean()
 				.getDimension();
 		}
 		return 0;
@@ -859,6 +937,19 @@ class Fitter {
 	 */
 	public void setFragmentDistribution(final double[][] fragmentDistribution) {
 		this.fragmentDistribution = fragmentDistribution;
+		uniformCount = 0;
+		uniformSpacing = 0;
+	}
+
+	/**
+	 * A Uniform distribution: in each lane, lengths evenly spaced in bp from the
+	 * lane's bottom to its top, by their number or, when that's 0, by the
+	 * largest spacing between them in bp.
+	 */
+	public void setUniformDistribution(final int count, final double spacing) {
+		fragmentDistribution = null;
+		uniformCount = count;
+		uniformSpacing = count > 0 ? 0 : spacing;
 	}
 
 	/**

@@ -12,6 +12,7 @@ package gellanesfit;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Checkbox;
+import java.awt.Choice;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Desktop;
@@ -142,8 +143,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private static final String TOLPK = "tolPK";
 	private static final String AREADRIFT = "areaDrift";
 	private static final String SDDRIFT = "sdSDrift";
-	private static final String DLO = "dlo"; // Uniform distribution range
-	private static final String DHI = "dhi";
+	// Uniform distribution: by spacing (EVERY, bp) or number of lengths
+	private static final String UNIFORMBYSPACING = "uniformBySpacing";
+	private static final String UNIFORMCOUNT = "uniformCount";
 	private static final String EVERY = "every";
 	
 	private static final String NLANES = "nLanes";
@@ -215,7 +217,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private FitState savedState; // Settings of the last session, if any
 	private boolean restoring = true; // Do not save while restoring the state
 
-	private int iw, ih, lw, lh, lsp, lhoff, lvoff, dlo, dhi, every;
+	private int iw, ih, lw, lh, lsp, lhoff, lvoff, every, uniformCount;
+	private boolean uniformBySpacing;
 	private int nLanes;
 	private int degBG; // Order of Background Polynomial
 	private double polyDerivative;
@@ -362,9 +365,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			lsp = prefs.getInt(LSP, Math.round((iw - lw * nLanes) / (nLanes + 1)));
 			lhoff = prefs.getInt(LHOFF, lsp / 2);
 			lvoff = prefs.getInt(LVOFF, (ih - lh) / 2);
-			dlo = prefs.getInt(DLO, 100);
-			dhi = prefs.getInt(DHI, 500);
-			every = prefs.getInt(EVERY, 1);
+			uniformBySpacing = prefs.getBoolean(UNIFORMBYSPACING, false);
+			uniformCount = prefs.getInt(UNIFORMCOUNT,
+				FragmentDistribution.UNIFORM_COUNT);
+			every = prefs.getInt(EVERY, 100);
 		}
 		else {
 			auto = true;
@@ -376,9 +380,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			lsp = Math.round((iw - lw * nLanes) / (nLanes + 1));
 			lhoff = lsp / 2;
 			lvoff = (ih - lh) / 2;
-			dlo = 100;
-			dhi = 500;
-			every = 1;
+			uniformBySpacing = false;
+			uniformCount = FragmentDistribution.UNIFORM_COUNT;
+			every = 100;
 			
 			// Create/Update prefs node keys
 			prefs.putBoolean(AUTO, auto);
@@ -390,8 +394,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			prefs.putInt(LSP, lsp);
 			prefs.putInt(LHOFF, lhoff);
 			prefs.putInt(LVOFF, lvoff);
-			prefs.putInt(DLO, dlo);
-			prefs.putInt(DHI, dhi);
+			prefs.putBoolean(UNIFORMBYSPACING, uniformBySpacing);
+			prefs.putInt(UNIFORMCOUNT, uniformCount);
 			prefs.putInt(EVERY, every);
 		}
 	}
@@ -414,9 +418,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			tolPK = savedState.tolPK;
 			areaDrift = savedState.areaDrift;
 			sdDrift = savedState.sdDrift;
-			dlo = savedState.dlo;
-			dhi = savedState.dhi;
-			every = savedState.every;
+			uniformBySpacing = savedState.uniformBySpacing;
+			if (savedState.uniformCount > 0) {
+				uniformCount = savedState.uniformCount;
+				every = savedState.every;
+			}
 		}
 	}
 
@@ -1410,8 +1416,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		st.sdDrift = sdDrift;
 		st.continuum = buttonContinuum.isSelected();
 		st.dist = cmbBoxDist.getSelectedIndex();
-		st.dlo = dlo;
-		st.dhi = dhi;
+		st.uniformBySpacing = uniformBySpacing;
+		st.uniformCount = uniformCount;
 		st.every = every;
 		st.customPeaks = allCustomPeaks();
 		st.fitDone = fitDone;
@@ -1767,7 +1773,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			" fragment lengths per lane,\nand could take roughly " + time +
 			". It can be stopped with the Stop\nbutton.\n \n" +
 			"Fewer lengths fit much faster: for a Uniform distribution, use\n" +
-			"a coarser Every step or a narrower range.");
+			"fewer peaks or a wider spacing.");
 		gd.setOKLabel("Fit Anyway");
 		gd.showDialog();
 		return gd.wasOKed();
@@ -2147,14 +2153,29 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
-	/** The Uniform dialog's note on its number of fragment lengths */
-	private static String uniformCountText(final int lower, final int upper,
-		final int every)
-	{
-		if (every <= 0 || upper < lower) return "";
-		final int n = FragmentDistribution.uniformCount(lower, upper, every);
-		return n + " fragment lengths" + (n > SLOW_FRAGMENTS
-			? ": slow to fit, consider a coarser step" : "");
+	/** Ways to set a Uniform distribution, in its dialog */
+	private static final String[] UNIFORM_SET_BY = { "Number of peaks",
+		"Spacing" };
+
+	/**
+	 * The Uniform dialog's note on the number of fragment lengths per lane
+	 *
+	 * @param value the number of peaks, or the spacing in bp
+	 */
+	private String uniformCountText(final boolean bySpacing, final int value) {
+		if (value <= 0) return "";
+		String n;
+		int most = value;
+		if (bySpacing) {
+			final int[] counts = fitter.uniformCounts(value);
+			if (counts == null) return "The number of peaks depends on each " +
+				"lane's size range, known after a fit.";
+			most = counts[1];
+			n = counts[0] == counts[1] ? "" + most : counts[0] + " to " + most;
+		}
+		else n = "" + Math.max(2, value);
+		return n + " peaks per lane" + (most > SLOW_FRAGMENTS
+			? ": slow to fit, consider fewer" : "");
 	}
 
 	/** Sets the fitter's fragment distribution from the selection */
@@ -2162,42 +2183,51 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		if (cmbBoxDist.getSelectedIndex() == 0) return;
 		if (cmbBoxDist.getSelectedItem().equals("Uniform")) {
 			if (ask) {
-				final String title = "DISTRIBUTION RANGE";
-				final String message =
-					"Enter the basepair-length range for the distribution.";
-				final GenericDialog gd = new GenericDialog(title);
-				gd.addMessage(message);
-				gd.addNumericField("Lower", dlo, 0, 5, "bp");
-				gd.addNumericField("Upper", dhi, 0, 5, "bp");
-				gd.addNumericField("Every", every, 0, 5, "bp");
+				final GenericDialog gd = new GenericDialog("UNIFORM DISTRIBUTION");
+				gd.addMessage("Fragment lengths evenly spaced in bp, from the bottom\n" +
+					"to the top of each lane, with sizes from the ladder.");
+				gd.addChoice("Set by", UNIFORM_SET_BY,
+					UNIFORM_SET_BY[uniformBySpacing ? 1 : 0]);
+				gd.addNumericField("Number of peaks", uniformCount, 0, 5, "");
+				gd.addNumericField("Spacing", every, 0, 5, "bp");
 				// Padded: the label keeps the width it's laid out with
-				gd.addMessage(String.format("%-60s", uniformCountText(dlo, dhi,
-					every)));
+				gd.addMessage(String.format("%-70s", uniformCountText(
+					uniformBySpacing, uniformBySpacing ? every : uniformCount)));
 				final Label count = (Label) gd.getMessage();
 				@SuppressWarnings("unchecked")
+				final Vector<Choice> choices = gd.getChoices();
+				@SuppressWarnings("unchecked")
 				final Vector<TextField> fields = gd.getNumericFields();
-				gd.addDialogListener((dialog, event) -> {
+				final Runnable update = () -> {
+					final boolean bySpacing = choices.get(0).getSelectedIndex() == 1;
+					fields.get(0).setEnabled(!bySpacing);
+					fields.get(1).setEnabled(bySpacing);
 					try {
-						count.setText(uniformCountText(Integer.parseInt(fields.get(0)
-							.getText().trim()), Integer.parseInt(fields.get(1).getText()
-								.trim()), Integer.parseInt(fields.get(2).getText().trim())));
+						count.setText(uniformCountText(bySpacing, Integer.parseInt(
+							fields.get(bySpacing ? 1 : 0).getText().trim())));
 					}
 					catch (final NumberFormatException e) {
 						count.setText("");
 					}
+				};
+				update.run();
+				gd.addDialogListener((dialog, event) -> {
+					update.run();
 					return true;
 				});
 				gd.showDialog();
 				if (!gd.wasOKed()) return;
-				dlo = (int) gd.getNextNumber();
-				dhi = (int) gd.getNextNumber();
-				every = (int) gd.getNextNumber();
-				prefs.putInt(DLO, dlo);
-				prefs.putInt(DHI, dhi);
+				uniformBySpacing = gd.getNextChoiceIndex() == 1;
+				final int n = (int) gd.getNextNumber();
+				final int spacing = (int) gd.getNextNumber();
+				if (n >= 2) uniformCount = n;
+				if (spacing >= 1) every = spacing;
+				prefs.putBoolean(UNIFORMBYSPACING, uniformBySpacing);
+				prefs.putInt(UNIFORMCOUNT, uniformCount);
 				prefs.putInt(EVERY, every);
 			}
-			fitter.setFragmentDistribution(FragmentDistribution.uniform(dlo, dhi,
-				every));
+			fitter.setUniformDistribution(uniformBySpacing ? 0 : uniformCount,
+				every);
 		}
 		else {
 			final String filename = FragmentDistribution.FOLDER + cmbBoxDist

@@ -88,29 +88,32 @@ final class FragmentDistribution {
 		return out;
 	}
 
-	/** How many lengths {@link #uniform} gives for these values */
-	static int uniformCount(final int lower, final int upper, final int every) {
-		return (upper - lower) / every + 1;
+	/** The default number of lengths of a Uniform distribution */
+	static final int UNIFORM_COUNT = 30;
+
+	/**
+	 * How many lengths a Uniform distribution over this range needs so that
+	 * they're at most {@code spacing} bp apart; at least 2.
+	 */
+	static int uniformCount(final double lower, final double upper,
+		final double spacing)
+	{
+		return Math.max(2, (int) Math.ceil((upper - lower) / spacing - 1e-9) + 1);
 	}
 
 	/**
-	 * A uniform distribution: every length from {@code upper} down to
-	 * {@code lower}, in steps of {@code every} bp, all equally frequent.
-	 * <p>
-	 * Known issue, kept for now so that results don't change: the frequency is
-	 * 1 / (upper - lower + 1), which is right only for a 1 bp step, so the
-	 * frequencies don't add up to 1 otherwise. Fits aren't affected, since the
-	 * guess rescales them; the Frequency column of the results is.
-	 * </p>
+	 * A uniform distribution: {@code count} lengths evenly spaced from
+	 * {@code upper} down to {@code lower} bp, both included, all equally
+	 * frequent.
 	 */
-	static double[][] uniform(final int lower, final int upper,
-		final int every)
+	static double[][] uniform(final double lower, final double upper,
+		final int count)
 	{
-		final double[][] dist = new double[uniformCount(lower, upper, every)][3];
-		final double f = 1.0 / (upper - lower + 1);
-		for (int i = 0; i < dist.length; i++) {
-			dist[i][FREQUENCY] = f;
-			dist[i][LENGTH] = upper - i * every;
+		final int n = Math.max(2, count);
+		final double[][] dist = new double[n][3];
+		for (int i = 0; i < n; i++) {
+			dist[i][FREQUENCY] = 1.0 / n;
+			dist[i][LENGTH] = upper - i * (upper - lower) / (n - 1);
 			dist[i][MW] = Ladder.molecularWeight(dist[i][LENGTH]);
 		}
 		return dist;
