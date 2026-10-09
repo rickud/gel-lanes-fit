@@ -15,6 +15,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -95,6 +96,8 @@ class Fitter {
 	 * largest spacing between them in bp; both 0 when it isn't Uniform
 	 */
 	private int uniformCount;
+	/** Continuum fits: strength of the smoothness penalty on the areas */
+	private double smoothness = 10;
 	private double uniformSpacing;
 	/** The distribution each Continuum lane was fitted with */
 	private final Map<Integer, double[][]> laneDistributions = new HashMap<>();
@@ -517,14 +520,29 @@ class Fitter {
 				pg.getUsedFragments(new double[] {xvals.getMinValue(), xvals.getMaxValue()}));
 		}
 		final SortedParameters firstGuess = doGuess(lane, pg, deg);
-		final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(fitMode,
-			deg, polyDerivative, offset, tolpk, areaDrift, sdDrift).withStartPoint(firstGuess);
-		cf.setStopCheck(() -> stopRequested);
-		final LeastSquaresProblem problem = cf.getProblem(obs.toList());
-
-		final LeastSquaresOptimizer.Optimum optimum = cf.getOptimizer().optimize(problem);
-
-		final RealVector fitted = new ArrayRealVector(optimum.getPoint());
+		final RealVector fitted;
+		final double fitRms;
+		if (continuum) {
+			final ContinuumFit.Result r = fitSmear(lane, xvals, yvals.mapSubtract(
+				flatBG), firstGuess);
+			RealVector f = new ArrayRealVector(new double[] { -1 });
+			for (int i = 0; i < r.areas.length; i++)
+				f = f.append(new ArrayRealVector(new double[] { r.height(i), r.means[i],
+					r.sds[i] }));
+			fitted = f;
+			fitRms = r.rms;
+		}
+		else {
+			final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(
+				fitMode, deg, polyDerivative, offset, tolpk, areaDrift, sdDrift)
+				.withStartPoint(firstGuess);
+			cf.setStopCheck(() -> stopRequested);
+			final LeastSquaresProblem problem = cf.getProblem(obs.toList());
+			final LeastSquaresOptimizer.Optimum optimum = cf.getOptimizer().optimize(
+				problem);
+			fitted = new ArrayRealVector(optimum.getPoint());
+			fitRms = optimum.getRMS();
+		}
 
 		// After fitting
 		RealVector norms = new ArrayRealVector();
@@ -576,7 +594,7 @@ class Fitter {
 		output.add(fit);
 
 		// Print RMS to console
-		rms.setEntry(lane - 1, optimum.getRMS()/
+		rms.setEntry(lane - 1, fitRms /
 			(inputData.get(lane - 1).getMaxY() - inputData.get(lane - 1).getMinY()));
 		final String outStr = String.format("Lane " + lane + ", RMS: %1$.4f; ", rms
 			.getEntry(lane - 1));
@@ -623,6 +641,37 @@ class Fitter {
 	/** Continuum fits' flat background: {@link #polyOffset} of the minimum */
 	private double flatBackground(final RealVector y) {
 		return polyOffset * y.getMinValue();
+	}
+
+	/**
+	 * Continuum fit of a lane (see {@link ContinuumFit}): the guess gives the
+	 * peaks' positions and widths, and the distribution their expected areas,
+	 * as frequency times length, since a fragment's signal grows with its mass.
+	 *
+	 * @param y the profile, background off
+	 */
+	private ContinuumFit.Result fitSmear(final int lane, final RealVector x,
+		final RealVector y, final SortedParameters guess)
+	{
+		final double[] means = guess.getMean().toArray();
+		final double[] sds = guess.getSD().toArray();
+		final double[] expected = new double[means.length];
+		Arrays.fill(expected, 1);
+		final List<Integer> used = selectedFragments.get(lane - 1);
+		final double[][] dist = laneDistributions.get(lane);
+		if (dist != null && used.size() == means.length) for (int i =
+			0; i < means.length; i++)
+		{
+			final double[] row = dist[used.get(i)];
+			expected[i] = row[FragmentDistribution.FREQUENCY] *
+				row[FragmentDistribution.LENGTH];
+		}
+		final ContinuumFit.Result r = new ContinuumFit(x.toArray(), y.toArray(),
+			means, sds, expected, sdDrift, smoothness, () -> stopRequested).fit();
+		log.info(String.format("[LANE %d] Continuum fit: %d iterations, offset " +
+			"%.1f px, stretch %.3f, width x %.2f", lane, r.iterations, r.offset,
+			r.stretch, r.widthScale));
+		return r;
 	}
 
 	/** The Continuum guesser, based on the fitted ladder lane */
@@ -946,6 +995,10 @@ class Fitter {
 	 * lane's bottom to its top, by their number or, when that's 0, by the
 	 * largest spacing between them in bp.
 	 */
+	public void setSmoothness(final double smoothness) {
+		this.smoothness = smoothness;
+	}
+
 	public void setUniformDistribution(final int count, final double spacing) {
 		fragmentDistribution = null;
 		uniformCount = count;
