@@ -53,6 +53,7 @@ public class SavedStateTest {
 			st.uniformCount);
 		assertEquals(false, st.uniformBySpacing);
 		assertEquals("saved before Log Spaced existed", 0, st.logCount);
+		assertNull("saved before Smoothness existed", st.smoothness);
 		assertTrue(st.fitDone);
 		assertTrue(st.showBands);
 		assertEquals("saved before fitRunning existed", false, st.fitRunning);
@@ -85,6 +86,7 @@ public class SavedStateTest {
 		st.uniformBySpacing = true;
 		st.uniformCount = 40;
 		st.logCount = 120;
+		st.smoothness = 25.0;
 		final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 		new SavedStateFile(Arrays.asList(new Rectangle(1, 2, 3, 4)), st, null)
 			.write(bytes);
@@ -99,6 +101,7 @@ public class SavedStateTest {
 		assertTrue(copy.state.uniformBySpacing);
 		assertEquals(40, copy.state.uniformCount);
 		assertEquals(120, copy.state.logCount);
+		assertEquals(25, copy.state.smoothness, 0);
 		assertNull(copy.ladder);
 	}
 }

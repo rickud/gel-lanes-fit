@@ -141,7 +141,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private static final String DEGBG = "degBG";
 	private static final String POLYDERIVATIVE = "polyDerivative";
 	private static final String TOLPK = "tolPK";
-	private static final String AREADRIFT = "areaDrift";
+	private static final String SMOOTHNESS = "smoothness";
+	/** Continuum fits' smoothness: default and largest */
+	private static final double DEFAULT_SMOOTHNESS = 10;
+	private static final double MAX_SMOOTHNESS = 1000;
 	private static final String SDDRIFT = "sdSDrift";
 	// Uniform distribution: by spacing (EVERY, bp) or number of lengths
 	private static final String UNIFORMBYSPACING = "uniformBySpacing";
@@ -225,7 +228,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private int degBG; // Order of Background Polynomial
 	private double polyDerivative;
 	private double tolPK; // Peak detection tolerance as % of range
-	private double areaDrift;
+	private double smoothness;
 	private double sdDrift;
 
 	private JPanel buttonPanelAutoManual;
@@ -253,13 +256,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private JLabel labelDegBG;
 	private JLabel labelPolyDerivative;
 	private JLabel labelTolPK;
-	private JLabel labelAreaDrift;
+	private JLabel labelSmoothness;
 	private JLabel labelSDDrift;
 
 	private JSpinner textDegBG;
 	private JSpinner textPolyDerivative;
 	private JSpinner textTolPK;
-	private JSpinner textAreaDrift;
+	private JSpinner textSmoothness;
 	private JSpinner textSDDrift;
 
 	private JPanel buttonPanelFitType;
@@ -354,7 +357,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		degBG = prefs.getInt(DEGBG, 2);
 		polyDerivative = prefs.getDouble(POLYDERIVATIVE, 10.0);
 		tolPK = prefs.getDouble(TOLPK, 0.1);
-		areaDrift = prefs.getDouble(AREADRIFT, 0.1);
+		smoothness = prefs.getDouble(SMOOTHNESS, DEFAULT_SMOOTHNESS);
 		sdDrift = prefs.getDouble(SDDRIFT, 1.0);
 
 		if (oldImpTitle.equals(impTitle)) {
@@ -419,7 +422,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			degBG = savedState.degBG;
 			polyDerivative = savedState.polyDerivative;
 			tolPK = savedState.tolPK;
-			areaDrift = savedState.areaDrift;
+			// Files saved before Smoothness existed have none: keep the default
+			if (savedState.smoothness != null) smoothness = savedState.smoothness;
 			sdDrift = savedState.sdDrift;
 			uniformBySpacing = savedState.uniformBySpacing;
 			if (savedState.logCount > 0) logCount = savedState.logCount;
@@ -566,7 +570,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		labelPolyDerivative = new JLabel(
 			"Max Polynomial Derivative (grayvalue/px)");
 		labelTolPK = new JLabel("Peak Tolerance (fraction)");
-		labelAreaDrift = new JLabel("Area Drift ");
+		labelSmoothness = new JLabel("Smoothness ");
 		labelSDDrift = new JLabel("SD Drift ");
 
 		int minDegBG = -1; int maxDegBG = 15;
@@ -598,15 +602,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		((JSpinner.DefaultEditor) textTolPK.getEditor()).getTextField().setColumns(
 			SPINNER_COLUMNS);
 
-		double minAreaDrift = 0.001; double maxAreaDrift = 1.00;
-		areaDrift = areaDrift < minAreaDrift ? minAreaDrift : areaDrift;
-		areaDrift = areaDrift > maxAreaDrift ? maxAreaDrift : areaDrift;
-		textAreaDrift = new JSpinner(
-				new SpinnerNumberModel(areaDrift, minAreaDrift, maxAreaDrift, 0.001));
-		textAreaDrift.setEditor(new JSpinner.NumberEditor(textAreaDrift, "###.###"));
-		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(textAreaDrift
+		smoothness = Math.max(0, Math.min(MAX_SMOOTHNESS, smoothness));
+		textSmoothness = new JSpinner(new SpinnerNumberModel(smoothness, 0,
+			MAX_SMOOTHNESS, 1));
+		textSmoothness.setEditor(new JSpinner.NumberEditor(textSmoothness, "###0.##"));
+		textSmoothness.setBorder(BorderFactory.createCompoundBorder(textSmoothness
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
-		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField()
+		((JSpinner.DefaultEditor) textSmoothness.getEditor()).getTextField()
 			.setColumns(SPINNER_COLUMNS);
 		textSDDrift = new JSpinner(new SpinnerNumberModel(sdDrift, 1.0, 5.0,
 			0.1));
@@ -643,7 +645,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		settingsPanel.add(labelTolPK, c2);
 		c2.gridx = 0; c2.gridy = 3;
 		c2.weightx = 0.1;
-		settingsPanel.add(labelAreaDrift, c2);
+		settingsPanel.add(labelSmoothness, c2);
 		c2.gridx = 0; c2.gridy = 4;
 		c2.weightx = 0.1;
 		settingsPanel.add(labelSDDrift, c2);
@@ -660,7 +662,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		settingsPanel.add(textTolPK, c2);
 		c2.gridx = 1; c2.gridy = 3;
 		c2.weightx = 0.0;
-		settingsPanel.add(textAreaDrift, c2);
+		settingsPanel.add(textSmoothness, c2);
 		c2.gridx = 1; c2.gridy = 4;
 		c2.weightx = 0.0;
 		settingsPanel.add(textSDDrift, c2);
@@ -742,14 +744,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			"0.1).<br>" + "Lower it to catch faint bands; raise it if noise is " +
 			"detected as bands.<br>" + "Used in Banded fits, and for the ladder " +
 			"lane in both fit types.", labelTolPK, textTolPK);
-		setToolTip("Continuum only. How far the fragments' fitted areas may<br>" +
-			"depart from the distribution's proportions, 0.001 to 1 (default " +
-			"0.1).<br>" + "Small values keep the distribution's shape; larger " +
-			"ones follow the data.", labelAreaDrift, textAreaDrift);
-		setToolTip("Continuum only. How far each fragment's width may depart<br>" +
-			"from the width expected from the ladder, as a factor, 1 to 5 " +
-			"(default 1).<br>" + "1 keeps the widths fixed; 2 allows half to " +
-			"double.", labelSDDrift, textSDDrift);
+		setToolTip("Continuum only. How strongly neighbouring fragments' areas<br>" +
+			"are kept alike, 0 to 1000 (default 10). A sharp change from one<br>" +
+			"fragment to the next only survives where the profile has one.<br>" +
+			"0 lets each area follow the data alone, which can zig-zag.",
+			labelSmoothness, textSmoothness);
+		setToolTip("Continuum only. How much the fit may widen or narrow all of<br>" +
+			"a lane's fragment peaks together, from the widths of the ladder<br>" +
+			"bands, as a factor, 1 to 5 (default 1: the ladder's widths).<br>" +
+			"Helps when the distribution has few lengths, by filling the gaps<br>" +
+			"between them; with many, e.g. Log Spaced, it makes no difference.",
+			labelSDDrift, textSDDrift);
 
 		setToolTip("Marks the bands on the image: fitted in magenta,<br>" +
 			"guesses in blue, custom peaks in green.", chkBoxBands);
@@ -835,7 +840,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitter.setDegBG(degBG);
 		fitter.setPolyDerivative(polyDerivative);
 		fitter.setTolPK(tolPK);
-		fitter.setAreaDrift(areaDrift);
+		fitter.setSmoothness(smoothness);
 		fitter.setSDDrift(sdDrift);
 	}
 
@@ -853,7 +858,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textDegBG.addChangeListener(this);
 		textPolyDerivative.addChangeListener(this);
 		textTolPK.addChangeListener(this);
-		textAreaDrift.addChangeListener(this);
+		textSmoothness.addChangeListener(this);
 		textSDDrift.addChangeListener(this);
 		
 		chkBoxBands.addActionListener(this);
@@ -1418,7 +1423,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		st.degBG = degBG;
 		st.polyDerivative = polyDerivative;
 		st.tolPK = tolPK;
-		st.areaDrift = areaDrift;
+		st.smoothness = smoothness;
 		st.sdDrift = sdDrift;
 		st.continuum = buttonContinuum.isSelected();
 		st.dist = cmbBoxDist.getSelectedIndex();
@@ -1485,13 +1490,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	/**
-	 * Greys out the controls the selected fit type doesn't use: Area Drift, SD
+	 * Greys out the controls the selected fit type doesn't use: Smoothness, SD
 	 * Drift and the fragment distribution are for Continuum fits only, and the
 	 * distribution also needs a ladder lane.
 	 */
 	private void updateFitTypeControls() {
 		final boolean continuum = buttonContinuum.isSelected();
-		for (final Component c : new Component[] { labelAreaDrift, textAreaDrift,
+		for (final Component c : new Component[] { labelSmoothness, textSmoothness,
 			labelSDDrift, textSDDrift })
 			c.setEnabled(continuum);
 		cmbBoxDist.setEnabled(continuum && ladderLaneInt != noLadderLane);
@@ -1676,10 +1681,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			fitter.setTolPK(tolPK);
 			prefs.putDouble(TOLPK, tolPK);
 		}
-		else if (o == textAreaDrift) {
-			areaDrift = (double) textAreaDrift.getModel().getValue();
-			fitter.setAreaDrift(areaDrift);
-			prefs.putDouble(AREADRIFT, areaDrift);
+		else if (o == textSmoothness) {
+			smoothness = (double) textSmoothness.getModel().getValue();
+			fitter.setSmoothness(smoothness);
+			prefs.putDouble(SMOOTHNESS, smoothness);
 		}
 		else if (o == textSDDrift) {
 			sdDrift = (double) textSDDrift.getModel().getValue();
@@ -1817,7 +1822,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private void setFitting(final boolean on) {
 		final Component[] controls = { buttonAuto, buttonManual, textNLanes,
 			sliderW, sliderH, sliderSp, sliderHOff, sliderVOff, textDegBG,
-			textPolyDerivative, textTolPK, textAreaDrift, textSDDrift, buttonBands,
+			textPolyDerivative, textTolPK, textSmoothness, textSDDrift, buttonBands,
 			buttonContinuum, chkBoxBands, cmbBoxLadderLane, cmbBoxLadderType,
 			cmbBoxDist, buttonEditPeaks, buttonResetCustomPeaks };
 		if (on) {

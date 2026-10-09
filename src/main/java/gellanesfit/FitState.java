@@ -24,7 +24,11 @@ class FitState implements Serializable {
 	int nLanes, lw, lh, lsp, lhoff, lvoff;
 	int ladderLane;
 	int degBG;
-	double polyDerivative, tolPK, areaDrift, sdDrift;
+	double polyDerivative, tolPK, sdDrift;
+	/** No longer used: Continuum fits use smoothness instead */
+	double areaDrift;
+	/** Continuum fits' smoothness; null in files saved before it was added */
+	Double smoothness;
 	boolean continuum;
 	int dist; // index of the fragment distribution
 	/**

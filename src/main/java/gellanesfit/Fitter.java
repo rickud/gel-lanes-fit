@@ -795,7 +795,7 @@ class Fitter {
 		if (fitMode == continuumMode) s +=
 			"<tr> <td>Background</td> <td>flat, " + Math.round(polyOffset * 100) +
 			" % of each lane's minimum (the ladder lane: polynomial)</td></tr>";
-		s += "<tr> <td>Area Drift Limit</td>             <td>" + areaDrift +
+		s += "<tr> <td>Smoothness</td>             <td>" + smoothness +
 			"</td></tr>";
 		s += "<tr> <td>SD Drift Limit</td>             <td>" + sdDrift +
 				"</td></tr></table>";
