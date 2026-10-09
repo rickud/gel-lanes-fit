@@ -415,10 +415,20 @@ class Fitter {
 	public List<DataSeries> doFit(final List<Integer> lanes) {
 		
 		final ArrayList<DataSeries> in = new ArrayList<>();
+		final List<Integer> missing = new ArrayList<>();
 		for (final int i : lanes) {
+			final int before = in.size();
 			for (final DataSeries d : inputData) {
 				if (d.getLane() == i) in.add(d);
 			}
+			if (in.size() == before) missing.add(i);
+		}
+		if (!missing.isEmpty()) {
+			final List<Integer> have = new ArrayList<>();
+			for (final DataSeries d : inputData)
+				have.add(d.getLane());
+			log.warn("No profile for lanes " + missing + " (profiles: lanes " +
+				have + "); they aren't fitted");
 		}
 		final ArrayList<DataSeries> out = new ArrayList<>();
 		final StopWatch sw = new StopWatch();

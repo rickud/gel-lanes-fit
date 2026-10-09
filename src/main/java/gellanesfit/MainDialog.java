@@ -1350,7 +1350,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			final Component[] c = logWindow.getContentPane().getComponents();
 
 			for (final int i : getAllLaneNumbers()) {
-				if (i != ladderLaneInt) {
+				// A lane that wasn't fitted has no distribution to show
+				if (i != ladderLaneInt && fitter.getFittedDistribution(i) != null) {
 					final String name = String.format("Lane %1$d", i);
 					final XYSeriesCollection dataset = new XYSeriesCollection();
 					dataset.addSeries(fitter.getFittedDistribution(i));
@@ -1826,6 +1827,48 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/**
+	 * The lanes with no profile because they're outside the image, e.g.
+	 * automatic lanes pushed off its edge by a large Space or Offset
+	 */
+	private List<Integer> lanesOffImage() {
+		final List<Integer> profiled = new ArrayList<>();
+		for (final DataSeries d : plotter.getProfiles())
+			profiled.add(d.getLane());
+		final List<Integer> off = new ArrayList<>();
+		for (final int l : getAllLaneNumbers())
+			if (!profiled.contains(l)) off.add(l);
+		return off;
+	}
+
+	/**
+	 * Before a fit: warns about lanes outside the image, which can't be
+	 * fitted. Without the ladder lane there's no fit; otherwise the user may
+	 * fit the lanes on the image.
+	 *
+	 * @return whether to go on with the fit
+	 */
+	private boolean confirmLanesOffImage() {
+		final List<Integer> off = lanesOffImage();
+		if (off.isEmpty()) return true;
+		final String lanes = (off.size() == 1 ? "Lane " : "Lanes ") + off
+			.toString().replaceAll("[\\[\\]]", "");
+		final String fix = "Move or resize the lanes so that they're on the " +
+			"image,\nfor example with a smaller Space or Horizontal Offset.";
+		if (off.contains(ladderLaneInt)) {
+			new MessageDialog(frame, "Lanes Outside the Image", lanes + (off
+				.size() == 1 ? " is" : " are") + " outside the image, including " +
+				"the ladder lane,\nso there's nothing to fit.\n \n" + fix);
+			return false;
+		}
+		final GenericDialog gd = new GenericDialog("Lanes Outside the Image");
+		gd.addMessage(lanes + (off.size() == 1 ? " is" : " are") +
+			" outside the image and can't be fitted.\n \n" + fix);
+		gd.setOKLabel("Fit the Others");
+		gd.showDialog();
+		return gd.wasOKed();
+	}
+
 	/** Fits the ladder lane, then the other lanes with the current settings */
 	private void runFit() {
 		if (ladderLaneInt == noLadderLane) {
@@ -1837,6 +1880,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			askUser("Ladder type not selected");
 			return;
 		}
+
+		if (!confirmLanesOffImage()) return;
 
 		// Remove everything in the plots, but the profile
 		plotter.setSelected(MainDialog.noLaneSelected);
@@ -1917,8 +1962,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 
 		final List<Integer> otherLanes = new ArrayList<>();
+		final List<Integer> offImage = lanesOffImage();
 		for (final int i : getAllLaneNumbers()) {
-			if (i != ladderLaneInt) otherLanes.add(i);
+			if (i != ladderLaneInt && !offImage.contains(i)) otherLanes.add(i);
 		}
 		startFitting(otherLanes, fitted);
 	}

@@ -36,6 +36,7 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 - [ ] **Automatic lanes:** changing **Number of Lanes** and each slider moves the rectangles on the image and updates the plots.
 - [ ] **Manual lanes:** switch to **Manual Rectangle Selection**. Draw a lane, move it, resize it; the plots follow. Click inside a lane and confirm: it's deleted and the lanes are renumbered from left to right.
 - [ ] **Switching modes:** switching back to Automatic and then to Manual again restores the manual lanes.
+- [ ] **Lanes outside the image:** drag **Space** up until some lanes leave the image and click **Fit**. A warning names them; **Fit the Others** fits the lanes on the image and the LOG opens without errors. With the ladder lane off the image, the warning says there's nothing to fit.
 - [ ] **Lane under the mouse:** moving the mouse over a lane highlights its plot and draws a line at the same position.
 
 ### Ladder and fit
