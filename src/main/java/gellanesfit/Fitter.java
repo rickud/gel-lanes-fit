@@ -333,13 +333,12 @@ class Fitter {
 			outText = outText.substring(0, outText.length() - 1) + "\n";
 		}
 		if (fitMode == continuumMode) {
-			String line = "\n\tMean\tStandard Deviation\n";
+			// Each lane's average fragment size, under its own heading
+			outText += "\n\tMean (bp)\tStandard Deviation (bp)\n";
 			for (int i = 0; i < inputData.size(); i++) {
-				if (i != ladderLane - 1) {
-					line = String.format("Lane %1$d\t%2$.2f \t %3$.2f\n", (i + 1),
-						statMatrix.getEntry(i, 0), statMatrix.getEntry(i, 1));
-					outText += line;
-				}
+				if (i != ladderLane - 1) outText += String.format(
+					"Lane %1$d\t%2$.2f \t %3$.2f\n", (i + 1), statMatrix.getEntry(i,
+						0), statMatrix.getEntry(i, 1));
 			}
 		}
 		return outText;
@@ -527,6 +526,12 @@ class Fitter {
 		if (continuum) {
 			final ContinuumFit.Result r = fitSmear(lane, xvals, yvals.mapSubtract(
 				flatBG), firstGuess);
+			// The guess's heights become the fit's starting ones (Amp. G.); the
+			// guess just added for this lane is last in the list
+			final List<Peak> guessed = getGuessPeaks(lane);
+			final int firstPeak = guessed.size() - r.startHeights.length;
+			for (int i = 0; i < r.startHeights.length; i++)
+				guessed.get(firstPeak + i).setNorm(r.startHeights[i]);
 			RealVector f = new ArrayRealVector(new double[] { -1 });
 			for (int i = 0; i < r.areas.length; i++)
 				f = f.append(new ArrayRealVector(new double[] { r.height(i), r.means[i],

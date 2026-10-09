@@ -61,6 +61,11 @@ final class ContinuumFit {
 	static final class Result {
 
 		double[] areas, means, sds;
+		/**
+		 * The heights the fit starts from: the profile's level at each peak,
+		 * shared out among overlapping peaks (see {@link ContinuumFit#startAreas})
+		 */
+		double[] startHeights;
 		double offset, stretch, widthScale;
 		/** Root mean square of the profile minus the fit */
 		double rms;
@@ -77,6 +82,12 @@ final class ContinuumFit {
 	private final double[] mean0, sd0;
 	/** Each area is penalized relative to this: expected times starting area */
 	private final double[] reference;
+	/**
+	 * The starting areas: the profile's level at each peak times the smaller of
+	 * its width (times the square root of 2 pi) and the spacing to its
+	 * neighbours, so that overlapping peaks add up to the profile
+	 */
+	private final double[] startAreas;
 	private final double maxOffset, centre, logSdDrift;
 	private final double noise, weight;
 	private final BooleanSupplier stopCheck;
@@ -113,6 +124,7 @@ final class ContinuumFit {
 		// as a misfit of one noise level at every point of the profile
 		weight = n > 2 ? smoothness * FastMath.sqrt(x.length / (double) (n -
 			2)) : 0;
+		startAreas = new double[n];
 		reference = referenceAreas(expected);
 	}
 
@@ -151,6 +163,7 @@ final class ContinuumFit {
 			final double level = FastMath.max(smoothedProfileAt(mean0[i], 2 *
 				sd0[i]), 1e-3 * max) + 1e-300;
 			ref[i] = level * width;
+			startAreas[i] = ref[i];
 		}
 		// The expected areas' shape, without their scale
 		double meanLogRatio = 0;
@@ -216,7 +229,9 @@ final class ContinuumFit {
 		r.areas = solution[1];
 		r.means = new double[n];
 		r.sds = new double[n];
+		r.startHeights = new double[n];
 		for (int i = 0; i < n; i++) {
+			r.startHeights[i] = startAreas[i] / (sd0[i] * SQRT_2PI);
 			r.means[i] = mean0[i] + r.offset + r.stretch * (mean0[i] - centre);
 			r.sds[i] = sd0[i] * r.widthScale;
 		}

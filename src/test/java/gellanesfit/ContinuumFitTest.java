@@ -212,6 +212,27 @@ public class ContinuumFitTest {
 				.getMean() - guess.get(i - 1).getMean(), 1);
 	}
 
+	@Test
+	public void guessHeightsAreTheFitsStartingPoint() throws Exception {
+		// Amp. G. shows where the fit starts: with closely spaced peaks, the
+		// guessed peaks add up to the profile above the background
+		final Fitter fitter = fitContinuum();
+		fitter.setLogDistribution(81);
+		fitter.resetFit(2);
+		fitter.doFit(2);
+		double laneMin = Double.MAX_VALUE;
+		for (final double v : smear)
+			laneMin = Math.min(laneMin, v);
+		for (final int x : new int[] { 200, 250, 300 }) {
+			double sum = 0;
+			for (final Peak p : fitter.getGuessPeaks(2))
+				sum += new org.apache.commons.math3.analysis.function.Gaussian(p
+					.getNorm(), p.getMean(), p.getSigma()).value(x);
+			final double above = smear[x - 50] - 0.98 * laneMin;
+			assertEquals("guess at " + x, above, sum, 0.15 * above);
+		}
+	}
+
 	/** The size of a fragment at a position of the synthetic ladder, in bp */
 	private static double basePairsAt(final double x) {
 		return Ladder.basePairs(Math.pow(10, Math.log10(1000 * 607.4 + 157.9) -
