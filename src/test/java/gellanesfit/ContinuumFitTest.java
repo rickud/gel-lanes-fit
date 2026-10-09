@@ -196,6 +196,22 @@ public class ContinuumFitTest {
 			assertTrue("width at " + p.getMean(), p.getSigma() > 1);
 	}
 
+	@Test
+	public void logSpacedPlacesFragmentsEvenlyAlongTheLane() throws Exception {
+		final Fitter fitter = fitContinuum();
+		fitter.setLogDistribution(41);
+		fitter.resetFit(2);
+		fitter.doFit(2);
+		final List<Peak> guess = fitter.getGuessPeaks(2);
+		assertEquals(41, guess.size());
+		assertEquals("first at the top", 50, guess.get(0).getMean(), 1);
+		assertEquals("last at the bottom", 450, guess.get(40).getMean(), 1);
+		// Log of the size runs with the position: about 10 px apart throughout
+		for (int i = 1; i < guess.size(); i++)
+			assertEquals("spacing before fragment " + i, 10, guess.get(i)
+				.getMean() - guess.get(i - 1).getMean(), 1);
+	}
+
 	/** The size of a fragment at a position of the synthetic ladder, in bp */
 	private static double basePairsAt(final double x) {
 		return Ladder.basePairs(Math.pow(10, Math.log10(1000 * 607.4 + 157.9) -

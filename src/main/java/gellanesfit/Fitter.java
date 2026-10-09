@@ -96,6 +96,8 @@ class Fitter {
 	 * largest spacing between them in bp; both 0 when it isn't Uniform
 	 */
 	private int uniformCount;
+	/** Log Spaced distribution: its number of lengths; 0 when it isn't one */
+	private int logCount;
 	/** Continuum fits: strength of the smoothness penalty on the areas */
 	private double smoothness = 10;
 	private double uniformSpacing;
@@ -686,10 +688,14 @@ class Fitter {
 
 	/**
 	 * The fragment distribution for a lane with these positions: the chosen
-	 * one, or for Uniform, lengths covering the lane from its bottom to its top
-	 * (see {@link #sizeRange}).
+	 * one, or for Uniform and Log Spaced, lengths covering the lane from its
+	 * bottom to its top (see {@link #sizeRange}).
 	 */
 	private double[][] distribution(final RealVector x) {
+		if (logCount > 0) {
+			final double[] range = sizeRange(x);
+			return FragmentDistribution.logSpaced(range[0], range[1], logCount);
+		}
 		if (uniformCount == 0 && uniformSpacing == 0) return fragmentDistribution;
 		final double[] range = sizeRange(x);
 		final int count = uniformCount > 0 ? uniformCount : FragmentDistribution
@@ -988,6 +994,18 @@ class Fitter {
 		this.fragmentDistribution = fragmentDistribution;
 		uniformCount = 0;
 		uniformSpacing = 0;
+		logCount = 0;
+	}
+
+	/**
+	 * A Log Spaced distribution: in each lane, this many lengths evenly spaced
+	 * in log(bp) from the lane's bottom to its top.
+	 */
+	public void setLogDistribution(final int count) {
+		fragmentDistribution = null;
+		uniformCount = 0;
+		uniformSpacing = 0;
+		logCount = count;
 	}
 
 	/**
@@ -1001,6 +1019,7 @@ class Fitter {
 
 	public void setUniformDistribution(final int count, final double spacing) {
 		fragmentDistribution = null;
+		logCount = 0;
 		uniformCount = count;
 		uniformSpacing = count > 0 ? 0 : spacing;
 	}

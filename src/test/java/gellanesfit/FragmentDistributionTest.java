@@ -58,6 +58,20 @@ public class FragmentDistributionTest {
 	}
 
 	@Test
+	public void logSpacedKeepsTheRatioOfNeighbouringLengths() {
+		final double[][] d = FragmentDistribution.logSpaced(100, 10000, 5);
+		final double[] lengths = new double[5];
+		for (int i = 0; i < 5; i++)
+			lengths[i] = d[i][FragmentDistribution.LENGTH];
+		assertArrayEquals(new double[] { 10000, 3162.28, 1000, 316.23, 100 },
+			lengths, 0.01);
+		double sum = 0;
+		for (final double[] row : d)
+			sum += row[FragmentDistribution.FREQUENCY];
+		assertEquals(1, sum, 1e-12);
+	}
+
+	@Test
 	public void uniformCountKeepsLengthsAtMostTheSpacingApart() {
 		assertEquals(31, FragmentDistribution.uniformCount(100, 700, 20));
 		assertEquals(196, FragmentDistribution.uniformCount(100, 4000, 20));
@@ -69,9 +83,11 @@ public class FragmentDistributionTest {
 
 	@Test
 	public void fitTimeEstimateGrowsSteeply() {
-		// The two measurements it's based on
-		assertEquals(0.3, FragmentDistribution.estimatedFitSeconds(31), 1e-9);
-		assertEquals(25, FragmentDistribution.estimatedFitSeconds(196), 3);
+		// The measurements it's based on (sample image smears)
+		assertEquals(0.4, FragmentDistribution.estimatedFitSeconds(31), 0.1);
+		assertEquals(2, FragmentDistribution.estimatedFitSeconds(150), 0.5);
+		assertEquals(4, FragmentDistribution.estimatedFitSeconds(200), 0.5);
+		assertEquals(17, FragmentDistribution.estimatedFitSeconds(300), 2);
 		assertEquals(0, FragmentDistribution.estimatedFitSeconds(0), 0);
 	}
 }

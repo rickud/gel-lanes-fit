@@ -146,6 +146,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	// Uniform distribution: by spacing (EVERY, bp) or number of lengths
 	private static final String UNIFORMBYSPACING = "uniformBySpacing";
 	private static final String UNIFORMCOUNT = "uniformCount";
+	private static final String LOGCOUNT = "logCount";
 	private static final String EVERY = "every";
 	
 	private static final String NLANES = "nLanes";
@@ -199,7 +200,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private final String[] ladderStr = { "Select Ladder Type", "Hi-Lo", "100bp", "Quick-Load", "Tapestation","Custom Ladder" };
 	private final String[] distStr = { "Select Fragment Distribution",
 		"AciI-Lambda", "AciI-Lambda4", "AciI-Lambda3", "AciI-Lambda2",
-		"Uniform", "Ladder" };
+		"Uniform", "Ladder", "Log Spaced" };
 	private Ladder ladder;
 	private final String warningFit =
 		"The current plots will be reset and the current fitting data will be lost.";
@@ -219,6 +220,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	private int iw, ih, lw, lh, lsp, lhoff, lvoff, every, uniformCount;
 	private boolean uniformBySpacing;
+	private int logCount = FragmentDistribution.LOG_COUNT;
 	private int nLanes;
 	private int degBG; // Order of Background Polynomial
 	private double polyDerivative;
@@ -369,6 +371,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			uniformCount = prefs.getInt(UNIFORMCOUNT,
 				FragmentDistribution.UNIFORM_COUNT);
 			every = prefs.getInt(EVERY, 100);
+			logCount = prefs.getInt(LOGCOUNT, FragmentDistribution.LOG_COUNT);
 		}
 		else {
 			auto = true;
@@ -419,6 +422,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			areaDrift = savedState.areaDrift;
 			sdDrift = savedState.sdDrift;
 			uniformBySpacing = savedState.uniformBySpacing;
+			if (savedState.logCount > 0) logCount = savedState.logCount;
 			if (savedState.uniformCount > 0) {
 				uniformCount = savedState.uniformCount;
 				every = savedState.every;
@@ -755,7 +759,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			"of its bands are visible in the ladder lane.", cmbBoxLadderType);
 		setToolTip("Continuum only. The fragment lengths expected in the " +
 			"sample,<br>" + "and how common each one is. More lengths make fits " +
-			"slower.", cmbBoxDist);
+			"slower.<br>" + "Uniform and Log Spaced cover each lane from bottom " +
+			"to top;<br>" + "Log Spaced puts more lengths among small fragments.",
+			cmbBoxDist);
 		setToolTip("While on, click in a plot to add a custom peak there,<br>" +
 			"or near a green dot to remove it. Custom peaks are used<br>" +
 			"by the next fit, in addition to or in place of detected bands.",
@@ -1418,6 +1424,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		st.dist = cmbBoxDist.getSelectedIndex();
 		st.uniformBySpacing = uniformBySpacing;
 		st.uniformCount = uniformCount;
+		st.logCount = logCount;
 		st.every = every;
 		st.customPeaks = allCustomPeaks();
 		st.fitDone = fitDone;
@@ -2153,6 +2160,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/** The Log Spaced dialog's note on the time a fit takes */
+	private static String logCountText(final int n) {
+		if (n < 2) return "";
+		final double seconds = FitTimer.estimatedSeconds(n);
+		return "About " + FitTimer.format(seconds) + " per lane on this " +
+			"computer" + (seconds > SLOW_FIT_SECONDS ? ": slow, consider fewer"
+				: "");
+	}
+
 	/** Ways to set a Uniform distribution, in its dialog */
 	private static final String[] UNIFORM_SET_BY = { "Number of peaks",
 		"Spacing" };
@@ -2181,7 +2197,37 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	/** Sets the fitter's fragment distribution from the selection */
 	private void loadDistribution(final boolean ask) {
 		if (cmbBoxDist.getSelectedIndex() == 0) return;
-		if (cmbBoxDist.getSelectedItem().equals("Uniform")) {
+		if (cmbBoxDist.getSelectedItem().equals("Log Spaced")) {
+			if (ask) {
+				final GenericDialog gd = new GenericDialog("LOG SPACED DISTRIBUTION");
+				gd.addMessage("Fragment lengths evenly spaced in log(bp), from the\n" +
+					"bottom to the top of each lane, with sizes from the ladder:\n" +
+					"more of them among small fragments than among large ones.");
+				gd.addNumericField("Number of fragments", logCount, 0, 5, "");
+				// Padded: the label keeps the width it's laid out with
+				gd.addMessage(String.format("%-70s", logCountText(logCount)));
+				final Label count = (Label) gd.getMessage();
+				@SuppressWarnings("unchecked")
+				final Vector<TextField> fields = gd.getNumericFields();
+				gd.addDialogListener((dialog, event) -> {
+					try {
+						count.setText(logCountText(Integer.parseInt(fields.get(0)
+							.getText().trim())));
+					}
+					catch (final NumberFormatException e) {
+						count.setText("");
+					}
+					return true;
+				});
+				gd.showDialog();
+				if (!gd.wasOKed()) return;
+				final int n = (int) gd.getNextNumber();
+				if (n >= 2) logCount = n;
+				prefs.putInt(LOGCOUNT, logCount);
+			}
+			fitter.setLogDistribution(logCount);
+		}
+		else if (cmbBoxDist.getSelectedItem().equals("Uniform")) {
 			if (ask) {
 				final GenericDialog gd = new GenericDialog("UNIFORM DISTRIBUTION");
 				gd.addMessage("Fragment lengths evenly spaced in bp, from the bottom\n" +

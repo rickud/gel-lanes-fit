@@ -52,6 +52,7 @@ public class SavedStateTest {
 		assertEquals("saved before Uniform covered the lane: use the default", 0,
 			st.uniformCount);
 		assertEquals(false, st.uniformBySpacing);
+		assertEquals("saved before Log Spaced existed", 0, st.logCount);
 		assertTrue(st.fitDone);
 		assertTrue(st.showBands);
 		assertEquals("saved before fitRunning existed", false, st.fitRunning);
@@ -83,6 +84,7 @@ public class SavedStateTest {
 		st.fitRunning = true;
 		st.uniformBySpacing = true;
 		st.uniformCount = 40;
+		st.logCount = 120;
 		final ByteArrayOutputStream bytes = new ByteArrayOutputStream();
 		new SavedStateFile(Arrays.asList(new Rectangle(1, 2, 3, 4)), st, null)
 			.write(bytes);
@@ -96,6 +98,7 @@ public class SavedStateTest {
 		assertTrue(copy.state.fitRunning);
 		assertTrue(copy.state.uniformBySpacing);
 		assertEquals(40, copy.state.uniformCount);
+		assertEquals(120, copy.state.logCount);
 		assertNull(copy.ladder);
 	}
 }

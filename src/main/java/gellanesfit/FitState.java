@@ -34,6 +34,8 @@ class FitState implements Serializable {
 	 */
 	boolean uniformBySpacing;
 	int every, uniformCount;
+	/** Log Spaced distribution: its number of lengths (0 in older files) */
+	int logCount;
 	List<Peak> customPeaks = new ArrayList<>();
 	boolean fitDone;
 	/**
