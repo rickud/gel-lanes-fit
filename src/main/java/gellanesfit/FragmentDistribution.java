@@ -38,13 +38,15 @@ final class FragmentDistribution {
 	/**
 	 * A rough estimate of how long a Continuum fit of one lane takes, in
 	 * seconds, from the number of fragment peaks it has. Measured on the
-	 * sample image: 31 fragments took about 0.3 s per lane and 196 about 25 s,
-	 * so the time grows roughly with the 2.4th power of the number. This is
-	 * for the computer it was measured on; {@link FitTimer} adapts it to the
-	 * one the plugin runs on.
+	 * sample image's smears: about 0.5 s up to 80 fragments, 2 s for 150, 4 s
+	 * for 200, 17 s for 300 and 45 to 90 s for 400; beyond about 100 the time
+	 * grows with roughly the 3.6th power of the number. This is for the
+	 * computer it was measured on; {@link FitTimer} adapts it to the one the
+	 * plugin runs on.
 	 */
 	static double estimatedFitSeconds(final int fragments) {
-		return 0.3 * Math.pow(fragments / 31.0, 2.4);
+		if (fragments <= 0) return 0;
+		return 0.4 + 3.6 * Math.pow(fragments / 200.0, 3.6);
 	}
 
 	/**
@@ -88,29 +90,54 @@ final class FragmentDistribution {
 		return out;
 	}
 
-	/** How many lengths {@link #uniform} gives for these values */
-	static int uniformCount(final int lower, final int upper, final int every) {
-		return (upper - lower) / every + 1;
+	/** The default number of lengths of a Uniform distribution */
+	static final int UNIFORM_COUNT = 30;
+	/** The default number of lengths of a Log Spaced distribution */
+	static final int LOG_COUNT = 150;
+
+	/**
+	 * How many lengths a Uniform distribution over this range needs so that
+	 * they're at most {@code spacing} bp apart; at least 2.
+	 */
+	static int uniformCount(final double lower, final double upper,
+		final double spacing)
+	{
+		return Math.max(2, (int) Math.ceil((upper - lower) / spacing - 1e-9) + 1);
 	}
 
 	/**
-	 * A uniform distribution: every length from {@code upper} down to
-	 * {@code lower}, in steps of {@code every} bp, all equally frequent.
-	 * <p>
-	 * Known issue, kept for now so that results don't change: the frequency is
-	 * 1 / (upper - lower + 1), which is right only for a 1 bp step, so the
-	 * frequencies don't add up to 1 otherwise. Fits aren't affected, since the
-	 * guess rescales them; the Frequency column of the results is.
-	 * </p>
+	 * A uniform distribution: {@code count} lengths evenly spaced from
+	 * {@code upper} down to {@code lower} bp, both included, all equally
+	 * frequent.
 	 */
-	static double[][] uniform(final int lower, final int upper,
-		final int every)
+	static double[][] uniform(final double lower, final double upper,
+		final int count)
 	{
-		final double[][] dist = new double[uniformCount(lower, upper, every)][3];
-		final double f = 1.0 / (upper - lower + 1);
-		for (int i = 0; i < dist.length; i++) {
-			dist[i][FREQUENCY] = f;
-			dist[i][LENGTH] = upper - i * every;
+		return spaced(lower, upper, count, false);
+	}
+
+	/**
+	 * A log-spaced distribution: {@code count} lengths from {@code upper} down
+	 * to {@code lower} bp, both included, evenly spaced in log(bp), so that
+	 * small fragments get more of them than large ones; all equally frequent.
+	 * Since fragments run roughly by the log of their size, they end up
+	 * roughly evenly spaced along the lane.
+	 */
+	static double[][] logSpaced(final double lower, final double upper,
+		final int count)
+	{
+		return spaced(lower, upper, count, true);
+	}
+
+	private static double[][] spaced(final double lower, final double upper,
+		final int count, final boolean log)
+	{
+		final int n = Math.max(2, count);
+		final double[][] dist = new double[n][3];
+		for (int i = 0; i < n; i++) {
+			dist[i][FREQUENCY] = 1.0 / n;
+			dist[i][LENGTH] = log ? upper * Math.pow(lower / upper, i / (n -
+				1.0)) : upper - i * (upper - lower) / (n - 1);
 			dist[i][MW] = Ladder.molecularWeight(dist[i][LENGTH]);
 		}
 		return dist;

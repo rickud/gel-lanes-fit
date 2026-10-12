@@ -15,9 +15,12 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CancellationException;
 
 import org.apache.commons.lang3.time.StopWatch;
@@ -83,11 +86,23 @@ class Fitter {
 	private static final double BACKGROUND_CEILING = 0.98;
 
 	private int degBG;
-	private double tolPK, areaDrift, sdDrift, polyDerivative, polyOffset;
+	private double tolPK, sdDrift, polyDerivative, polyOffset;
 	private int fitMode = bandMode;
 	private int ladderLane = MainDialog.noLadderLane;
 	private double[] ladder; // MW, Dalton
 	private double[][] fragmentDistribution; // MW, Dalton; relative frequency
+	/**
+	 * Uniform distribution: its number of lengths, or else (when 0) the
+	 * largest spacing between them in bp; both 0 when it isn't Uniform
+	 */
+	private int uniformCount;
+	/** Log Spaced distribution: its number of lengths; 0 when it isn't one */
+	private int logCount;
+	/** Continuum fits: strength of the smoothness penalty on the areas */
+	private double smoothness = 10;
+	private double uniformSpacing;
+	/** The distribution each Continuum lane was fitted with */
+	private final Map<Integer, double[][]> laneDistributions = new HashMap<>();
 	private List<List<Integer>> selectedFragments;
 	private final String title; // for the datafile, main image's title
 	private List<DataSeries> inputData;
@@ -225,12 +240,11 @@ class Fitter {
 						rt.addValue(headers[11], " - ");
 					}
 					else {
-						final double freq = fragmentDistribution[selectedFragments.get(
-							lane - 1).get(p)][0];
-						final double bp = fragmentDistribution[selectedFragments.get(lane -
-							1).get(p)][1];
-						final double mw = fragmentDistribution[selectedFragments.get(lane -
-							1).get(p)][2];
+						final double[] row = laneDistributions.get(lane)[selectedFragments
+							.get(lane - 1).get(p)];
+						final double freq = row[FragmentDistribution.FREQUENCY];
+						final double bp = row[FragmentDistribution.LENGTH];
+						final double mw = row[FragmentDistribution.MW];
 						rt.addValue(headers[9], String.format("%1$.3f", freq));
 						rt.addValue(headers[10], String.format("%1$.0f", bp));
 						rt.addValue(headers[11], String.format("%1$.3f", mw));
@@ -252,8 +266,8 @@ class Fitter {
 	{
 		RealVector bpSubarray = new ArrayRealVector();
 		RealVector wSubarray  = new ArrayRealVector();
-		final RealMatrix distMatrix = new Array2DRowRealMatrix(
-			fragmentDistribution);
+		final RealMatrix distMatrix = new Array2DRowRealMatrix(laneDistributions
+			.get(lane));
 		final RealVector bpArray = distMatrix.getColumnVector(1);
 		final RealVector wArray  = distMatrix.getColumnVector(2);
 
@@ -319,13 +333,12 @@ class Fitter {
 			outText = outText.substring(0, outText.length() - 1) + "\n";
 		}
 		if (fitMode == continuumMode) {
-			String line = "\n\tMean\tStandard Deviation\n";
+			// Each lane's average fragment size, under its own heading
+			outText += "\n\tMean (bp)\tStandard Deviation (bp)\n";
 			for (int i = 0; i < inputData.size(); i++) {
-				if (i != ladderLane - 1) {
-					line = String.format("Lane %1$d\t%2$.2f \t %3$.2f\n", (i + 1),
-						statMatrix.getEntry(i, 0), statMatrix.getEntry(i, 1));
-					outText += line;
-				}
+				if (i != ladderLane - 1) outText += String.format(
+					"Lane %1$d\t%2$.2f \t %3$.2f\n", (i + 1), statMatrix.getEntry(i,
+						0), statMatrix.getEntry(i, 1));
 			}
 		}
 		return outText;
@@ -351,8 +364,12 @@ class Fitter {
 	 * The starting guess for a lane: the guesser's peaks, with the lane's custom
 	 * peaks replacing the closest guessed peak (in Banded mode, only when within
 	 * {@link #peakDistanceTol} pixels) or added to it.
+	 *
+	 * @param deg the background's degree, -1 for none
 	 */
-	private SortedParameters doGuess(final int lane, final ParameterGuesser pg) {
+	private SortedParameters doGuess(final int lane, final ParameterGuesser pg,
+		final int deg)
+	{
 		// Guess a set of peaks a set of peaks
 		SortedParameters guess = pg.guess();
 		List<Peak> peaks = arrayToPeaks(lane, guess.getParameters());
@@ -386,10 +403,10 @@ class Fitter {
 		}
 		allGuessList.addAll(peaks);
 		RealVector poly = new ArrayRealVector();
-		poly = poly.append(degBG).append(new ArrayRealVector(degBG + 1));
+		poly = poly.append(deg).append(new ArrayRealVector(deg + 1));
 
 		// The background starts at the lane's minimum; degree -1 has none
-		if (degBG >= 0) for (final DataSeries d : inputData) {
+		if (deg >= 0) for (final DataSeries d : inputData) {
 			if (d.getLane() == lane) poly.setEntry(1, d.getMinY());
 		}
 		
@@ -475,6 +492,13 @@ class Fitter {
 	 * Fits a lane's profile: guesses the peaks, fits them with the background, and
 	 * stores the guessed and fitted peaks and the lane's RMS. Continuum fits use
 	 * the fitted peaks of the reference (ladder) lane.
+	 * <p>
+	 * Banded fits fit a polynomial background with the peaks. Continuum fits
+	 * use a flat background at {@link #polyOffset} of the lane's minimum: a
+	 * smear's information is in the smear itself, and there's nothing to base
+	 * a background shape on. It's subtracted before fitting, so only the
+	 * fragments are fitted.
+	 * </p>
 	 */
 	private List<DataSeries> doFit(final DataSeries in) {
 		final int lane = in.getLane();
@@ -488,33 +512,63 @@ class Fitter {
 		// Tolerance as percentage of the range
 		final double tolpk = tolPK * (yvals.getMaxValue() - yvals.getMinValue());
 
-		final WeightedObservedPoints obs = observations(in);
+		final boolean continuum = fitMode == continuumMode;
+		final double flatBG = continuum ? flatBackground(yvals) : 0;
+		final int deg = continuum ? -1 : degBG;
+		// What's left to fit once a flat background is taken off
+		final double offset = continuum ? 0 : polyOffset;
+
+		final WeightedObservedPoints obs = observations(in, flatBG);
 		ParameterGuesser pg = null;
-		if (fitMode == bandMode) {
+		if (!continuum) {
 			pg = new GaussianArrayCurveFitter.ParameterGuesser(
-				obs.toList(), degBG, tolpk, polyOffset);
+				obs.toList(), deg, tolpk, offset);
 		} else {
-			pg = continuumGuesser(obs, tolpk);
+			final double[][] dist = distribution(xvals);
+			laneDistributions.put(lane, dist);
+			pg = continuumGuesser(obs, tolpk, dist);
 			selectedFragments.set(lane - 1, 
 				pg.getUsedFragments(new double[] {xvals.getMinValue(), xvals.getMaxValue()}));
 		}
-		final SortedParameters firstGuess = doGuess(lane, pg);
-		final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(fitMode,
-			degBG, polyDerivative, polyOffset, tolpk, areaDrift, sdDrift).withStartPoint(firstGuess);
-		cf.setStopCheck(() -> stopRequested);
-		final LeastSquaresProblem problem = cf.getProblem(obs.toList());
-
-		final LeastSquaresOptimizer.Optimum optimum = cf.getOptimizer().optimize(problem);
-
-		final RealVector fitted = new ArrayRealVector(optimum.getPoint());
+		final SortedParameters firstGuess = doGuess(lane, pg, deg);
+		final RealVector fitted;
+		final double fitRms;
+		if (continuum) {
+			final ContinuumFit.Result r = fitSmear(lane, xvals, yvals.mapSubtract(
+				flatBG), firstGuess);
+			// The guess's heights become the fit's starting ones (Amp. G.); the
+			// guess just added for this lane is last in the list
+			final List<Peak> guessed = getGuessPeaks(lane);
+			final int firstPeak = guessed.size() - r.startHeights.length;
+			for (int i = 0; i < r.startHeights.length; i++)
+				guessed.get(firstPeak + i).setNorm(r.startHeights[i]);
+			RealVector f = new ArrayRealVector(new double[] { -1 });
+			for (int i = 0; i < r.areas.length; i++)
+				f = f.append(new ArrayRealVector(new double[] { r.height(i), r.means[i],
+					r.sds[i] }));
+			fitted = f;
+			fitRms = r.rms;
+		}
+		else {
+			final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(deg,
+				polyDerivative, offset, tolpk).withStartPoint(firstGuess);
+			cf.setStopCheck(() -> stopRequested);
+			final LeastSquaresProblem problem = cf.getProblem(obs.toList());
+			final LeastSquaresOptimizer.Optimum optimum = cf.getOptimizer().optimize(
+				problem);
+			fitted = new ArrayRealVector(optimum.getPoint());
+			fitRms = optimum.getRMS();
+		}
 
 		// After fitting
 		RealVector norms = new ArrayRealVector();
 		RealVector means = new ArrayRealVector();
 		RealVector sds = new ArrayRealVector();
-		final RealVector poly = fitted.getSubVector(0, degBG + 2);
+		// The background as degree and coefficients, the flat one if Continuum
+		final RealVector poly = continuum ? new ArrayRealVector(new double[] { 0,
+			flatBG }) : fitted.getSubVector(0, deg + 2);
 
-		for (int b = degBG + 2; b < fitted.getDimension(); b += 3) {
+		for (int b = deg + 2; b < fitted.getDimension(); b += 3) {
 			// Fitted Peaks
 			final double n = fitted.getEntry(b);
 			final double m = fitted.getEntry(b + 1);
@@ -528,8 +582,9 @@ class Fitter {
 		allFittedList.addAll(fittedPeaks);
 
 		// Create new DataSeries for Plotter
-		final PolynomialFunction bg = new PolynomialFunction(degBG < 0
-			? new double[] { 0 } : poly.getSubVector(1, degBG + 1).toArray());
+		final PolynomialFunction bg = new PolynomialFunction(poly.getDimension() < 2
+			? new double[] { 0 } : poly.getSubVector(1, poly.getDimension() - 1)
+				.toArray());
 		output.add(new DataSeries("Background", lane, DataSeries.BACKGROUND, xvals,
 			bg, Plotter.bgColor));
 
@@ -555,7 +610,7 @@ class Fitter {
 		output.add(fit);
 
 		// Print RMS to console
-		rms.setEntry(lane - 1, optimum.getRMS()/
+		rms.setEntry(lane - 1, fitRms /
 			(inputData.get(lane - 1).getMaxY() - inputData.get(lane - 1).getMinY()));
 		final String outStr = String.format("Lane " + lane + ", RMS: %1$.4f; ", rms
 			.getEntry(lane - 1));
@@ -590,20 +645,130 @@ class Fitter {
 	}
 
 	/** A lane's profile as points to fit */
-	private static WeightedObservedPoints observations(final DataSeries in) {
+	private static WeightedObservedPoints observations(final DataSeries in,
+		final double background)
+	{
 		final WeightedObservedPoints obs = new WeightedObservedPoints();
 		for (int o = 0; o < in.getX().getDimension(); o++)
-			obs.add(in.getX().getEntry(o), in.getY().getEntry(o));
+			obs.add(in.getX().getEntry(o), in.getY().getEntry(o) - background);
 		return obs;
+	}
+
+	/** Continuum fits' flat background: {@link #polyOffset} of the minimum */
+	private double flatBackground(final RealVector y) {
+		return polyOffset * y.getMinValue();
+	}
+
+	/**
+	 * Continuum fit of a lane (see {@link ContinuumFit}): the guess gives the
+	 * peaks' positions and widths, and the distribution their expected areas,
+	 * as frequency times length, since a fragment's signal grows with its mass.
+	 *
+	 * @param y the profile, background off
+	 */
+	private ContinuumFit.Result fitSmear(final int lane, final RealVector x,
+		final RealVector y, final SortedParameters guess)
+	{
+		final double[] means = guess.getMean().toArray();
+		final double[] sds = guess.getSD().toArray();
+		final double[] expected = new double[means.length];
+		Arrays.fill(expected, 1);
+		final List<Integer> used = selectedFragments.get(lane - 1);
+		final double[][] dist = laneDistributions.get(lane);
+		if (dist != null && used.size() == means.length) for (int i =
+			0; i < means.length; i++)
+		{
+			final double[] row = dist[used.get(i)];
+			expected[i] = row[FragmentDistribution.FREQUENCY] *
+				row[FragmentDistribution.LENGTH];
+		}
+		final ContinuumFit.Result r = new ContinuumFit(x.toArray(), y.toArray(),
+			means, sds, expected, sdDrift, smoothness, () -> stopRequested).fit();
+		log.info(String.format("[LANE %d] Continuum fit: %d iterations, offset " +
+			"%.1f px, stretch %.3f, width x %.2f", lane, r.iterations, r.offset,
+			r.stretch, r.widthScale));
+		return r;
 	}
 
 	/** The Continuum guesser, based on the fitted ladder lane */
 	private ParameterGuesser continuumGuesser(final WeightedObservedPoints obs,
-		final double tolpk)
+		final double tolpk, final double[][] dist)
 	{
-		return new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(), degBG,
-			tolpk, polyOffset, new Array2DRowRealMatrix(fragmentDistribution),
-			getFittedPeaks(ladderLane), ladder);
+		// The flat background is already off the observations
+		return new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(), -1,
+			tolpk, 0, new Array2DRowRealMatrix(dist), getFittedPeaks(ladderLane),
+			ladder);
+	}
+
+	/**
+	 * The fragment distribution for a lane with these positions: the chosen
+	 * one, or for Uniform and Log Spaced, lengths covering the lane from its
+	 * bottom to its top (see {@link #sizeRange}).
+	 */
+	private double[][] distribution(final RealVector x) {
+		if (logCount > 0) {
+			final double[] range = sizeRange(x);
+			return FragmentDistribution.logSpaced(range[0], range[1], logCount);
+		}
+		if (uniformCount == 0 && uniformSpacing == 0) return fragmentDistribution;
+		final double[] range = sizeRange(x);
+		final int count = uniformCount > 0 ? uniformCount : FragmentDistribution
+			.uniformCount(range[0], range[1], uniformSpacing);
+		return FragmentDistribution.uniform(range[0], range[1], count);
+	}
+
+	/**
+	 * The fragment lengths at the bottom and the top of a lane with these
+	 * positions, in bp, from the fitted ladder: its log molecular weight is
+	 * interpolated linearly between the ladder bands and extrapolated beyond
+	 * them, as the Continuum guess does to place fragments. At least 1 bp.
+	 */
+	double[] sizeRange(final RealVector x) {
+		final List<Peak> bands = getFittedPeaks(ladderLane);
+		final int n = Math.min(bands.size(), ladder.length);
+		if (n < 2) throw new IllegalStateException(
+			"The ladder lane needs at least 2 fitted bands");
+		final double[] pos = new double[n];
+		final double[] logMW = new double[n];
+		for (int i = 0; i < n; i++) { // top band first
+			pos[i] = bands.get(i).getMean();
+			logMW[i] = Math.log10(ladder[i]);
+		}
+		final double top = Ladder.basePairs(Math.pow(10, interpolate(pos, logMW, x
+			.getMinValue())));
+		final double bottom = Ladder.basePairs(Math.pow(10, interpolate(pos,
+			logMW, x.getMaxValue())));
+		return new double[] { Math.max(1, Math.min(bottom, top)), Math.max(1, Math
+			.max(bottom, top)) };
+	}
+
+	/**
+	 * A Uniform distribution set by spacing: the fewest and the most lengths a
+	 * sample lane gets, or null until the ladder lane is fitted.
+	 */
+	int[] uniformCounts(final double spacing) {
+		if (ladder == null || getFittedPeaks(ladderLane).size() < 2) return null;
+		int fewest = Integer.MAX_VALUE;
+		int most = 0;
+		for (final DataSeries d : inputData) {
+			if (d.getLane() == ladderLane) continue;
+			final double[] range = sizeRange(d.getX());
+			final int n = FragmentDistribution.uniformCount(range[0], range[1],
+				spacing);
+			fewest = Math.min(fewest, n);
+			most = Math.max(most, n);
+		}
+		return most == 0 ? null : new int[] { fewest, most };
+	}
+
+	/** Linear interpolation, and extrapolation from the end segments */
+	private static double interpolate(final double[] xs, final double[] ys,
+		final double x)
+	{
+		int i = 0;
+		while (i < xs.length - 2 && x > xs[i + 1])
+			i++;
+		return ys[i] + (ys[i + 1] - ys[i]) * (x - xs[i]) / (xs[i + 1] - xs[i]);
 	}
 
 	/**
@@ -616,7 +781,8 @@ class Fitter {
 			if (in.getLane() != lane) continue;
 			final RealVector y = in.getY();
 			final double tolpk = tolPK * (y.getMaxValue() - y.getMinValue());
-			return continuumGuesser(observations(in), tolpk).guess().getMean()
+			return continuumGuesser(observations(in, flatBackground(y)), tolpk,
+				distribution(in.getX())).guess().getMean()
 				.getDimension();
 		}
 		return 0;
@@ -640,7 +806,10 @@ class Fitter {
 			"</td></tr>";
 		s += "<tr> <td>Maximum Polynomial Derivative</td><td>" + polyDerivative +
 			"</td></tr>";
-		s += "<tr> <td>Area Drift Limit</td>             <td>" + areaDrift +
+		if (fitMode == continuumMode) s +=
+			"<tr> <td>Background</td> <td>flat, " + Math.round(polyOffset * 100) +
+			" % of each lane's minimum (the ladder lane: polynomial)</td></tr>";
+		s += "<tr> <td>Smoothness</td>             <td>" + smoothness +
 			"</td></tr>";
 		s += "<tr> <td>SD Drift Limit</td>             <td>" + sdDrift +
 				"</td></tr></table>";
@@ -837,6 +1006,36 @@ class Fitter {
 	 */
 	public void setFragmentDistribution(final double[][] fragmentDistribution) {
 		this.fragmentDistribution = fragmentDistribution;
+		uniformCount = 0;
+		uniformSpacing = 0;
+		logCount = 0;
+	}
+
+	/**
+	 * A Log Spaced distribution: in each lane, this many lengths evenly spaced
+	 * in log(bp) from the lane's bottom to its top.
+	 */
+	public void setLogDistribution(final int count) {
+		fragmentDistribution = null;
+		uniformCount = 0;
+		uniformSpacing = 0;
+		logCount = count;
+	}
+
+	/**
+	 * A Uniform distribution: in each lane, lengths evenly spaced in bp from the
+	 * lane's bottom to its top, by their number or, when that's 0, by the
+	 * largest spacing between them in bp.
+	 */
+	public void setSmoothness(final double smoothness) {
+		this.smoothness = smoothness;
+	}
+
+	public void setUniformDistribution(final int count, final double spacing) {
+		fragmentDistribution = null;
+		logCount = 0;
+		uniformCount = count;
+		uniformSpacing = count > 0 ? 0 : spacing;
 	}
 
 	/**
@@ -855,13 +1054,6 @@ class Fitter {
 		this.tolPK = tolPK;
 	}
 
-	/**
-	 * Area Drift: how far Continuum fits may depart from the distribution's
-	 * proportions.
-	 */
-	public void setAreaDrift(final double areaDrift) {
-		this.areaDrift = areaDrift;
-	}
 	/**
 	 * SD Drift: how far Continuum fits' widths may depart from the ladder-based
 	 * widths, as a factor.

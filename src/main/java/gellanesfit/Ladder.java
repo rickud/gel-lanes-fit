@@ -66,6 +66,11 @@ class Ladder implements Serializable {
 		return bp * DALTONS_PER_BP + END_DALTONS;
 	}
 
+	/** Length of a double-stranded DNA fragment of this molecular weight, in bp */
+	static double basePairs(final double mw) {
+		return (mw - END_DALTONS) / DALTONS_PER_BP;
+	}
+
 	static final int HILO        = 1;
 	static final int BP100       = 2;
 	static final int QUICKLOAD   = 3;

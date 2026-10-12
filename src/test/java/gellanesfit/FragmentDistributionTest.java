@@ -43,32 +43,51 @@ public class FragmentDistributionTest {
 	}
 
 	@Test
-	public void uniformListsLengthsFromUpperDownInSteps() {
-		final double[][] d = FragmentDistribution.uniform(100, 700, 20);
+	public void uniformSpacesLengthsEvenlyFromUpperToLower() {
+		final double[][] d = FragmentDistribution.uniform(100, 700, 31);
 		assertEquals(31, d.length);
 		assertEquals(700, d[0][FragmentDistribution.LENGTH], 0);
-		assertEquals(100, d[30][FragmentDistribution.LENGTH], 0);
+		assertEquals(680, d[1][FragmentDistribution.LENGTH], 1e-9);
+		assertEquals(100, d[30][FragmentDistribution.LENGTH], 1e-9);
 		assertEquals(Ladder.molecularWeight(400), d[15][FragmentDistribution.MW],
 			1e-9);
-		// Known issue, kept until it's fixed: 1 / (upper - lower + 1) instead of
-		// 1 / 31, so the frequencies don't add up to 1 for steps above 1 bp
+		double sum = 0;
 		for (final double[] row : d)
-			assertEquals(1.0 / 601, row[FragmentDistribution.FREQUENCY], 1e-15);
+			sum += row[FragmentDistribution.FREQUENCY];
+		assertEquals("frequencies add up to 1", 1, sum, 1e-12);
 	}
 
 	@Test
-	public void uniformCountMatchesTheDistribution() {
+	public void logSpacedKeepsTheRatioOfNeighbouringLengths() {
+		final double[][] d = FragmentDistribution.logSpaced(100, 10000, 5);
+		final double[] lengths = new double[5];
+		for (int i = 0; i < 5; i++)
+			lengths[i] = d[i][FragmentDistribution.LENGTH];
+		assertArrayEquals(new double[] { 10000, 3162.28, 1000, 316.23, 100 },
+			lengths, 0.01);
+		double sum = 0;
+		for (final double[] row : d)
+			sum += row[FragmentDistribution.FREQUENCY];
+		assertEquals(1, sum, 1e-12);
+	}
+
+	@Test
+	public void uniformCountKeepsLengthsAtMostTheSpacingApart() {
 		assertEquals(31, FragmentDistribution.uniformCount(100, 700, 20));
 		assertEquals(196, FragmentDistribution.uniformCount(100, 4000, 20));
-		assertEquals(FragmentDistribution.uniform(100, 4000, 20).length,
-			FragmentDistribution.uniformCount(100, 4000, 20));
+		// 610 bp doesn't divide by 20: 32 lengths, 19.7 bp apart
+		assertEquals(32, FragmentDistribution.uniformCount(100, 710, 20));
+		assertEquals("at least both ends", 2, FragmentDistribution.uniformCount(
+			100, 110, 50));
 	}
 
 	@Test
 	public void fitTimeEstimateGrowsSteeply() {
-		// The two measurements it's based on
-		assertEquals(0.3, FragmentDistribution.estimatedFitSeconds(31), 1e-9);
-		assertEquals(25, FragmentDistribution.estimatedFitSeconds(196), 3);
+		// The measurements it's based on (sample image smears)
+		assertEquals(0.4, FragmentDistribution.estimatedFitSeconds(31), 0.1);
+		assertEquals(2, FragmentDistribution.estimatedFitSeconds(150), 0.5);
+		assertEquals(4, FragmentDistribution.estimatedFitSeconds(200), 0.5);
+		assertEquals(17, FragmentDistribution.estimatedFitSeconds(300), 2);
 		assertEquals(0, FragmentDistribution.estimatedFitSeconds(0), 0);
 	}
 }

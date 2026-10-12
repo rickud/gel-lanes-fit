@@ -57,7 +57,7 @@ public class StopFitTest {
 		fitter.setLadder(mw);
 		fitter.setFitMode(Fitter.continuumMode);
 		// Many fragment lengths: a fit that takes a long time
-		fitter.setFragmentDistribution(FragmentDistribution.uniform(50, 1500, 3));
+		fitter.setFragmentDistribution(FragmentDistribution.uniform(50, 1500, 484));
 		assertTrue(fitter.fragmentsToFit(2) > 300);
 
 		final ExecutorService executor = Executors.newSingleThreadExecutor();
@@ -84,7 +84,7 @@ public class StopFitTest {
 
 		// The stop doesn't carry over to the next fit
 		fitter.setFragmentDistribution(FragmentDistribution.uniform(200, 500,
-			50));
+			7));
 		fitter.doFit(Arrays.asList(3));
 		assertTrue(fitter.getFittedPeaks(3).size() > 0);
 	}

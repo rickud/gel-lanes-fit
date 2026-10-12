@@ -24,10 +24,20 @@ class FitState implements Serializable {
 	int nLanes, lw, lh, lsp, lhoff, lvoff;
 	int ladderLane;
 	int degBG;
-	double polyDerivative, tolPK, areaDrift, sdDrift;
+	double polyDerivative, tolPK, sdDrift;
+	/** Continuum fits' smoothness; null in files saved before it was added */
+	Double smoothness;
 	boolean continuum;
 	int dist; // index of the fragment distribution
-	int dlo, dhi, every;
+	/**
+	 * Uniform distribution: set by the spacing {@code every} in bp, or else by
+	 * the number of lengths {@code uniformCount} (0 in files saved before it
+	 * was added: use the default)
+	 */
+	boolean uniformBySpacing;
+	int every, uniformCount;
+	/** Log Spaced distribution: its number of lengths (0 in older files) */
+	int logCount;
 	List<Peak> customPeaks = new ArrayList<>();
 	boolean fitDone;
 	/**

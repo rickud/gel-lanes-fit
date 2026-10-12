@@ -12,6 +12,7 @@ package gellanesfit;
 import java.awt.BasicStroke;
 import java.awt.BorderLayout;
 import java.awt.Checkbox;
+import java.awt.Choice;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Desktop;
@@ -140,10 +141,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private static final String DEGBG = "degBG";
 	private static final String POLYDERIVATIVE = "polyDerivative";
 	private static final String TOLPK = "tolPK";
-	private static final String AREADRIFT = "areaDrift";
+	private static final String SMOOTHNESS = "smoothness";
+	/** Continuum fits' smoothness: default and largest */
+	private static final double DEFAULT_SMOOTHNESS = 10;
+	private static final double MAX_SMOOTHNESS = 1000;
 	private static final String SDDRIFT = "sdSDrift";
-	private static final String DLO = "dlo"; // Uniform distribution range
-	private static final String DHI = "dhi";
+	// Uniform distribution: by spacing (EVERY, bp) or number of lengths
+	private static final String UNIFORMBYSPACING = "uniformBySpacing";
+	private static final String UNIFORMCOUNT = "uniformCount";
+	private static final String LOGCOUNT = "logCount";
 	private static final String EVERY = "every";
 	
 	private static final String NLANES = "nLanes";
@@ -197,7 +203,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private final String[] ladderStr = { "Select Ladder Type", "Hi-Lo", "100bp", "Quick-Load", "Tapestation","Custom Ladder" };
 	private final String[] distStr = { "Select Fragment Distribution",
 		"AciI-Lambda", "AciI-Lambda4", "AciI-Lambda3", "AciI-Lambda2",
-		"Uniform", "Ladder" };
+		"Uniform", "Ladder", "Log Spaced" };
 	private Ladder ladder;
 	private final String warningFit =
 		"The current plots will be reset and the current fitting data will be lost.";
@@ -215,12 +221,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private FitState savedState; // Settings of the last session, if any
 	private boolean restoring = true; // Do not save while restoring the state
 
-	private int iw, ih, lw, lh, lsp, lhoff, lvoff, dlo, dhi, every;
+	private int iw, ih, lw, lh, lsp, lhoff, lvoff, every, uniformCount;
+	private boolean uniformBySpacing;
+	private int logCount = FragmentDistribution.LOG_COUNT;
 	private int nLanes;
 	private int degBG; // Order of Background Polynomial
 	private double polyDerivative;
 	private double tolPK; // Peak detection tolerance as % of range
-	private double areaDrift;
+	private double smoothness;
 	private double sdDrift;
 
 	private JPanel buttonPanelAutoManual;
@@ -248,13 +256,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private JLabel labelDegBG;
 	private JLabel labelPolyDerivative;
 	private JLabel labelTolPK;
-	private JLabel labelAreaDrift;
+	private JLabel labelSmoothness;
 	private JLabel labelSDDrift;
 
 	private JSpinner textDegBG;
 	private JSpinner textPolyDerivative;
 	private JSpinner textTolPK;
-	private JSpinner textAreaDrift;
+	private JSpinner textSmoothness;
 	private JSpinner textSDDrift;
 
 	private JPanel buttonPanelFitType;
@@ -351,7 +359,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		degBG = prefs.getInt(DEGBG, 2);
 		polyDerivative = prefs.getDouble(POLYDERIVATIVE, 10.0);
 		tolPK = prefs.getDouble(TOLPK, 0.1);
-		areaDrift = prefs.getDouble(AREADRIFT, 0.1);
+		smoothness = prefs.getDouble(SMOOTHNESS, DEFAULT_SMOOTHNESS);
 		sdDrift = prefs.getDouble(SDDRIFT, 1.0);
 
 		if (oldImpTitle.equals(impTitle)) {
@@ -364,9 +372,11 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			lsp = prefs.getInt(LSP, Math.round((iw - lw * nLanes) / (nLanes + 1)));
 			lhoff = prefs.getInt(LHOFF, lsp / 2);
 			lvoff = prefs.getInt(LVOFF, (ih - lh) / 2);
-			dlo = prefs.getInt(DLO, 100);
-			dhi = prefs.getInt(DHI, 500);
-			every = prefs.getInt(EVERY, 1);
+			uniformBySpacing = prefs.getBoolean(UNIFORMBYSPACING, false);
+			uniformCount = prefs.getInt(UNIFORMCOUNT,
+				FragmentDistribution.UNIFORM_COUNT);
+			every = prefs.getInt(EVERY, 100);
+			logCount = prefs.getInt(LOGCOUNT, FragmentDistribution.LOG_COUNT);
 		}
 		else {
 			auto = true;
@@ -378,9 +388,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			lsp = Math.round((iw - lw * nLanes) / (nLanes + 1));
 			lhoff = lsp / 2;
 			lvoff = (ih - lh) / 2;
-			dlo = 100;
-			dhi = 500;
-			every = 1;
+			uniformBySpacing = false;
+			uniformCount = FragmentDistribution.UNIFORM_COUNT;
+			every = 100;
 			
 			// Create/Update prefs node keys
 			prefs.putBoolean(AUTO, auto);
@@ -392,8 +402,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			prefs.putInt(LSP, lsp);
 			prefs.putInt(LHOFF, lhoff);
 			prefs.putInt(LVOFF, lvoff);
-			prefs.putInt(DLO, dlo);
-			prefs.putInt(DHI, dhi);
+			prefs.putBoolean(UNIFORMBYSPACING, uniformBySpacing);
+			prefs.putInt(UNIFORMCOUNT, uniformCount);
 			prefs.putInt(EVERY, every);
 		}
 	}
@@ -414,11 +424,15 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			degBG = savedState.degBG;
 			polyDerivative = savedState.polyDerivative;
 			tolPK = savedState.tolPK;
-			areaDrift = savedState.areaDrift;
+			// Files saved before Smoothness existed have none: keep the default
+			if (savedState.smoothness != null) smoothness = savedState.smoothness;
 			sdDrift = savedState.sdDrift;
-			dlo = savedState.dlo;
-			dhi = savedState.dhi;
-			every = savedState.every;
+			uniformBySpacing = savedState.uniformBySpacing;
+			if (savedState.logCount > 0) logCount = savedState.logCount;
+			if (savedState.uniformCount > 0) {
+				uniformCount = savedState.uniformCount;
+				every = savedState.every;
+			}
 		}
 	}
 
@@ -558,7 +572,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		labelPolyDerivative = new JLabel(
 			"Max Polynomial Derivative (grayvalue/px)");
 		labelTolPK = new JLabel("Peak Tolerance (fraction)");
-		labelAreaDrift = new JLabel("Area Drift ");
+		labelSmoothness = new JLabel("Smoothness ");
 		labelSDDrift = new JLabel("SD Drift ");
 
 		int minDegBG = -1; int maxDegBG = 15;
@@ -590,15 +604,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		((JSpinner.DefaultEditor) textTolPK.getEditor()).getTextField().setColumns(
 			SPINNER_COLUMNS);
 
-		double minAreaDrift = 0.001; double maxAreaDrift = 1.00;
-		areaDrift = areaDrift < minAreaDrift ? minAreaDrift : areaDrift;
-		areaDrift = areaDrift > maxAreaDrift ? maxAreaDrift : areaDrift;
-		textAreaDrift = new JSpinner(
-				new SpinnerNumberModel(areaDrift, minAreaDrift, maxAreaDrift, 0.001));
-		textAreaDrift.setEditor(new JSpinner.NumberEditor(textAreaDrift, "###.###"));
-		textAreaDrift.setBorder(BorderFactory.createCompoundBorder(textAreaDrift
+		smoothness = Math.max(0, Math.min(MAX_SMOOTHNESS, smoothness));
+		textSmoothness = new JSpinner(new SpinnerNumberModel(smoothness, 0,
+			MAX_SMOOTHNESS, 1));
+		textSmoothness.setEditor(new JSpinner.NumberEditor(textSmoothness, "###0.##"));
+		textSmoothness.setBorder(BorderFactory.createCompoundBorder(textSmoothness
 			.getBorder(), BorderFactory.createEmptyBorder(0, 2, 0, 2)));
-		((JSpinner.DefaultEditor) textAreaDrift.getEditor()).getTextField()
+		((JSpinner.DefaultEditor) textSmoothness.getEditor()).getTextField()
 			.setColumns(SPINNER_COLUMNS);
 		textSDDrift = new JSpinner(new SpinnerNumberModel(sdDrift, 1.0, 5.0,
 			0.1));
@@ -638,7 +650,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		settingsPanel.add(labelTolPK, c2);
 		c2.gridx = 0; c2.gridy = 3;
 		c2.weightx = 0.1;
-		settingsPanel.add(labelAreaDrift, c2);
+		settingsPanel.add(labelSmoothness, c2);
 		c2.gridx = 0; c2.gridy = 4;
 		c2.weightx = 0.1;
 		settingsPanel.add(labelSDDrift, c2);
@@ -655,7 +667,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		settingsPanel.add(textTolPK, c2);
 		c2.gridx = 1; c2.gridy = 3;
 		c2.weightx = 0.0;
-		settingsPanel.add(textAreaDrift, c2);
+		settingsPanel.add(textSmoothness, c2);
 		c2.gridx = 1; c2.gridy = 4;
 		c2.weightx = 0.0;
 		settingsPanel.add(textSDDrift, c2);
@@ -727,23 +739,29 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		setToolTip("Shape of the background under each lane, -1 to 15 (default " +
 			"2).<br>" + "-1: no background; 0: constant; 1: straight slope; 2: " +
 			"gentle curve.<br>" + "Higher degrees follow uneven backgrounds but " +
-			"can absorb broad bands.", labelDegBG, textDegBG);
+			"can absorb broad bands.<br>" + "In Continuum fits, only for the ladder " +
+			"lane; the other lanes get a flat background<br>" + "at 98 % of their " +
+			"lowest intensity.", labelDegBG, textDegBG);
 		setToolTip("Limit on the background's steepness, as its average slope<br>" +
 			"in gray values per pixel, 0 to 10 (default 10). 0 forces a flat " +
-			"background.", labelPolyDerivative, textPolyDerivative);
+			"background.<br>" + "In Continuum fits, only for the ladder lane.",
+			labelPolyDerivative, textPolyDerivative);
 		setToolTip("How much a band must stand out to be detected, as a " +
 			"fraction<br>" + "of the lane's intensity range, 0.01 to 1 (default " +
 			"0.1).<br>" + "Lower it to catch faint bands; raise it if noise is " +
 			"detected as bands.<br>" + "Used in Banded fits, and for the ladder " +
 			"lane in both fit types.", labelTolPK, textTolPK);
-		setToolTip("Continuum only. How far the fragments' fitted areas may<br>" +
-			"depart from the distribution's proportions, 0.001 to 1 (default " +
-			"0.1).<br>" + "Small values keep the distribution's shape; larger " +
-			"ones follow the data.", labelAreaDrift, textAreaDrift);
-		setToolTip("Continuum only. How far each fragment's width may depart<br>" +
-			"from the width expected from the ladder, as a factor, 1 to 5 " +
-			"(default 1).<br>" + "1 keeps the widths fixed; 2 allows half to " +
-			"double.", labelSDDrift, textSDDrift);
+		setToolTip("Continuum only. How strongly neighbouring fragments' areas<br>" +
+			"are kept alike, 0 to 1000 (default 10). A sharp change from one<br>" +
+			"fragment to the next only survives where the profile has one.<br>" +
+			"0 lets each area follow the data alone, which can zig-zag.",
+			labelSmoothness, textSmoothness);
+		setToolTip("Continuum only. How much the fit may widen or narrow all of<br>" +
+			"a lane's fragment peaks together, from the widths of the ladder<br>" +
+			"bands, as a factor, 1 to 5 (default 1: the ladder's widths).<br>" +
+			"Helps when the distribution has few lengths, by filling the gaps<br>" +
+			"between them; with many, e.g. Log Spaced, it makes no difference.",
+			labelSDDrift, textSDDrift);
 
 		setToolTip("Marks the bands on the image: fitted in magenta,<br>" +
 			"guesses in blue, custom peaks in green.", chkBoxBands);
@@ -756,7 +774,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			"of its bands are visible in the ladder lane.", cmbBoxLadderType);
 		setToolTip("Continuum only. The fragment lengths expected in the " +
 			"sample,<br>" + "and how common each one is. More lengths make fits " +
-			"slower.", cmbBoxDist);
+			"slower.<br>" + "Uniform and Log Spaced cover each lane from bottom " +
+			"to top;<br>" + "Log Spaced puts more lengths among small fragments.",
+			cmbBoxDist);
 		setToolTip("While on, click in a plot to add a custom peak there,<br>" +
 			"or near a green dot to remove it. Custom peaks are used<br>" +
 			"by the next fit, in addition to or in place of detected bands.",
@@ -839,7 +859,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		fitter.setDegBG(degBG);
 		fitter.setPolyDerivative(polyDerivative);
 		fitter.setTolPK(tolPK);
-		fitter.setAreaDrift(areaDrift);
+		fitter.setSmoothness(smoothness);
 		fitter.setSDDrift(sdDrift);
 	}
 
@@ -857,7 +877,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textDegBG.addChangeListener(this);
 		textPolyDerivative.addChangeListener(this);
 		textTolPK.addChangeListener(this);
-		textAreaDrift.addChangeListener(this);
+		textSmoothness.addChangeListener(this);
 		textSDDrift.addChangeListener(this);
 		
 		chkBoxBands.addActionListener(this);
@@ -1427,12 +1447,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		st.degBG = degBG;
 		st.polyDerivative = polyDerivative;
 		st.tolPK = tolPK;
-		st.areaDrift = areaDrift;
+		st.smoothness = smoothness;
 		st.sdDrift = sdDrift;
 		st.continuum = buttonContinuum.isSelected();
 		st.dist = cmbBoxDist.getSelectedIndex();
-		st.dlo = dlo;
-		st.dhi = dhi;
+		st.uniformBySpacing = uniformBySpacing;
+		st.uniformCount = uniformCount;
+		st.logCount = logCount;
 		st.every = every;
 		st.customPeaks = allCustomPeaks();
 		st.fitDone = fitDone;
@@ -1493,13 +1514,13 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	}
 
 	/**
-	 * Greys out the controls the selected fit type doesn't use: Area Drift, SD
+	 * Greys out the controls the selected fit type doesn't use: Smoothness, SD
 	 * Drift and the fragment distribution are for Continuum fits only, and the
 	 * distribution also needs a ladder lane.
 	 */
 	private void updateFitTypeControls() {
 		final boolean continuum = buttonContinuum.isSelected();
-		for (final Component c : new Component[] { labelAreaDrift, textAreaDrift,
+		for (final Component c : new Component[] { labelSmoothness, textSmoothness,
 			labelSDDrift, textSDDrift })
 			c.setEnabled(continuum);
 		cmbBoxDist.setEnabled(continuum && ladderLaneInt != noLadderLane);
@@ -1664,10 +1685,10 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			fitter.setTolPK(tolPK);
 			prefs.putDouble(TOLPK, tolPK);
 		}
-		else if (o == textAreaDrift) {
-			areaDrift = (double) textAreaDrift.getModel().getValue();
-			fitter.setAreaDrift(areaDrift);
-			prefs.putDouble(AREADRIFT, areaDrift);
+		else if (o == textSmoothness) {
+			smoothness = (double) textSmoothness.getModel().getValue();
+			fitter.setSmoothness(smoothness);
+			prefs.putDouble(SMOOTHNESS, smoothness);
 		}
 		else if (o == textSDDrift) {
 			sdDrift = (double) textSDDrift.getModel().getValue();
@@ -1813,7 +1834,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			" fragment lengths per lane,\nand could take roughly " + time +
 			". It can be stopped with the Stop\nbutton.\n \n" +
 			"Fewer lengths fit much faster: for a Uniform distribution, use\n" +
-			"a coarser Every step or a narrower range.");
+			"fewer peaks or a wider spacing.");
 		gd.setOKLabel("Fit Anyway");
 		gd.showDialog();
 		return gd.wasOKed();
@@ -1850,7 +1871,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private void setFitting(final boolean on) {
 		final Component[] controls = { buttonAuto, buttonManual, textNLanes,
 			sliderW, sliderH, sliderSp, sliderHOff, sliderVOff, textDegBG,
-			textPolyDerivative, textTolPK, textAreaDrift, textSDDrift, buttonBands,
+			textPolyDerivative, textTolPK, textSmoothness, textSDDrift, buttonBands,
 			buttonContinuum, chkBoxBands, cmbBoxLadderLane, cmbBoxLadderType,
 			cmbBoxDist, buttonEditPeaks, buttonResetCustomPeaks };
 		if (on) {
@@ -2253,40 +2274,59 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
-	/** The Uniform dialog's note on its number of fragment lengths */
-	private static String uniformCountText(final int lower, final int upper,
-		final int every)
-	{
-		if (every <= 0 || upper < lower) return "";
-		final int n = FragmentDistribution.uniformCount(lower, upper, every);
-		return n + " fragment lengths" + (n > SLOW_FRAGMENTS
-			? ": slow to fit, consider a coarser step" : "");
+	/** The Log Spaced dialog's note on the time a fit takes */
+	private static String logCountText(final int n) {
+		if (n < 2) return "";
+		final double seconds = FitTimer.estimatedSeconds(n);
+		return "About " + FitTimer.format(seconds) + " per lane on this " +
+			"computer" + (seconds > SLOW_FIT_SECONDS ? ": slow, consider fewer"
+				: "");
+	}
+
+	/** Ways to set a Uniform distribution, in its dialog */
+	private static final String[] UNIFORM_SET_BY = { "Number of peaks",
+		"Spacing" };
+
+	/**
+	 * The Uniform dialog's note on the number of fragment lengths per lane
+	 *
+	 * @param value the number of peaks, or the spacing in bp
+	 */
+	private String uniformCountText(final boolean bySpacing, final int value) {
+		if (value <= 0) return "";
+		String n;
+		int most = value;
+		if (bySpacing) {
+			final int[] counts = fitter.uniformCounts(value);
+			if (counts == null) return "The number of peaks depends on each " +
+				"lane's size range, known after a fit.";
+			most = counts[1];
+			n = counts[0] == counts[1] ? "" + most : counts[0] + " to " + most;
+		}
+		else n = "" + Math.max(2, value);
+		return n + " peaks per lane" + (most > SLOW_FRAGMENTS
+			? ": slow to fit, consider fewer" : "");
 	}
 
 	/** Sets the fitter's fragment distribution from the selection */
 	private void loadDistribution(final boolean ask) {
 		if (cmbBoxDist.getSelectedIndex() == 0) return;
-		if (cmbBoxDist.getSelectedItem().equals("Uniform")) {
+		if (cmbBoxDist.getSelectedItem().equals("Log Spaced")) {
 			if (ask) {
-				final String title = "DISTRIBUTION RANGE";
-				final String message =
-					"Enter the basepair-length range for the distribution.";
-				final GenericDialog gd = new GenericDialog(title);
-				gd.addMessage(message);
-				gd.addNumericField("Lower", dlo, 0, 5, "bp");
-				gd.addNumericField("Upper", dhi, 0, 5, "bp");
-				gd.addNumericField("Every", every, 0, 5, "bp");
+				final GenericDialog gd = new GenericDialog("LOG SPACED DISTRIBUTION");
+				gd.addMessage("Fragment lengths evenly spaced in log(bp), from the\n" +
+					"bottom to the top of each lane, with sizes from the ladder:\n" +
+					"more of them among small fragments than among large ones.");
+				gd.addNumericField("Number of fragments", logCount, 0, 5, "");
 				// Padded: the label keeps the width it's laid out with
-				gd.addMessage(String.format("%-60s", uniformCountText(dlo, dhi,
-					every)));
+				gd.addMessage(String.format("%-70s", logCountText(logCount)));
 				final Label count = (Label) gd.getMessage();
 				@SuppressWarnings("unchecked")
 				final Vector<TextField> fields = gd.getNumericFields();
 				gd.addDialogListener((dialog, event) -> {
 					try {
-						count.setText(uniformCountText(Integer.parseInt(fields.get(0)
-							.getText().trim()), Integer.parseInt(fields.get(1).getText()
-								.trim()), Integer.parseInt(fields.get(2).getText().trim())));
+						count.setText(logCountText(Integer.parseInt(fields.get(0)
+							.getText().trim())));
 					}
 					catch (final NumberFormatException e) {
 						count.setText("");
@@ -2295,15 +2335,59 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 				});
 				gd.showDialog();
 				if (!gd.wasOKed()) return;
-				dlo = (int) gd.getNextNumber();
-				dhi = (int) gd.getNextNumber();
-				every = (int) gd.getNextNumber();
-				prefs.putInt(DLO, dlo);
-				prefs.putInt(DHI, dhi);
+				final int n = (int) gd.getNextNumber();
+				if (n >= 2) logCount = n;
+				prefs.putInt(LOGCOUNT, logCount);
+			}
+			fitter.setLogDistribution(logCount);
+		}
+		else if (cmbBoxDist.getSelectedItem().equals("Uniform")) {
+			if (ask) {
+				final GenericDialog gd = new GenericDialog("UNIFORM DISTRIBUTION");
+				gd.addMessage("Fragment lengths evenly spaced in bp, from the bottom\n" +
+					"to the top of each lane, with sizes from the ladder.");
+				gd.addChoice("Set by", UNIFORM_SET_BY,
+					UNIFORM_SET_BY[uniformBySpacing ? 1 : 0]);
+				gd.addNumericField("Number of peaks", uniformCount, 0, 5, "");
+				gd.addNumericField("Spacing", every, 0, 5, "bp");
+				// Padded: the label keeps the width it's laid out with
+				gd.addMessage(String.format("%-70s", uniformCountText(
+					uniformBySpacing, uniformBySpacing ? every : uniformCount)));
+				final Label count = (Label) gd.getMessage();
+				@SuppressWarnings("unchecked")
+				final Vector<Choice> choices = gd.getChoices();
+				@SuppressWarnings("unchecked")
+				final Vector<TextField> fields = gd.getNumericFields();
+				final Runnable update = () -> {
+					final boolean bySpacing = choices.get(0).getSelectedIndex() == 1;
+					fields.get(0).setEnabled(!bySpacing);
+					fields.get(1).setEnabled(bySpacing);
+					try {
+						count.setText(uniformCountText(bySpacing, Integer.parseInt(
+							fields.get(bySpacing ? 1 : 0).getText().trim())));
+					}
+					catch (final NumberFormatException e) {
+						count.setText("");
+					}
+				};
+				update.run();
+				gd.addDialogListener((dialog, event) -> {
+					update.run();
+					return true;
+				});
+				gd.showDialog();
+				if (!gd.wasOKed()) return;
+				uniformBySpacing = gd.getNextChoiceIndex() == 1;
+				final int n = (int) gd.getNextNumber();
+				final int spacing = (int) gd.getNextNumber();
+				if (n >= 2) uniformCount = n;
+				if (spacing >= 1) every = spacing;
+				prefs.putBoolean(UNIFORMBYSPACING, uniformBySpacing);
+				prefs.putInt(UNIFORMCOUNT, uniformCount);
 				prefs.putInt(EVERY, every);
 			}
-			fitter.setFragmentDistribution(FragmentDistribution.uniform(dlo, dhi,
-				every));
+			fitter.setUniformDistribution(uniformBySpacing ? 0 : uniformCount,
+				every);
 		}
 		else {
 			final String filename = FragmentDistribution.FOLDER + cmbBoxDist
