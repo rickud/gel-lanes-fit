@@ -115,7 +115,7 @@ The plugin then:
 
 While the lanes are being fitted, the window stays responsive: the status bar shows how many lanes are done and about how long the rest will take, and **Fit** becomes **Stop**. The settings, the lanes and the custom peaks can't be changed until the fit ends. Click **Stop** to end a fit that takes too long; it stops within a few seconds, keeps the ladder lane's fit, and drops the other lanes' partial results. Closing the plugin window also stops the fit.
 
-If you change the lanes or re-run a fit, the plugin warns that the current fit will be replaced. Tick **Don't show this again** to skip that warning in future.
+If you change the lanes or re-run a fit, the plugin warns that the current fit will be replaced; **Cancel** leaves the lanes and the fit as they were. Tick **Don't show this again** to skip that warning in future. This unticks **Warn Before Replacing a Fit** in the main window; tick it to bring the warning back.
 
 Tick **Show Bands** to mark the bands on the image as short ticks at each lane's edges: magenta for fitted bands, blue for the initial guesses, green for custom peaks. The setting is remembered.
 
