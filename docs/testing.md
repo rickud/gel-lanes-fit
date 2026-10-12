@@ -52,7 +52,7 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 - [ ] **Slow fit warning:** a Continuum fit with a Uniform distribution of a few hundred lengths asks before fitting, mentioning the Stop button; **Cancel** stops after the ladder lane, **Fit Anyway** fits.
 - [ ] **Stop:** during a slow fit, the window stays responsive, the status bar shows the lanes fitted and the estimated time left, and **Fit** reads **Stop**; the settings, lane edits and Edit Custom Peaks are disabled. Clicking **Stop** ends the fit within a few seconds with a message; the ladder lane's fit is kept and the controls are as before. Fitting again then works normally.
 - [ ] **Closing during a fit:** closing the plugin window while a fit runs stops it.
-- [ ] **Fit warning:** with a fit shown, changing the lanes or fitting again shows the warning; **Don't show this again** stops it.
+- [ ] **Fit warning:** with **Warn Before Replacing a Fit** ticked and a fit shown, changing the lanes (sliders, Number of Lanes, a manual lane, or switching between automatic and manual) or fitting again shows the warning. Ticking **Don't show this again** in it unticks **Warn Before Replacing a Fit** and stops the warning; ticking the checkbox again brings it back, also after a restart.
 
 ### Custom peaks and display
 

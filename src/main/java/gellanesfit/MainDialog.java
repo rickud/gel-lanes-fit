@@ -263,6 +263,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private ButtonGroup buttonGroupFitType;
 
 	private JCheckBox chkBoxBands;
+	private JCheckBox chkBoxWarnFit;
 	private JComboBox<String> cmbBoxLadderLane;
 	private JComboBox<String> cmbBoxLadderType;
 	private JComboBox<String> cmbBoxDist;
@@ -608,6 +609,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			.setColumns(SPINNER_COLUMNS);
 
 		chkBoxBands = new JCheckBox("Show Bands");
+		// The reverse of "Don't show this again" in the warning itself
+		chkBoxWarnFit = new JCheckBox("Warn Before Replacing a Fit", !prefs
+			.getBoolean(SKIPFITWARNING, false));
 
 		final String[] lanes = new String[1 + nLanes];
 		lanes[0] = "Select Ladder Lane";
@@ -660,25 +664,27 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		c2.gridwidth = 1; c2.gridheight = 1;
 		c2.fill = GridBagConstraints.HORIZONTAL;
 		settingsPanel.add(chkBoxBands, c2);
-
 		c2.gridx = 0; c2.gridy = 6;
+		settingsPanel.add(chkBoxWarnFit, c2);
+
+		c2.gridx = 0; c2.gridy = 7;
 		c2.gridwidth = 3; c2.gridheight = 1;
 		settingsPanel.add(cmbBoxLadderLane, c2);
 
-		c2.gridx = 0; c2.gridy = 7;
+		c2.gridx = 0; c2.gridy = 8;
 		settingsPanel.add(cmbBoxLadderType, c2);
 
-		c2.gridx = 0; c2.gridy = 8;
+		c2.gridx = 0; c2.gridy = 9;
 		settingsPanel.add(cmbBoxDist, c2);
 
-		c2.gridx = 0; c2.gridy = 9;
+		c2.gridx = 0; c2.gridy = 10;
 		c2.gridwidth = 1;
 		settingsPanel.add(buttonEditPeaks, c2);
 
-		c2.gridx = 0; c2.gridy = 10;
+		c2.gridx = 0; c2.gridy = 11;
 		settingsPanel.add(buttonResetCustomPeaks, c2);
 
-		c2.gridx = 0; c2.gridy = 11;
+		c2.gridx = 0; c2.gridy = 12;
 		c2.gridwidth = GridBagConstraints.REMAINDER;
 		c2.gridheight = 1;
 		c2.weighty = 1.0;
@@ -741,6 +747,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		setToolTip("Marks the bands on the image: fitted in magenta,<br>" +
 			"guesses in blue, custom peaks in green.", chkBoxBands);
+		setToolTip("Asks before a change to the lanes, or a new fit, replaces<br>" +
+			"the fit shown. Unticked by \"Don't show this again\" in that<br>" +
+			"warning; tick it to bring the warning back.", chkBoxWarnFit);
 		setToolTip("The lane with the size ladder. It's fitted first, and its<br>" +
 			"bands label the plots of every lane.", cmbBoxLadderLane);
 		setToolTip("The ladder's band sizes. After choosing it, you pick which<br>" +
@@ -843,6 +852,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textSDDrift.addChangeListener(this);
 		
 		chkBoxBands.addActionListener(this);
+		chkBoxWarnFit.addActionListener(this);
 		buttonBands.addActionListener(this);
 		buttonContinuum.addActionListener(this);
 
@@ -911,13 +921,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	/** Warns that the fit will be lost, unless the user opted out */
 	private boolean askFitReset() {
-		if (prefs.getBoolean(SKIPFITWARNING, false)) return true;
+		if (!chkBoxWarnFit.isSelected()) return true;
 		final GenericDialog gd = new GenericDialog("WARNING!");
 		gd.addMessage(warningFit);
 		gd.addCheckbox("Don't show this again", false);
 		gd.showDialog();
 		if (!gd.wasOKed()) return false;
-		if (gd.getNextBoolean()) prefs.putBoolean(SKIPFITWARNING, true);
+		if (gd.getNextBoolean()) {
+			prefs.putBoolean(SKIPFITWARNING, true);
+			chkBoxWarnFit.setSelected(false);
+		}
 		return true;
 	}
 
@@ -2116,6 +2129,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		if (e.getSource().equals(chkBoxBands)) {
 			reDrawROIs(imp, "none");
 			saveState();
+		}
+		if (e.getSource().equals(chkBoxWarnFit)) {
+			prefs.putBoolean(SKIPFITWARNING, !chkBoxWarnFit.isSelected());
 		}
 
 		// ComboBoxes
