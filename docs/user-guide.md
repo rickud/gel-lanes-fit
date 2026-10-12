@@ -78,7 +78,7 @@ Choose how lanes are placed at the top of the main window:
   - **Move or resize a lane:** drag it or its handles.
   - **Delete a lane:** click inside it (not on a handle) and confirm.
 
-  Lanes are numbered from left to right. Your manual lanes are kept when you switch to Automatic and back.
+  Lanes are numbered from left to right. Your manual lanes are kept when you switch to Automatic and back. Clicking the mode that's already selected changes nothing.
 
 Make each lane a little narrower than the band so the profile isn't diluted by the gaps between lanes, and tall enough to cover every band you want to fit.
 
@@ -115,7 +115,7 @@ The plugin then:
 
 While the lanes are being fitted, the window stays responsive: the status bar shows how many lanes are done and about how long the rest will take, and **Fit** becomes **Stop**. The settings, the lanes and the custom peaks can't be changed until the fit ends. Click **Stop** to end a fit that takes too long; it stops within a few seconds, keeps the ladder lane's fit, and drops the other lanes' partial results. Closing the plugin window also stops the fit.
 
-If you change the lanes or re-run a fit, the plugin warns that the current fit will be replaced; **Cancel** leaves the lanes and the fit as they were. Tick **Don't show this again** to skip that warning in future. This unticks **Warn Before Replacing a Fit** in the main window; tick it to bring the warning back.
+If you change the lanes (with the sliders, Number of Lanes, by editing a manual lane, or by switching between automatic and manual lanes) or re-run a fit, the plugin warns that the current fit will be replaced; **Cancel** leaves the lanes, the controls and the fit as they were. Tick **Don't show this again** to skip that warning in future. This unticks **Warn Before Replacing a Fit** in the main window; tick it to bring the warning back.
 
 Tick **Show Bands** to mark the bands on the image as short ticks at each lane's edges: magenta for fitted bands, blue for the initial guesses, green for custom peaks. The setting is remembered.
 
@@ -237,6 +237,7 @@ The folder is created when you start the plugin on the image. `saved-state.bak` 
 
 - Click **Open Data Folder** in the main window to open this folder in Finder or Explorer. Hovering over the button shows the full path.
 - The next time you open the same image, the plugin restores the lanes, ladder, settings and custom peaks from `saved-state.bak` and repeats the last fit. A fit that never finished isn't repeated: see [The last fit isn't repeated at startup](#the-last-fit-isnt-repeated-at-startup).
+- A saved state from a newer version of the plugin opens in an older one too; a fragment distribution the older version doesn't have is left unselected, and the Console says so.
 - Results from versions before 1.0.8 were saved in `gel-lanes-fit/<image name without spaces>/` next to the image. The plugin moves that folder to the new name the first time you open the image, so your saved state carries over.
 - If the image has never been saved to disk, the folder is created in the Fiji installation folder instead.
 
