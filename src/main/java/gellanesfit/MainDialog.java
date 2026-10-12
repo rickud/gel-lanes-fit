@@ -795,17 +795,19 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final boolean stateLoaded = !savedRects.isEmpty() || ladder != null;
 		int ladderType = 0;
 		if (stateLoaded && ladder != null) ladderType = ladder.getType();
+		// Set up the lanes directly: a click on the mode already selected
+		// does nothing
 		if (auto) {
-			buttonAuto.doClick();
+			switchToAutomaticLanes();
 		}
 		else {
 			if (!stateLoaded || rois.size() == 0) { // go back to AUTO
 				auto = true;
 				prefs.putBoolean(AUTO, auto);
-				buttonAuto.doClick();
+				switchToAutomaticLanes();
 			}
 			else { // Go to MANUAL
-				buttonManual.doClick();
+				switchToManualLanes();
 			}
 		}
 		buttonAuto.setSelected(auto);
@@ -2094,7 +2096,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			buttonManual))
 		{
 			final boolean toAuto = e.getSource().equals(buttonAuto);
-			if (toAuto != auto && fitDone && !askFitReset()) {
+			if (toAuto == auto) return; // Already in that mode: nothing to do
+			if (fitDone && !askFitReset()) {
 				(toAuto ? buttonManual : buttonAuto).setSelected(true);
 				return;
 			}
