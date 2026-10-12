@@ -388,7 +388,8 @@ class Fitter {
 		RealVector poly = new ArrayRealVector();
 		poly = poly.append(degBG).append(new ArrayRealVector(degBG + 1));
 
-		for (final DataSeries d : inputData) {
+		// The background starts at the lane's minimum; degree -1 has none
+		if (degBG >= 0) for (final DataSeries d : inputData) {
 			if (d.getLane() == lane) poly.setEntry(1, d.getMinY());
 		}
 		
@@ -415,10 +416,20 @@ class Fitter {
 	public List<DataSeries> doFit(final List<Integer> lanes) {
 		
 		final ArrayList<DataSeries> in = new ArrayList<>();
+		final List<Integer> missing = new ArrayList<>();
 		for (final int i : lanes) {
+			final int before = in.size();
 			for (final DataSeries d : inputData) {
 				if (d.getLane() == i) in.add(d);
 			}
+			if (in.size() == before) missing.add(i);
+		}
+		if (!missing.isEmpty()) {
+			final List<Integer> have = new ArrayList<>();
+			for (final DataSeries d : inputData)
+				have.add(d.getLane());
+			log.warn("No profile for lanes " + missing + " (profiles: lanes " +
+				have + "); they aren't fitted");
 		}
 		final ArrayList<DataSeries> out = new ArrayList<>();
 		final StopWatch sw = new StopWatch();
@@ -517,8 +528,8 @@ class Fitter {
 		allFittedList.addAll(fittedPeaks);
 
 		// Create new DataSeries for Plotter
-		final PolynomialFunction bg = new PolynomialFunction(poly.getSubVector(1,
-			degBG + 1).toArray());
+		final PolynomialFunction bg = new PolynomialFunction(degBG < 0
+			? new double[] { 0 } : poly.getSubVector(1, degBG + 1).toArray());
 		output.add(new DataSeries("Background", lane, DataSeries.BACKGROUND, xvals,
 			bg, Plotter.bgColor));
 

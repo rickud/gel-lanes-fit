@@ -263,6 +263,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private ButtonGroup buttonGroupFitType;
 
 	private JCheckBox chkBoxBands;
+	private JCheckBox chkBoxWarnFit;
 	private JComboBox<String> cmbBoxLadderLane;
 	private JComboBox<String> cmbBoxLadderType;
 	private JComboBox<String> cmbBoxDist;
@@ -322,6 +323,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 	private void setupMainDialog() {
 		readPreferences();
 		applySavedState();
+		keepLanesOnImage(null); // e.g. a Space saved too large for the lanes
 		buildModeButtons();
 		buildTopPanel();
 		buildSliderPanel();
@@ -607,6 +609,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			.setColumns(SPINNER_COLUMNS);
 
 		chkBoxBands = new JCheckBox("Show Bands");
+		// The reverse of "Don't show this again" in the warning itself
+		chkBoxWarnFit = new JCheckBox("Warn Before Replacing a Fit", !prefs
+			.getBoolean(SKIPFITWARNING, false));
 
 		final String[] lanes = new String[1 + nLanes];
 		lanes[0] = "Select Ladder Lane";
@@ -659,25 +664,27 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		c2.gridwidth = 1; c2.gridheight = 1;
 		c2.fill = GridBagConstraints.HORIZONTAL;
 		settingsPanel.add(chkBoxBands, c2);
-
 		c2.gridx = 0; c2.gridy = 6;
+		settingsPanel.add(chkBoxWarnFit, c2);
+
+		c2.gridx = 0; c2.gridy = 7;
 		c2.gridwidth = 3; c2.gridheight = 1;
 		settingsPanel.add(cmbBoxLadderLane, c2);
 
-		c2.gridx = 0; c2.gridy = 7;
+		c2.gridx = 0; c2.gridy = 8;
 		settingsPanel.add(cmbBoxLadderType, c2);
 
-		c2.gridx = 0; c2.gridy = 8;
+		c2.gridx = 0; c2.gridy = 9;
 		settingsPanel.add(cmbBoxDist, c2);
 
-		c2.gridx = 0; c2.gridy = 9;
+		c2.gridx = 0; c2.gridy = 10;
 		c2.gridwidth = 1;
 		settingsPanel.add(buttonEditPeaks, c2);
 
-		c2.gridx = 0; c2.gridy = 10;
+		c2.gridx = 0; c2.gridy = 11;
 		settingsPanel.add(buttonResetCustomPeaks, c2);
 
-		c2.gridx = 0; c2.gridy = 11;
+		c2.gridx = 0; c2.gridy = 12;
 		c2.gridwidth = GridBagConstraints.REMAINDER;
 		c2.gridheight = 1;
 		c2.weighty = 1.0;
@@ -740,6 +747,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 		setToolTip("Marks the bands on the image: fitted in magenta,<br>" +
 			"guesses in blue, custom peaks in green.", chkBoxBands);
+		setToolTip("Asks before a change to the lanes, or a new fit, replaces<br>" +
+			"the fit shown. Unticked by \"Don't show this again\" in that<br>" +
+			"warning; tick it to bring the warning back.", chkBoxWarnFit);
 		setToolTip("The lane with the size ladder. It's fitted first, and its<br>" +
 			"bands label the plots of every lane.", cmbBoxLadderLane);
 		setToolTip("The ladder's band sizes. After choosing it, you pick which<br>" +
@@ -785,17 +795,19 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final boolean stateLoaded = !savedRects.isEmpty() || ladder != null;
 		int ladderType = 0;
 		if (stateLoaded && ladder != null) ladderType = ladder.getType();
+		// Set up the lanes directly: a click on the mode already selected
+		// does nothing
 		if (auto) {
-			buttonAuto.doClick();
+			switchToAutomaticLanes();
 		}
 		else {
 			if (!stateLoaded || rois.size() == 0) { // go back to AUTO
 				auto = true;
 				prefs.putBoolean(AUTO, auto);
-				buttonAuto.doClick();
+				switchToAutomaticLanes();
 			}
 			else { // Go to MANUAL
-				buttonManual.doClick();
+				switchToManualLanes();
 			}
 		}
 		buttonAuto.setSelected(auto);
@@ -811,7 +823,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		cmbBoxLadderType.setEnabled(ladder != null);
 		updateLadderLane();
 		updateLadderType();
-		cmbBoxDist.setSelectedIndex(savedState == null ? 0 : savedState.dist);
+		int dist = savedState == null ? 0 : savedState.dist;
+		if (dist < 0 || dist >= distStr.length) {
+			// Saved by a newer version with more distributions
+			log.warn("The saved fragment distribution (" + dist + ") isn't " +
+				"available in this version; choose one again.");
+			dist = 0;
+		}
+		cmbBoxDist.setSelectedIndex(dist);
 		loadDistribution(false);
 
 		buttonEditPeaks.setEnabled(false);
@@ -842,6 +861,7 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		textSDDrift.addChangeListener(this);
 		
 		chkBoxBands.addActionListener(this);
+		chkBoxWarnFit.addActionListener(this);
 		buttonBands.addActionListener(this);
 		buttonContinuum.addActionListener(this);
 
@@ -910,13 +930,16 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 
 	/** Warns that the fit will be lost, unless the user opted out */
 	private boolean askFitReset() {
-		if (prefs.getBoolean(SKIPFITWARNING, false)) return true;
+		if (!chkBoxWarnFit.isSelected()) return true;
 		final GenericDialog gd = new GenericDialog("WARNING!");
 		gd.addMessage(warningFit);
 		gd.addCheckbox("Don't show this again", false);
 		gd.showDialog();
 		if (!gd.wasOKed()) return false;
-		if (gd.getNextBoolean()) prefs.putBoolean(SKIPFITWARNING, true);
+		if (gd.getNextBoolean()) {
+			prefs.putBoolean(SKIPFITWARNING, true);
+			chkBoxWarnFit.setSelected(false);
+		}
 		return true;
 	}
 
@@ -1350,7 +1373,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			final Component[] c = logWindow.getContentPane().getComponents();
 
 			for (final int i : getAllLaneNumbers()) {
-				if (i != ladderLaneInt) {
+				// A lane that wasn't fitted has no distribution to show
+				if (i != ladderLaneInt && fitter.getFittedDistribution(i) != null) {
 					final String name = String.format("Lane %1$d", i);
 					final XYSeriesCollection dataset = new XYSeriesCollection();
 					dataset.addSeries(fitter.getFittedDistribution(i));
@@ -1594,56 +1618,36 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		final List<Object> fitDisruptors = new ArrayList<>(Arrays.asList(sliderW,
 			sliderH, sliderSp, sliderHOff, sliderVOff, textNLanes));
 
+		// Changes made here to keep the controls in step, not by the user
+		if (syncingLaneControls) return;
 		if (fitDisruptors.contains(o)) {
 			if (fitDone && !askFitReset()) {
-				textNLanes.setValue(nLanes);
+				syncLaneControls(); // back to the lanes as they are
 				return;
 			}
 		}
-		// ROI SLIDERS
-		if (o == sliderW) {
-			lw = sliderW.getValue();
-			prefs.putInt(LW, lw);
-			final String str = "Width ( " + lw + " px )";
-			setSliderTitle(sliderW, str);
-			sliderUpdate();
-		}
-		else if (o == sliderH) {
-			lh = sliderH.getValue();
-			prefs.putInt(LH, lh);
-			final String str = "Height ( " + lh + " px )";
-			setSliderTitle(sliderH, str);
-			sliderUpdate();
-		}
-		else if (o == sliderSp) {
-			lsp = sliderSp.getValue();
-			prefs.putInt(LSP, lsp);
-			final String str = "Spacing ( " + lsp + " px )";
-			setSliderTitle(sliderSp, str);
-			sliderUpdate();
-		}
-		else if (o == sliderHOff) {
-			lhoff = sliderHOff.getValue();
-			prefs.putInt(LHOFF, lhoff);
-			final String str = "Horizontal Offset ( " + lhoff + " px )";
-			setSliderTitle(sliderHOff, str);
-			sliderUpdate();
-		}
-		else if (o == sliderVOff) {
-			lvoff = sliderVOff.getValue();
-			prefs.putInt(LVOFF, lvoff);
-			final String str = "Vertical Offset ( " + lvoff + " px )";
-			setSliderTitle(sliderVOff, str);
-			sliderUpdate();
-		}
-		// SPINNERS
-		if (o == textNLanes) {
-			nLanes = (int) textNLanes.getModel().getValue();
+		// ROI SLIDERS and Number of Lanes
+		if (o == sliderW) lw = sliderW.getValue();
+		else if (o == sliderH) lh = sliderH.getValue();
+		else if (o == sliderSp) lsp = sliderSp.getValue();
+		else if (o == sliderHOff) lhoff = sliderHOff.getValue();
+		else if (o == sliderVOff) lvoff = sliderVOff.getValue();
+		else if (o == textNLanes) nLanes = (int) textNLanes.getModel().getValue();
+		if (fitDisruptors.contains(o)) {
+			keepLanesOnImage(o);
+			syncLaneControls();
 			prefs.putInt(NLANES, nLanes);
-			ladderLaneInt = ladderLaneInt <= nLanes ? ladderLaneInt : noLadderLane;
-			ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
+			prefs.putInt(LW, lw);
+			prefs.putInt(LH, lh);
+			prefs.putInt(LSP, lsp);
+			prefs.putInt(LHOFF, lhoff);
+			prefs.putInt(LVOFF, lvoff);
+			if (o == textNLanes) {
+				ladderLaneInt = ladderLaneInt <= nLanes ? ladderLaneInt : noLadderLane;
+				ladderLaneStr = ladderLaneInt == 0 ? "none" : "Lane " + ladderLaneInt;
+			}
 			sliderUpdate();
-			updateLadderLane();
+			if (o == textNLanes) updateLadderLane();
 		}
 		else if (o == textDegBG) {
 			degBG = (int) textDegBG.getModel().getValue();
@@ -1669,6 +1673,51 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			sdDrift = (double) textSDDrift.getModel().getValue();
 			fitter.setSDDrift(sdDrift);
 			prefs.putDouble(SDDRIFT, sdDrift);
+		}
+	}
+
+	/**
+	 * Keeps the automatic lanes on the image (see {@link AutoLanes#keepOnImage})
+	 *
+	 * @param changed the control changed, or null when restoring settings
+	 */
+	private void keepLanesOnImage(final Object changed) {
+		final AutoLanes.Changed c = changed == sliderW ? AutoLanes.Changed.WIDTH
+			: changed == sliderH ? AutoLanes.Changed.HEIGHT : changed == sliderSp
+				? AutoLanes.Changed.SPACE : changed == sliderHOff
+					? AutoLanes.Changed.H_OFFSET : changed == sliderVOff
+						? AutoLanes.Changed.V_OFFSET : changed == textNLanes
+							? AutoLanes.Changed.COUNT : AutoLanes.Changed.NONE;
+		final AutoLanes lanes = new AutoLanes(nLanes, lw, lh, lsp, lhoff, lvoff);
+		lanes.keepOnImage(iw, ih, c);
+		lw = lanes.width;
+		lh = lanes.height;
+		lsp = lanes.space;
+		lhoff = lanes.hOffset;
+		lvoff = lanes.vOffset;
+	}
+
+	/** True while the lane controls are being set to match the lanes */
+	private boolean syncingLaneControls = false;
+
+	/** Sets Number of Lanes and the sliders, and their titles, to the lanes */
+	private void syncLaneControls() {
+		syncingLaneControls = true;
+		try {
+			textNLanes.setValue(nLanes);
+			sliderW.setValue(lw);
+			sliderH.setValue(lh);
+			sliderSp.setValue(lsp);
+			sliderHOff.setValue(lhoff);
+			sliderVOff.setValue(lvoff);
+			setSliderTitle(sliderW, "Width ( " + lw + " px )");
+			setSliderTitle(sliderH, "Height ( " + lh + " px )");
+			setSliderTitle(sliderSp, "Space ( " + lsp + " px )");
+			setSliderTitle(sliderHOff, "Horizontal Offset ( " + lhoff + " px )");
+			setSliderTitle(sliderVOff, "Vertical Offset ( " + lvoff + " px )");
+		}
+		finally {
+			syncingLaneControls = false;
 		}
 	}
 
@@ -1826,6 +1875,48 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 	}
 
+	/**
+	 * The lanes with no profile because they're outside the image, e.g.
+	 * automatic lanes pushed off its edge by a large Space or Offset
+	 */
+	private List<Integer> lanesOffImage() {
+		final List<Integer> profiled = new ArrayList<>();
+		for (final DataSeries d : plotter.getProfiles())
+			profiled.add(d.getLane());
+		final List<Integer> off = new ArrayList<>();
+		for (final int l : getAllLaneNumbers())
+			if (!profiled.contains(l)) off.add(l);
+		return off;
+	}
+
+	/**
+	 * Before a fit: warns about lanes outside the image, which can't be
+	 * fitted. Without the ladder lane there's no fit; otherwise the user may
+	 * fit the lanes on the image.
+	 *
+	 * @return whether to go on with the fit
+	 */
+	private boolean confirmLanesOffImage() {
+		final List<Integer> off = lanesOffImage();
+		if (off.isEmpty()) return true;
+		final String lanes = (off.size() == 1 ? "Lane " : "Lanes ") + off
+			.toString().replaceAll("[\\[\\]]", "");
+		final String fix = "Move or resize the lanes so that they're on the " +
+			"image,\nfor example with a smaller Space or Horizontal Offset.";
+		if (off.contains(ladderLaneInt)) {
+			new MessageDialog(frame, "Lanes Outside the Image", lanes + (off
+				.size() == 1 ? " is" : " are") + " outside the image, including " +
+				"the ladder lane,\nso there's nothing to fit.\n \n" + fix);
+			return false;
+		}
+		final GenericDialog gd = new GenericDialog("Lanes Outside the Image");
+		gd.addMessage(lanes + (off.size() == 1 ? " is" : " are") +
+			" outside the image and can't be fitted.\n \n" + fix);
+		gd.setOKLabel("Fit the Others");
+		gd.showDialog();
+		return gd.wasOKed();
+	}
+
 	/** Fits the ladder lane, then the other lanes with the current settings */
 	private void runFit() {
 		if (ladderLaneInt == noLadderLane) {
@@ -1837,6 +1928,8 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			askUser("Ladder type not selected");
 			return;
 		}
+
+		if (!confirmLanesOffImage()) return;
 
 		// Remove everything in the plots, but the profile
 		plotter.setSelected(MainDialog.noLaneSelected);
@@ -1917,8 +2010,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		}
 
 		final List<Integer> otherLanes = new ArrayList<>();
+		final List<Integer> offImage = lanesOffImage();
 		for (final int i : getAllLaneNumbers()) {
-			if (i != ladderLaneInt) otherLanes.add(i);
+			if (i != ladderLaneInt && !offImage.contains(i)) otherLanes.add(i);
 		}
 		startFitting(otherLanes, fitted);
 	}
@@ -1997,6 +2091,18 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			runFit();
 		}
 
+		// Switching between automatic and manual lanes replaces the fit shown
+		if (e.getSource().equals(buttonAuto) || e.getSource().equals(
+			buttonManual))
+		{
+			final boolean toAuto = e.getSource().equals(buttonAuto);
+			if (toAuto == auto) return; // Already in that mode: nothing to do
+			if (fitDone && !askFitReset()) {
+				(toAuto ? buttonManual : buttonAuto).setSelected(true);
+				return;
+			}
+		}
+
 		if (e.getSource().equals(buttonAuto)) {
 			switchToAutomaticLanes();
 		}
@@ -2044,6 +2150,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		if (e.getSource().equals(chkBoxBands)) {
 			reDrawROIs(imp, "none");
 			saveState();
+		}
+		if (e.getSource().equals(chkBoxWarnFit)) {
+			prefs.putBoolean(SKIPFITWARNING, !chkBoxWarnFit.isSelected());
 		}
 
 		// ComboBoxes

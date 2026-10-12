@@ -35,7 +35,10 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 
 - [ ] **Automatic lanes:** changing **Number of Lanes** and each slider moves the rectangles on the image and updates the plots.
 - [ ] **Manual lanes:** switch to **Manual Rectangle Selection**. Draw a lane, move it, resize it; the plots follow. Click inside a lane and confirm: it's deleted and the lanes are renumbered from left to right.
-- [ ] **Switching modes:** switching back to Automatic and then to Manual again restores the manual lanes.
+- [ ] **Switching modes:** switching back to Automatic and then to Manual again restores the manual lanes. Clicking the mode that's already selected changes nothing: the profiles, plots and fit stay.
+- [ ] **Lanes stay on the image:** dragging **Width**, **Space** or **Horizontal Offset** to the right stops when the last lane reaches the image's right edge, and **Height** or **Vertical Offset** at its bottom edge; the slider and its value stop there too. Raising **Number of Lanes** beyond what fits shrinks Width and Space so every lane stays on the image.
+- [ ] **Cancelling the reset warning:** after a fit, move a slider and press **Cancel**: the slider goes back to where it was, matching the lanes.
+- [ ] **Lanes outside the image:** drag **Space** up until some lanes leave the image and click **Fit**. A warning names them; **Fit the Others** fits the lanes on the image and the LOG opens without errors. With the ladder lane off the image, the warning says there's nothing to fit.
 - [ ] **Lane under the mouse:** moving the mouse over a lane highlights its plot and draws a line at the same position.
 
 ### Ladder and fit
@@ -49,7 +52,7 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 - [ ] **Slow fit warning:** a Continuum fit with a Uniform distribution of a few hundred lengths asks before fitting, mentioning the Stop button; **Cancel** stops after the ladder lane, **Fit Anyway** fits.
 - [ ] **Stop:** during a slow fit, the window stays responsive, the status bar shows the lanes fitted and the estimated time left, and **Fit** reads **Stop**; the settings, lane edits and Edit Custom Peaks are disabled. Clicking **Stop** ends the fit within a few seconds with a message; the ladder lane's fit is kept and the controls are as before. Fitting again then works normally.
 - [ ] **Closing during a fit:** closing the plugin window while a fit runs stops it.
-- [ ] **Fit warning:** with a fit shown, changing the lanes or fitting again shows the warning; **Don't show this again** stops it.
+- [ ] **Fit warning:** with **Warn Before Replacing a Fit** ticked and a fit shown, changing the lanes (sliders, Number of Lanes, a manual lane, or switching between automatic and manual) or fitting again shows the warning. Ticking **Don't show this again** in it unticks **Warn Before Replacing a Fit** and stops the warning; ticking the checkbox again brings it back, also after a restart.
 
 ### Custom peaks and display
 

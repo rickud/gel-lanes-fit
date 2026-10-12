@@ -79,6 +79,25 @@ public class BandedFitTest {
 	}
 
 	@Test
+	public void fitsWithoutABackground() {
+		// Polynomial Degree -1: no background (used to throw in doGuess)
+		final double[] y = TestProfiles.values(100, 500, 0, 0, BANDS);
+		final Fitter fitter = bandedFitter(context, TestProfiles.profile(1, 100,
+			y));
+		fitter.setDegBG(-1);
+		final List<DataSeries> curves = fitter.doFit(1);
+
+		final List<Peak> peaks = fitter.getFittedPeaks(1);
+		assertEquals(3, peaks.size());
+		for (int i = 0; i < BANDS.length; i++)
+			assertEquals("position of band " + i, BANDS[i][1], peaks.get(i)
+				.getMean(), 1.0);
+		for (final DataSeries d : curves)
+			if (d.getType() == DataSeries.BACKGROUND) assertEquals(
+				"the background is zero", 0, d.getY().getLInfNorm(), 0);
+	}
+
+	@Test
 	public void customPeakAddsABandTheDetectionMissed() {
 		// The middle band is too weak for the 0.1 tolerance
 		final double[] y = TestProfiles.values(100, 500, 20, 0, band(100, 180, 6),
