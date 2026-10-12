@@ -821,7 +821,14 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		cmbBoxLadderType.setEnabled(ladder != null);
 		updateLadderLane();
 		updateLadderType();
-		cmbBoxDist.setSelectedIndex(savedState == null ? 0 : savedState.dist);
+		int dist = savedState == null ? 0 : savedState.dist;
+		if (dist < 0 || dist >= distStr.length) {
+			// Saved by a newer version with more distributions
+			log.warn("The saved fragment distribution (" + dist + ") isn't " +
+				"available in this version; choose one again.");
+			dist = 0;
+		}
+		cmbBoxDist.setSelectedIndex(dist);
 		loadDistribution(false);
 
 		buttonEditPeaks.setEnabled(false);
