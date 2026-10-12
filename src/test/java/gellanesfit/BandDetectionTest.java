@@ -15,7 +15,7 @@ public class BandDetectionTest {
 	private static SortedParameters guess(final double[] y,
 		final double absoluteTolerance)
 	{
-		return new GaussianArrayCurveFitter.ParameterGuesser(TestProfiles.points(
+		return new ParameterGuesser(TestProfiles.points(
 			X0, y), 2, absoluteTolerance, 0.98).guess();
 	}
 

@@ -32,8 +32,6 @@ import org.apache.commons.math3.analysis.polynomials.PolynomialFunction;
 import org.apache.commons.math3.exception.NotStrictlyPositiveException;
 import org.apache.commons.math3.fitting.PolynomialCurveFitter;
 import org.apache.commons.math3.fitting.WeightedObservedPoints;
-import org.apache.commons.math3.fitting.leastsquares.LeastSquaresOptimizer;
-import org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem;
 import org.apache.commons.math3.linear.Array2DRowRealMatrix;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealMatrix;
@@ -47,14 +45,14 @@ import org.scijava.display.DisplayService;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 
-import gellanesfit.GaussianArrayCurveFitter.ParameterGuesser;
 import ij.measure.ResultsTable;
 
 /**
  * Fits the lanes' profiles and keeps the results.
  * <p>
- * Each lane's profile is modelled as a polynomial background plus a sum of
- * Gaussian peaks (see {@link GaussianArrayCurveFitter}). In Banded mode the
+ * Each lane's profile is modelled as a background plus a sum of Gaussian
+ * peaks, fitted by {@link BandFit} (Banded) or {@link ContinuumFit}, from the
+ * starting guess of a {@link ParameterGuesser}. In Banded mode the
  * peaks start at the bands found in the profile; in Continuum mode, at the
  * positions where the fragment distribution's lengths are expected to run,
  * predicted from the fitted ladder lane. Custom peaks added by the user replace
@@ -521,7 +519,7 @@ class Fitter {
 		final WeightedObservedPoints obs = observations(in, flatBG);
 		ParameterGuesser pg = null;
 		if (!continuum) {
-			pg = new GaussianArrayCurveFitter.ParameterGuesser(
+			pg = new ParameterGuesser(
 				obs.toList(), deg, tolpk, offset);
 		} else {
 			final double[][] dist = distribution(xvals);
@@ -550,14 +548,11 @@ class Fitter {
 			fitRms = r.rms;
 		}
 		else {
-			final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(deg,
-				polyDerivative, offset, tolpk).withStartPoint(firstGuess);
-			cf.setStopCheck(() -> stopRequested);
-			final LeastSquaresProblem problem = cf.getProblem(obs.toList());
-			final LeastSquaresOptimizer.Optimum optimum = cf.getOptimizer().optimize(
-				problem);
-			fitted = new ArrayRealVector(optimum.getPoint());
-			fitRms = optimum.getRMS();
+			final BandFit.Result r = new BandFit(xvals.toArray(), yvals.toArray(),
+				deg, firstGuess.getMean().toArray(), firstGuess.getSD().toArray(),
+				polyDerivative, () -> stopRequested).fit();
+			fitted = new ArrayRealVector(r.parameters);
+			fitRms = r.rms;
 		}
 
 		// After fitting
@@ -695,7 +690,7 @@ class Fitter {
 		final double tolpk, final double[][] dist)
 	{
 		// The flat background is already off the observations
-		return new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(), -1,
+		return new ParameterGuesser(obs.toList(), -1,
 			tolpk, 0, new Array2DRowRealMatrix(dist), getFittedPeaks(ladderLane),
 			ladder);
 	}

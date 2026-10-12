@@ -65,12 +65,12 @@ public class BandedFitTest {
 		assertEquals(3, peaks.size());
 		for (int i = 0; i < BANDS.length; i++) {
 			final Peak p = peaks.get(i);
-			assertEquals("position of band " + i, BANDS[i][1], p.getMean(), 1.0);
-			// The narrowest band comes out about 19 % too wide (5.95 for 5)
+			// The background follows the slope, so the bands come out as made
+			assertEquals("position of band " + i, BANDS[i][1], p.getMean(), 0.1);
 			assertEquals("width of band " + i, BANDS[i][2], p.getSigma(),
-				0.25 * BANDS[i][2]);
+				0.02 * BANDS[i][2]);
 			assertEquals("height of band " + i, BANDS[i][0], p.getNorm(),
-				0.15 * BANDS[i][0]);
+				0.02 * BANDS[i][0]);
 		}
 		Reference.check("banded-sloped-background", Reference.peaks(peaks));
 		Reference.check("banded-sloped-background-guess", Reference.peaks(fitter
