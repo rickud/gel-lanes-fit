@@ -2089,6 +2089,17 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 			runFit();
 		}
 
+		// Switching between automatic and manual lanes replaces the fit shown
+		if (e.getSource().equals(buttonAuto) || e.getSource().equals(
+			buttonManual))
+		{
+			final boolean toAuto = e.getSource().equals(buttonAuto);
+			if (toAuto != auto && fitDone && !askFitReset()) {
+				(toAuto ? buttonManual : buttonAuto).setSelected(true);
+				return;
+			}
+		}
+
 		if (e.getSource().equals(buttonAuto)) {
 			switchToAutomaticLanes();
 		}
