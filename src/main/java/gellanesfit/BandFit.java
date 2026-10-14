@@ -17,8 +17,10 @@ import org.apache.commons.math3.fitting.PolynomialCurveFitter;
 import org.apache.commons.math3.fitting.WeightedObservedPoints;
 import org.apache.commons.math3.fitting.leastsquares.LeastSquaresBuilder;
 import org.apache.commons.math3.fitting.leastsquares.LeastSquaresOptimizer;
+import org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem;
 import org.apache.commons.math3.fitting.leastsquares.LevenbergMarquardtOptimizer;
 import org.apache.commons.math3.linear.Array2DRowRealMatrix;
+import org.apache.commons.math3.optim.ConvergenceChecker;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealMatrix;
 import org.apache.commons.math3.linear.RealVector;
@@ -53,6 +55,9 @@ final class BandFit {
 	/** Weight of the penalty terms, against misfits of one noise level */
 	private static final double PENALTY = 30;
 	private static final double CUTOFF = 8;
+	/** The fit stops when an iteration improves the cost by less than this */
+	static final double COST_TOLERANCE = 1e-6;
+	static final int MAX_ITERATIONS = 200;
 
 	/** The fit's result */
 	static final class Result {
@@ -242,10 +247,19 @@ final class BandFit {
 		final double[] target = new double[rows];
 		for (int j = 0; j < x.length; j++)
 			target[j] = y[j] / noise;
+		// Stops when an iteration barely improves the fit, or after
+		// MAX_ITERATIONS, keeping the point reached: a band the profile doesn't
+		// support only approaches zero height, and the library's own criteria
+		// may then never be met
+		final ConvergenceChecker<LeastSquaresProblem.Evaluation> checker = (
+			iteration, previous, current) -> iteration >= MAX_ITERATIONS || FastMath
+				.abs(previous.getCost() - current.getCost()) <= COST_TOLERANCE *
+					current.getCost();
 		final LeastSquaresOptimizer.Optimum opt = new LevenbergMarquardtOptimizer()
 			.optimize(new LeastSquaresBuilder().start(start).model(
-				this::valueAndJacobian).target(target).maxEvaluations(100_000)
-				.maxIterations(5_000).lazyEvaluation(false).build());
+				this::valueAndJacobian).target(target).checker(checker)
+				.maxEvaluations(Integer.MAX_VALUE).maxIterations(Integer.MAX_VALUE)
+				.lazyEvaluation(false).build());
 		final double[] p = opt.getPoint().toArray();
 
 		final Result r = new Result();

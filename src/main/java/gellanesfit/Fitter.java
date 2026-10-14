@@ -507,8 +507,7 @@ class Fitter {
 		final List<Peak> fittedPeaks = new ArrayList<>();
 		final List<DataSeries> output = new ArrayList<>();
 
-		// Tolerance as percentage of the range
-		final double tolpk = tolPK * (yvals.getMaxValue() - yvals.getMinValue());
+		final double tolpk = bandTolerance(yvals);
 
 		final boolean continuum = fitMode == continuumMode;
 		final double flatBG = continuum ? flatBackground(yvals) : 0;
@@ -611,6 +610,25 @@ class Fitter {
 			.getEntry(lane - 1));
 		log.info(outStr);
 		return output;
+	}
+
+	/**
+	 * Band detection: a band must rise above the dips on either side by
+	 * more than this many times the profile's noise, whatever the Peak
+	 * Tolerance. In a faint lane, Peak Tolerance's fraction of the lane's
+	 * range is mostly noise, and noise peaks then make dozens of bands that
+	 * take minutes to fit.
+	 */
+	static final double BAND_NOISE_FLOOR = 5;
+
+	/**
+	 * How much a band must stand out to be detected, in gray values: Peak
+	 * Tolerance times the lane's intensity range, but at least
+	 * {@link #BAND_NOISE_FLOOR} times its noise
+	 */
+	private double bandTolerance(final RealVector y) {
+		return Math.max(tolPK * (y.getMaxValue() - y.getMinValue()),
+			BAND_NOISE_FLOOR * ContinuumFit.noiseLevel(y.toArray()));
 	}
 
 	/**
@@ -775,7 +793,7 @@ class Fitter {
 		for (final DataSeries in : inputData) {
 			if (in.getLane() != lane) continue;
 			final RealVector y = in.getY();
-			final double tolpk = tolPK * (y.getMaxValue() - y.getMinValue());
+			final double tolpk = bandTolerance(y);
 			return continuumGuesser(observations(in, flatBackground(y)), tolpk,
 				distribution(in.getX())).guess().getMean()
 				.getDimension();

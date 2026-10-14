@@ -749,8 +749,9 @@ class MainDialog extends JFrame implements ActionListener, ChangeListener,
 		setToolTip("How much a band must stand out to be detected, as a " +
 			"fraction<br>" + "of the lane's intensity range, 0.01 to 1 (default " +
 			"0.1).<br>" + "Lower it to catch faint bands; raise it if noise is " +
-			"detected as bands.<br>" + "Used in Banded fits, and for the ladder " +
-			"lane in both fit types.", labelTolPK, textTolPK);
+			"detected as bands.<br>" + "A band must also stand out by more than 5 " +
+			"times the lane's noise.<br>" + "Used in Banded fits, and for the " +
+			"ladder lane in both fit types.", labelTolPK, textTolPK);
 		setToolTip("Continuum only. How strongly neighbouring fragments' areas<br>" +
 			"are kept alike, 0 to 1000 (default 10). A sharp change from one<br>" +
 			"fragment to the next only survives where the profile has one.<br>" +

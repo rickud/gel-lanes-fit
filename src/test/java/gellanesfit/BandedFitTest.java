@@ -97,6 +97,25 @@ public class BandedFitTest {
 	}
 
 	@Test
+	public void noiseIsNotTakenForBands() {
+		// A faint lane: noise on a gentle slope, no bands. Peak Tolerance's
+		// fraction of its range is mostly noise; the noise floor keeps the
+		// noise peaks from becoming bands (they made fits take minutes)
+		final java.util.Random random = new java.util.Random(3);
+		final double[] y = TestProfiles.values(100, 700, 1000, 0.1);
+		for (int j = 0; j < y.length; j++)
+			y[j] += 10 * random.nextGaussian();
+		final Fitter fitter = bandedFitter(context, TestProfiles.profile(1, 100,
+			y));
+		fitter.setTolPK(0.05);
+		final long start = System.nanoTime();
+		fitter.doFit(1);
+		assertTrue("few bands: " + fitter.getFittedPeaks(1).size(), fitter
+			.getFittedPeaks(1).size() <= 2);
+		assertTrue("fast", System.nanoTime() - start < 5e9);
+	}
+
+	@Test
 	public void customPeakAddsABandTheDetectionMissed() {
 		// The middle band is too weak for the 0.1 tolerance
 		final double[] y = TestProfiles.values(100, 500, 20, 0, band(100, 180, 6),
