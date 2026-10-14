@@ -68,12 +68,16 @@ final class BandFit {
 		/** Root mean square of the profile minus the fit */
 		double rms;
 		int iterations;
+		/** The starting background's coefficients in x, constant first */
+		double[] startBackground;
 	}
 
 	private final double[] x, y;
 	private final int deg, n;
 	private final double[] mean0, sd0, maxShift, maxHeight;
 	private final double[] envelope;
+	/** Half the envelope's window, in points */
+	private final int envelopeHalf;
 	private final double maxSlope;
 	private final double noise, centre, half;
 	private final BooleanSupplier stopCheck;
@@ -102,8 +106,9 @@ final class BandFit {
 		centre = (x[0] + x[x.length - 1]) / 2;
 		half = FastMath.max(1e-9, (x[x.length - 1] - x[0]) / 2);
 		noise = ContinuumFit.noiseLevel(y);
-		envelope = lowerEnvelope(y, (int) FastMath.round(ENVELOPE_WINDOW *
-			median(sds)));
+		final int window = (int) FastMath.round(ENVELOPE_WINDOW * median(sds));
+		envelope = lowerEnvelope(y, window);
+		envelopeHalf = FastMath.max(1, window / 2);
 		maxShift = new double[n];
 		maxHeight = new double[n];
 		for (int i = 0; i < n; i++) {
@@ -128,45 +133,30 @@ final class BandFit {
 	 * The profile's lower envelope: a morphological opening (the lowest value
 	 * within half a window on either side, then the highest of those), which
 	 * removes anything narrower than the window, such as bands, and follows a
-	 * straight slope exactly; then averaged over the same window, and never
-	 * above the profile
+	 * straight slope exactly; then averaged over the same window (centred, so
+	 * narrower near the ends), and never above the profile. Within half a
+	 * window of either end, where an opening can't follow a slope, it's the
+	 * profile itself.
 	 */
 	static double[] lowerEnvelope(final double[] y, final int window) {
 		final int w = FastMath.max(1, window / 2);
 		final double[] min = slide(y, w, true);
 		final double[] open = slide(min, w, false);
-		extendEnds(open, w);
-		final double[] env = new double[y.length];
-		for (int j = 0; j < y.length; j++) {
+		// Within half a window of either end, the opening flattens a slope
+		// (there's nothing beyond the end to take the highest value from):
+		// it's used from w to n-1-w only, averaged over a window centred on
+		// each point and kept within that range, so that a straight slope
+		// averages to itself. Beyond it, the ceiling is the profile itself.
+		final int n = y.length;
+		final double[] env = y.clone();
+		for (int j = w; j <= n - 1 - w; j++) {
+			final int h = FastMath.min(w, FastMath.min(j - w, n - 1 - w - j));
 			double s = 0;
-			int c = 0;
-			for (int k = FastMath.max(0, j - w); k <= FastMath.min(y.length - 1, j +
-				w); k++)
-			{
+			for (int k = j - h; k <= j + h; k++)
 				s += open[k];
-				c++;
-			}
-			env[j] = FastMath.min(s / c, y[j]);
+			env[j] = FastMath.min(s / (2 * h + 1), y[j]);
 		}
 		return env;
-	}
-
-	/**
-	 * Within w points of either end, the opening flattens a slope (there's
-	 * nothing beyond the end to take the highest value from): there, it's
-	 * replaced by a straight line through the next w points inwards
-	 */
-	private static void extendEnds(final double[] v, final int w) {
-		final int n = v.length;
-		if (n < 3 * w + 2) return;
-		// Left end: line through points w .. 2w
-		double slope = (v[2 * w] - v[w]) / w;
-		for (int j = 0; j < w; j++)
-			v[j] = v[w] - slope * (w - j);
-		// Right end: line through points n-1-2w .. n-1-w
-		slope = (v[n - 1 - w] - v[n - 1 - 2 * w]) / w;
-		for (int j = n - w; j < n; j++)
-			v[j] = v[n - 1 - w] + slope * (j - (n - 1 - w));
 	}
 
 	/** The lowest (or highest) value within w points on either side */
@@ -203,8 +193,10 @@ final class BandFit {
 	private double[] startingBackground() {
 		final int m = bgCount();
 		if (m == 0) return new double[0];
+		// Fitted where the envelope is an opening, away from the ends
 		final WeightedObservedPoints obs = new WeightedObservedPoints();
-		for (int j = 0; j < x.length; j++)
+		final int skip = x.length > 4 * envelopeHalf ? envelopeHalf : 0;
+		for (int j = skip; j < x.length - skip; j++)
 			obs.add((x[j] - centre) / half, envelope[j]);
 		final double[] c = PolynomialCurveFitter.create(deg).fit(obs.toList());
 		double over = 0;
@@ -235,7 +227,8 @@ final class BandFit {
 	Result fit() {
 		final int m = bgCount();
 		final double[] start = new double[m + 3 * n];
-		System.arraycopy(toParameters(startingBackground()), 0, start, 0, m);
+		final double[] startT = startingBackground();
+		System.arraycopy(toParameters(startT), 0, start, 0, m);
 		for (int i = 0; i < n; i++) {
 			// Height: start at the profile above the envelope, half the upper bound
 			start[m + 3 * i] = 0;
@@ -264,6 +257,7 @@ final class BandFit {
 
 		final Result r = new Result();
 		r.iterations = opt.getIterations();
+		r.startBackground = toX(startT);
 		final double[] coeffsT = coefficients(p);
 		final double[] coeffsX = toX(coeffsT);
 		final double[] out = new double[1 + m + 3 * n];

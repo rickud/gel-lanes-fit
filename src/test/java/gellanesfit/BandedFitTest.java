@@ -97,6 +97,23 @@ public class BandedFitTest {
 	}
 
 	@Test
+	public void logComparesTheStartingAndFittedBackground() {
+		// 20 + 0.02 x under the bands, x from 100 to 500
+		final double[] y = TestProfiles.values(100, 500, 20, 0.02, BANDS);
+		final Fitter fitter = bandedFitter(context, TestProfiles.profile(1, 100,
+			y));
+		fitter.doFit(1);
+		final String log = fitter.getSummary();
+		assertTrue(log.contains("<h2>BACKGROUND</h2>"));
+		final int fitted = log.indexOf("<td>fitted</td>");
+		assertTrue(log.indexOf("<td>start</td>") > 0 && fitted > 0);
+		// Fitted row: top 22.0, middle 26.0, bottom 30.0, slope 0.0200
+		final String row = log.substring(fitted, log.indexOf("</tr>", fitted));
+		assertTrue(row, row.contains("<td>22.0</td><td>26.0</td><td>30.0</td>" +
+			"<td>0.0200</td>"));
+	}
+
+	@Test
 	public void noiseIsNotTakenForBands() {
 		// A faint lane: noise on a gentle slope, no bands. Peak Tolerance's
 		// fraction of its range is mostly noise; the noise floor keeps the

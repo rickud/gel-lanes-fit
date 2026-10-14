@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
 
@@ -99,6 +100,11 @@ class Fitter {
 	/** Continuum fits: strength of the smoothness penalty on the areas */
 	private double smoothness = 10;
 	private double uniformSpacing;
+	/**
+	 * Each fitted lane's background, as coefficients in x (constant first):
+	 * {starting, fitted}; for Continuum lanes, the flat background twice
+	 */
+	private final Map<Integer, double[][]> backgrounds = new HashMap<>();
 	/** The distribution each Continuum lane was fitted with */
 	private final Map<Integer, double[][]> laneDistributions = new HashMap<>();
 	private List<List<Integer>> selectedFragments;
@@ -545,6 +551,7 @@ class Fitter {
 					r.sds[i] }));
 			fitted = f;
 			fitRms = r.rms;
+			backgrounds.put(lane, new double[][] { { flatBG }, { flatBG } });
 		}
 		else {
 			final BandFit.Result r = new BandFit(xvals.toArray(), yvals.toArray(),
@@ -552,6 +559,8 @@ class Fitter {
 				polyDerivative, () -> stopRequested).fit();
 			fitted = new ArrayRealVector(r.parameters);
 			fitRms = r.rms;
+			backgrounds.put(lane, new double[][] { r.startBackground, Arrays
+				.copyOfRange(r.parameters, 1, deg + 2) });
 		}
 
 		// After fitting
@@ -844,7 +853,43 @@ class Fitter {
 			}
 		}
 		s += "</table>";
+		s += backgroundSummary();
 		return s;
+	}
+
+	/**
+	 * The LOG's background table: for each fitted lane, the starting and the
+	 * fitted background, as values at the lane's top, middle and bottom, its
+	 * average slope, and its coefficients
+	 */
+	private String backgroundSummary() {
+		String s = "<h2>BACKGROUND</h2>";
+		s += "<p>Gray values at the lane's top, middle and bottom; average " +
+			"slope in gray values per px; coefficients of x (px from the top " +
+			"of the image), constant first.</p>";
+		s += "<table><tr><th>Lane</th><th></th><th>Top</th><th>Middle</th>" +
+			"<th>Bottom</th><th>Slope</th><th>Coefficients</th></tr>";
+		for (final DataSeries d : inputData) {
+			final double[][] bg = backgrounds.get(d.getLane());
+			if (bg == null) continue;
+			final double top = d.getMinX();
+			final double bottom = d.getMaxX();
+			for (int k = 0; k < 2; k++) {
+				final PolynomialFunction p = new PolynomialFunction(bg[k].length > 0
+					? bg[k] : new double[] { 0 });
+				String coeffs = "";
+				for (final double c : bg[k])
+					coeffs += String.format(Locale.ROOT, "%.4g  ", c);
+				s += String.format(Locale.ROOT,
+					"<tr><td>%s</td><td>%s</td><td>%.1f</td><td>%.1f</td>" +
+						"<td>%.1f</td><td>%.4f</td><td>%s</td></tr>", k == 0 ? "Lane " + d
+							.getLane() : "", k == 0 ? "start" : "fitted", p.value(top), p
+								.value((top + bottom) / 2), p.value(bottom), (p.value(bottom) -
+									p.value(top)) / (bottom - top), coeffs.isEmpty() ? "none"
+										: coeffs.trim());
+			}
+		}
+		return s + "</table>";
 	}
 
 	/**
@@ -900,6 +945,7 @@ class Fitter {
 
 	/** Forgets a lane's guessed and fitted peaks; its custom peaks are kept. */
 	public void resetFit(final int lane) {
+		backgrounds.remove(lane);
 		final Iterator<Peak> itFitted = allFittedList.iterator();
 		while (itFitted.hasNext()) {
 			final Peak f = itFitted.next();
