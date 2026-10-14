@@ -858,6 +858,46 @@ class Fitter {
 	}
 
 	/**
+	 * A polynomial as an equation in HTML, e.g. <i>b</i>(<i>x</i>) = 19.88 +
+	 * 0.02109 <i>x</i> &minus; 2.460&times;10<sup>&minus;6</sup>
+	 * <i>x</i><sup>2</sup>: four significant digits, powers of ten for very
+	 * small or large coefficients, and a real minus sign. Basic HTML, so that
+	 * it shows in the LOG window as well as in a browser.
+	 *
+	 * @param c coefficients, constant first; none for no background
+	 */
+	static String polynomialHtml(final double[] c) {
+		final String b = "<i>b</i>(<i>x</i>) = ";
+		if (c.length == 0) return b + "0 (no background)";
+		String s = "";
+		for (int k = 0; k < c.length; k++) {
+			final double a = Math.abs(c[k]);
+			if (k > 0 && a == 0) continue;
+			final String sign = c[k] < 0 ? "&minus;" : "+";
+			if (s.isEmpty()) s += c[k] < 0 ? "&minus;" : "";
+			else s += " " + sign + " ";
+			s += numberHtml(a);
+			if (k >= 1) s += " <i>x</i>";
+			if (k >= 2) s += "<sup>" + k + "</sup>";
+		}
+		return b + s;
+	}
+
+	/** A positive number to four significant digits, as m&times;10<sup>e</sup>
+	 * when very small or large */
+	private static String numberHtml(final double a) {
+		if (a == 0) return "0";
+		final int e = (int) Math.floor(Math.log10(a));
+		if (e >= -3 && e < 5) {
+			final int decimals = Math.max(0, 3 - e);
+			return String.format(Locale.ROOT, "%." + decimals + "f", a);
+		}
+		final double m = a / Math.pow(10, e);
+		return String.format(Locale.ROOT, "%.3f&times;10<sup>%s%d</sup>", m, e < 0
+			? "&minus;" : "", Math.abs(e));
+	}
+
+	/**
 	 * The LOG's background table: for each fitted lane, the starting and the
 	 * fitted background, as values at the lane's top, middle and bottom, its
 	 * average slope, and its coefficients
@@ -865,10 +905,10 @@ class Fitter {
 	private String backgroundSummary() {
 		String s = "<h2>BACKGROUND</h2>";
 		s += "<p>Gray values at the lane's top, middle and bottom; average " +
-			"slope in gray values per px; coefficients of x (px from the top " +
-			"of the image), constant first.</p>";
+			"slope in gray values per px; the polynomial, with <i>x</i> in px " +
+			"from the top of the image.</p>";
 		s += "<table><tr><th>Lane</th><th></th><th>Top</th><th>Middle</th>" +
-			"<th>Bottom</th><th>Slope</th><th>Coefficients</th></tr>";
+			"<th>Bottom</th><th>Slope</th><th>Background</th></tr>";
 		for (final DataSeries d : inputData) {
 			final double[][] bg = backgrounds.get(d.getLane());
 			if (bg == null) continue;
@@ -877,16 +917,12 @@ class Fitter {
 			for (int k = 0; k < 2; k++) {
 				final PolynomialFunction p = new PolynomialFunction(bg[k].length > 0
 					? bg[k] : new double[] { 0 });
-				String coeffs = "";
-				for (final double c : bg[k])
-					coeffs += String.format(Locale.ROOT, "%.4g  ", c);
 				s += String.format(Locale.ROOT,
 					"<tr><td>%s</td><td>%s</td><td>%.1f</td><td>%.1f</td>" +
 						"<td>%.1f</td><td>%.4f</td><td>%s</td></tr>", k == 0 ? "Lane " + d
 							.getLane() : "", k == 0 ? "start" : "fitted", p.value(top), p
 								.value((top + bottom) / 2), p.value(bottom), (p.value(bottom) -
-									p.value(top)) / (bottom - top), coeffs.isEmpty() ? "none"
-										: coeffs.trim());
+									p.value(top)) / (bottom - top), polynomialHtml(bg[k]));
 			}
 		}
 		return s + "</table>";

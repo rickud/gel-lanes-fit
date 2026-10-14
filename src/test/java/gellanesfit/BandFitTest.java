@@ -84,6 +84,24 @@ public class BandFitTest {
 	}
 
 	@Test
+	public void bandsNearTheEndsKeepTheirHeight() {
+		// Tall bands 10 px from each end, on a slope, within the envelope's
+		// half window of the ends
+		final double[] x = new double[401];
+		final double[] y = new double[x.length];
+		for (int j = 0; j < x.length; j++) {
+			x[j] = j;
+			y[j] = 40 + 0.05 * j + 500 * Math.exp(-0.5 * Math.pow((j - 10) / 4.0,
+				2)) + 300 * Math.exp(-0.5 * Math.pow((j - 390) / 4.0, 2));
+		}
+		final double[] p = new BandFit(x, y, 1, new double[] { 10, 390 },
+			new double[] { 4, 4 }, 10, () -> false).fit().parameters;
+		assertEquals("top band", 500, p[3], 5);
+		assertEquals("bottom band", 300, p[6], 3);
+		assertEquals("background slope", 0.05, p[2], 0.002);
+	}
+
+	@Test
 	public void bandsKeepTheirOrder() {
 		final double[] bg = new double[401];
 		final double[] p = fit(0, 10, bg);

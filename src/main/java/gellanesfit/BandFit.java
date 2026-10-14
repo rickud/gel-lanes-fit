@@ -135,8 +135,8 @@ final class BandFit {
 	 * removes anything narrower than the window, such as bands, and follows a
 	 * straight slope exactly; then averaged over the same window (centred, so
 	 * narrower near the ends), and never above the profile. Within half a
-	 * window of either end, where an opening can't follow a slope, it's the
-	 * profile itself.
+	 * window of either end, where an opening can't follow a slope, it's
+	 * continued in a straight line with the overall slope.
 	 */
 	static double[] lowerEnvelope(final double[] y, final int window) {
 		final int w = FastMath.max(1, window / 2);
@@ -146,16 +146,40 @@ final class BandFit {
 		// (there's nothing beyond the end to take the highest value from):
 		// it's used from w to n-1-w only, averaged over a window centred on
 		// each point and kept within that range, so that a straight slope
-		// averages to itself. Beyond it, the ceiling is the profile itself.
+		// averages to itself
 		final int n = y.length;
-		final double[] env = y.clone();
-		for (int j = w; j <= n - 1 - w; j++) {
-			final int h = FastMath.min(w, FastMath.min(j - w, n - 1 - w - j));
+		final int first = w, last = n - 1 - w;
+		final double[] env = new double[n];
+		if (last - first < 2) { // Too short a lane for the window
+			double low = Double.POSITIVE_INFINITY;
+			for (final double v : y)
+				low = FastMath.min(low, v);
+			Arrays.fill(env, low);
+			return env;
+		}
+		for (int j = first; j <= last; j++) {
+			final int h = FastMath.min(w, FastMath.min(j - first, last - j));
 			double s = 0;
 			for (int k = j - h; k <= j + h; k++)
 				s += open[k];
 			env[j] = FastMath.min(s / (2 * h + 1), y[j]);
 		}
+		// Near the ends: a straight line with the slope of the whole reliable
+		// part, from its first and last points, under the profile. Bands near
+		// an end stay above it, and a straight background is followed exactly.
+		double sx = 0, sy = 0, sxx = 0, sxy = 0;
+		for (int j = first; j <= last; j++) {
+			sx += j;
+			sy += env[j];
+			sxx += (double) j * j;
+			sxy += j * env[j];
+		}
+		final double count = last - first + 1;
+		final double slope = (count * sxy - sx * sy) / (count * sxx - sx * sx);
+		for (int j = 0; j < first; j++)
+			env[j] = FastMath.min(y[j], env[first] + slope * (j - first));
+		for (int j = last + 1; j < n; j++)
+			env[j] = FastMath.min(y[j], env[last] + slope * (j - last));
 		return env;
 	}
 

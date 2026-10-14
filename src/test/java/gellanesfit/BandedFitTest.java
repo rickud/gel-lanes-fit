@@ -114,6 +114,17 @@ public class BandedFitTest {
 	}
 
 	@Test
+	public void backgroundEquationIsTypeset() {
+		assertEquals("<i>b</i>(<i>x</i>) = 19.88 + 0.02109 <i>x</i> &minus; " +
+			"2.460&times;10<sup>&minus;6</sup> <i>x</i><sup>2</sup>", Fitter
+				.polynomialHtml(new double[] { 19.88, 0.02109, -2.46e-6 }));
+		assertEquals("<i>b</i>(<i>x</i>) = &minus;5.000", Fitter.polynomialHtml(
+			new double[] { -5 }));
+		assertEquals("<i>b</i>(<i>x</i>) = 0 (no background)", Fitter
+			.polynomialHtml(new double[0]));
+	}
+
+	@Test
 	public void noiseIsNotTakenForBands() {
 		// A faint lane: noise on a gentle slope, no bands. Peak Tolerance's
 		// fraction of its range is mostly noise; the noise floor keeps the
