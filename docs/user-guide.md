@@ -214,6 +214,7 @@ After a fit, three places show the results:
   - the fit type and parameters;
   - each lane's **RMS**, the typical difference between the fit and the profile as a fraction of the lane's intensity range (lower is better);
   - for Continuum fits, each lane's **Average Fragment Size ± standard deviation** in base pairs. It's weighted by each fragment's fitted area times its length. The value in parentheses is the average over the distribution itself, for comparison.
+  - **BACKGROUND:** for each lane, the starting and the fitted background, as its values at the lane's top, middle and bottom, its average slope (gray values per pixel) and its polynomial coefficients. Comparing the two shows how far the fit moved the background from its start, the profile's lower envelope. Continuum lanes show their flat background, which isn't fitted.
   - the data folder's path at the end.
 
   For Continuum fits, the LOG window also has one tab per lane with the fitted size distribution.
