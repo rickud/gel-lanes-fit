@@ -33,8 +33,10 @@ import org.apache.commons.math3.util.Pair;
  * The background must stay below the profile's lower envelope: the lowest
  * values within a few band widths, smoothed. It can follow a sloped or hazy
  * background, or a smear under the bands, but can't rise into the bands.
- * That ceiling is a penalty in the least-squares sum, so the optimizer can
- * follow it. The background's average slope (Max Polynomial Derivative) is a
+ * The background may also never bend upward: its second derivative must be
+ * zero or negative everywhere (a straight line, or a cap shape), so that a
+ * high degree can't add wiggles. The ceiling and the curvature limit are
+ * penalties in the least-squares sum, so the optimizer can follow them. The background's average slope (Max Polynomial Derivative) is a
  * parameter of its own, bounded by tanh, so it never exceeds the limit. Each band's height, position and width are kept
  * within bounds of their starting values by mapping them through tanh: a
  * band moves at most half way to its nearest neighbour, so bands keep their
@@ -58,6 +60,8 @@ final class BandFit {
 	/** The fit stops when an iteration improves the cost by less than this */
 	static final double COST_TOLERANCE = 1e-6;
 	static final int MAX_ITERATIONS = 200;
+	/** Iterations in a row that must barely improve the fit to stop it */
+	static final int CALM_ITERATIONS = 5;
 
 	/** The fit's result */
 	static final class Result {
@@ -222,7 +226,11 @@ final class BandFit {
 		final int skip = x.length > 4 * envelopeHalf ? envelopeHalf : 0;
 		for (int j = skip; j < x.length - skip; j++)
 			obs.add((x[j] - centre) / half, envelope[j]);
-		final double[] c = PolynomialCurveFitter.create(deg).fit(obs.toList());
+		double[] c = PolynomialCurveFitter.create(deg).fit(obs.toList());
+		if (bendsUpward(c)) { // Not allowed: start from a straight line
+			c = Arrays.copyOf(PolynomialCurveFitter.create(FastMath.min(deg, 1))
+				.fit(obs.toList()), m);
+		}
 		double over = 0;
 		for (int j = 0; j < x.length; j++)
 			over = FastMath.max(over, poly(c, (x[j] - centre) / half) - envelope[j]);
@@ -239,6 +247,21 @@ final class BandFit {
 			c[0] -= o;
 		}
 		return c;
+	}
+
+	/** Whether the background's second derivative is positive anywhere */
+	private boolean bendsUpward(final double[] c) {
+		for (int j = 0; j < x.length; j++)
+			if (curvature(c, (x[j] - centre) / half) > 1e-9 * noise) return true;
+		return false;
+	}
+
+	/** The second derivative in t of the polynomial with these coefficients */
+	private static double curvature(final double[] c, final double t) {
+		double v = 0;
+		for (int k = c.length - 1; k >= 2; k--)
+			v = v * t + k * (k - 1) * c[k];
+		return v;
 	}
 
 	private static double poly(final double[] c, final double t) {
@@ -260,18 +283,24 @@ final class BandFit {
 			start[m + 3 * i + 2] = FastMath.atanh(FastMath.max(-0.999, FastMath.min(
 				0.999, -widthOffset() / widthScale())));
 		}
-		final int rows = x.length + x.length;
+		final int rows = 3 * x.length;
 		final double[] target = new double[rows];
 		for (int j = 0; j < x.length; j++)
 			target[j] = y[j] / noise;
-		// Stops when an iteration barely improves the fit, or after
-		// MAX_ITERATIONS, keeping the point reached: a band the profile doesn't
-		// support only approaches zero height, and the library's own criteria
-		// may then never be met
+		// Stops when CALM_ITERATIONS iterations in a row barely improve the fit,
+		// or after MAX_ITERATIONS, keeping the point reached: a band the profile
+		// doesn't support only approaches zero height, and the library's own
+		// criteria may then never be met. One small step isn't enough: the
+		// first steps can be small while the optimizer finds its scale.
+		final int[] calm = { 0 };
 		final ConvergenceChecker<LeastSquaresProblem.Evaluation> checker = (
-			iteration, previous, current) -> iteration >= MAX_ITERATIONS || FastMath
-				.abs(previous.getCost() - current.getCost()) <= COST_TOLERANCE *
-					current.getCost();
+			iteration, previous, current) -> {
+			if (iteration >= MAX_ITERATIONS) return true;
+			if (FastMath.abs(previous.getCost() - current.getCost()) <=
+				COST_TOLERANCE * current.getCost()) calm[0]++;
+			else calm[0] = 0;
+			return calm[0] >= CALM_ITERATIONS;
+		};
 		final LeastSquaresOptimizer.Optimum opt = new LevenbergMarquardtOptimizer()
 			.optimize(new LeastSquaresBuilder().start(start).model(
 				this::valueAndJacobian).target(target).checker(checker)
@@ -404,8 +433,8 @@ final class BandFit {
 	}
 
 	/**
-	 * Rows: the profile (over the noise), and the envelope penalty at each
-	 * point
+	 * Rows: the profile (over the noise), the envelope penalty and the
+	 * curvature penalty at each point
 	 */
 	private Pair<RealVector, RealMatrix> valueAndJacobian(final RealVector point) {
 		if (stopCheck.getAsBoolean()) throw new CancellationException(
@@ -414,8 +443,8 @@ final class BandFit {
 		final int m = bgCount();
 		final int cols = p.length;
 		final int nx = x.length;
-		final double[] value = new double[2 * nx];
-		final double[][] jac = new double[2 * nx][cols];
+		final double[] value = new double[3 * nx];
+		final double[][] jac = new double[3 * nx][cols];
 		final double[] c = coefficients(p);
 		for (int j = 0; j < nx; j++) {
 			final double t = (x[j] - centre) / half;
@@ -430,6 +459,18 @@ final class BandFit {
 				value[nx + j] = PENALTY * over / noise;
 				for (int k = 0; k < m; k++)
 					jac[nx + j][k] = PENALTY * g[k] / noise;
+			}
+			// Curvature penalty: only where the background bends upward. The
+			// linear term doesn't enter the curvature, so the slope parameter
+			// and the odd terms' share of c1 don't either.
+			final double bend = curvature(c, t);
+			if (bend > 0) {
+				value[2 * nx + j] = PENALTY * bend / noise;
+				double tk = 1;
+				for (int k = 2; k < m; k++) {
+					jac[2 * nx + j][k] = PENALTY * k * (k - 1) * tk / noise;
+					tk *= t;
+				}
 			}
 		}
 		for (int i = 0; i < n; i++) {

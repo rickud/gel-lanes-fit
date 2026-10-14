@@ -102,6 +102,21 @@ public class BandFitTest {
 	}
 
 	@Test
+	public void backgroundNeverBendsUpward() {
+		// An upward-bending background (b'' > 0): the fit may not follow it,
+		// and keeps b'' at or below zero
+		final double[] bg = new double[401];
+		for (int j = 0; j < bg.length; j++)
+			bg[j] = 40 + 0.0004 * (j - 200) * (j - 200);
+		final double[] p = fit(2, 10, bg);
+		assertTrue("b'' = " + 2 * p[3], 2 * p[3] <= 1e-6);
+		// The bands are still found, if not exactly
+		assertEquals(120, p[5], 1);
+		assertEquals(200, p[8], 1);
+		assertEquals(300, p[11], 1);
+	}
+
+	@Test
 	public void bandsKeepTheirOrder() {
 		final double[] bg = new double[401];
 		final double[] p = fit(0, 10, bg);
