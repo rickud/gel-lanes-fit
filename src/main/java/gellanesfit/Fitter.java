@@ -20,6 +20,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CancellationException;
 
@@ -32,8 +33,6 @@ import org.apache.commons.math3.analysis.polynomials.PolynomialFunction;
 import org.apache.commons.math3.exception.NotStrictlyPositiveException;
 import org.apache.commons.math3.fitting.PolynomialCurveFitter;
 import org.apache.commons.math3.fitting.WeightedObservedPoints;
-import org.apache.commons.math3.fitting.leastsquares.LeastSquaresOptimizer;
-import org.apache.commons.math3.fitting.leastsquares.LeastSquaresProblem;
 import org.apache.commons.math3.linear.Array2DRowRealMatrix;
 import org.apache.commons.math3.linear.ArrayRealVector;
 import org.apache.commons.math3.linear.RealMatrix;
@@ -47,14 +46,14 @@ import org.scijava.display.DisplayService;
 import org.scijava.log.LogService;
 import org.scijava.plugin.Parameter;
 
-import gellanesfit.GaussianArrayCurveFitter.ParameterGuesser;
 import ij.measure.ResultsTable;
 
 /**
  * Fits the lanes' profiles and keeps the results.
  * <p>
- * Each lane's profile is modelled as a polynomial background plus a sum of
- * Gaussian peaks (see {@link GaussianArrayCurveFitter}). In Banded mode the
+ * Each lane's profile is modelled as a background plus a sum of Gaussian
+ * peaks, fitted by {@link BandFit} (Banded) or {@link ContinuumFit}, from the
+ * starting guess of a {@link ParameterGuesser}. In Banded mode the
  * peaks start at the bands found in the profile; in Continuum mode, at the
  * positions where the fragment distribution's lengths are expected to run,
  * predicted from the fitted ladder lane. Custom peaks added by the user replace
@@ -101,6 +100,11 @@ class Fitter {
 	/** Continuum fits: strength of the smoothness penalty on the areas */
 	private double smoothness = 10;
 	private double uniformSpacing;
+	/**
+	 * Each fitted lane's background, as coefficients in x (constant first):
+	 * {starting, fitted}; for Continuum lanes, the flat background twice
+	 */
+	private final Map<Integer, double[][]> backgrounds = new HashMap<>();
 	/** The distribution each Continuum lane was fitted with */
 	private final Map<Integer, double[][]> laneDistributions = new HashMap<>();
 	private List<List<Integer>> selectedFragments;
@@ -509,8 +513,7 @@ class Fitter {
 		final List<Peak> fittedPeaks = new ArrayList<>();
 		final List<DataSeries> output = new ArrayList<>();
 
-		// Tolerance as percentage of the range
-		final double tolpk = tolPK * (yvals.getMaxValue() - yvals.getMinValue());
+		final double tolpk = bandTolerance(yvals);
 
 		final boolean continuum = fitMode == continuumMode;
 		final double flatBG = continuum ? flatBackground(yvals) : 0;
@@ -521,7 +524,7 @@ class Fitter {
 		final WeightedObservedPoints obs = observations(in, flatBG);
 		ParameterGuesser pg = null;
 		if (!continuum) {
-			pg = new GaussianArrayCurveFitter.ParameterGuesser(
+			pg = new ParameterGuesser(
 				obs.toList(), deg, tolpk, offset);
 		} else {
 			final double[][] dist = distribution(xvals);
@@ -548,16 +551,16 @@ class Fitter {
 					r.sds[i] }));
 			fitted = f;
 			fitRms = r.rms;
+			backgrounds.put(lane, new double[][] { { flatBG }, { flatBG } });
 		}
 		else {
-			final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(deg,
-				polyDerivative, offset, tolpk).withStartPoint(firstGuess);
-			cf.setStopCheck(() -> stopRequested);
-			final LeastSquaresProblem problem = cf.getProblem(obs.toList());
-			final LeastSquaresOptimizer.Optimum optimum = cf.getOptimizer().optimize(
-				problem);
-			fitted = new ArrayRealVector(optimum.getPoint());
-			fitRms = optimum.getRMS();
+			final BandFit.Result r = new BandFit(xvals.toArray(), yvals.toArray(),
+				deg, firstGuess.getMean().toArray(), firstGuess.getSD().toArray(),
+				polyDerivative, () -> stopRequested).fit();
+			fitted = new ArrayRealVector(r.parameters);
+			fitRms = r.rms;
+			backgrounds.put(lane, new double[][] { r.startBackground, Arrays
+				.copyOfRange(r.parameters, 1, deg + 2) });
 		}
 
 		// After fitting
@@ -616,6 +619,25 @@ class Fitter {
 			.getEntry(lane - 1));
 		log.info(outStr);
 		return output;
+	}
+
+	/**
+	 * Band detection: a band must rise above the dips on either side by
+	 * more than this many times the profile's noise, whatever the Peak
+	 * Tolerance. In a faint lane, Peak Tolerance's fraction of the lane's
+	 * range is mostly noise, and noise peaks then make dozens of bands that
+	 * take minutes to fit.
+	 */
+	static final double BAND_NOISE_FLOOR = 5;
+
+	/**
+	 * How much a band must stand out to be detected, in gray values: Peak
+	 * Tolerance times the lane's intensity range, but at least
+	 * {@link #BAND_NOISE_FLOOR} times its noise
+	 */
+	private double bandTolerance(final RealVector y) {
+		return Math.max(tolPK * (y.getMaxValue() - y.getMinValue()),
+			BAND_NOISE_FLOOR * ContinuumFit.noiseLevel(y.toArray()));
 	}
 
 	/**
@@ -695,7 +717,7 @@ class Fitter {
 		final double tolpk, final double[][] dist)
 	{
 		// The flat background is already off the observations
-		return new GaussianArrayCurveFitter.ParameterGuesser(obs.toList(), -1,
+		return new ParameterGuesser(obs.toList(), -1,
 			tolpk, 0, new Array2DRowRealMatrix(dist), getFittedPeaks(ladderLane),
 			ladder);
 	}
@@ -780,7 +802,7 @@ class Fitter {
 		for (final DataSeries in : inputData) {
 			if (in.getLane() != lane) continue;
 			final RealVector y = in.getY();
-			final double tolpk = tolPK * (y.getMaxValue() - y.getMinValue());
+			final double tolpk = bandTolerance(y);
 			return continuumGuesser(observations(in, flatBackground(y)), tolpk,
 				distribution(in.getX())).guess().getMean()
 				.getDimension();
@@ -831,7 +853,79 @@ class Fitter {
 			}
 		}
 		s += "</table>";
+		s += backgroundSummary();
 		return s;
+	}
+
+	/**
+	 * A polynomial as an equation in HTML, e.g. <i>b</i>(<i>x</i>) = 19.88 +
+	 * 0.02109 <i>x</i> &minus; 2.460&times;10<sup>&minus;6</sup>
+	 * <i>x</i><sup>2</sup>: four significant digits, powers of ten for very
+	 * small or large coefficients, and a real minus sign. Basic HTML, so that
+	 * it shows in the LOG window as well as in a browser.
+	 *
+	 * @param c coefficients, constant first; none for no background
+	 */
+	static String polynomialHtml(final double[] c) {
+		final String b = "<i>b</i>(<i>x</i>) = ";
+		if (c.length == 0) return b + "0 (no background)";
+		String s = "";
+		for (int k = 0; k < c.length; k++) {
+			final double a = Math.abs(c[k]);
+			if (k > 0 && a == 0) continue;
+			final String sign = c[k] < 0 ? "&minus;" : "+";
+			if (s.isEmpty()) s += c[k] < 0 ? "&minus;" : "";
+			else s += " " + sign + " ";
+			s += numberHtml(a);
+			if (k >= 1) s += " <i>x</i>";
+			if (k >= 2) s += "<sup>" + k + "</sup>";
+		}
+		return b + s;
+	}
+
+	/** A positive number to four significant digits, as m&times;10<sup>e</sup>
+	 * when very small or large */
+	private static String numberHtml(final double a) {
+		if (a == 0) return "0";
+		final int e = (int) Math.floor(Math.log10(a));
+		if (e >= -3 && e < 5) {
+			final int decimals = Math.max(0, 3 - e);
+			return String.format(Locale.ROOT, "%." + decimals + "f", a);
+		}
+		final double m = a / Math.pow(10, e);
+		return String.format(Locale.ROOT, "%.3f&times;10<sup>%s%d</sup>", m, e < 0
+			? "&minus;" : "", Math.abs(e));
+	}
+
+	/**
+	 * The LOG's background table: for each fitted lane, the starting and the
+	 * fitted background, as values at the lane's top, middle and bottom, its
+	 * average slope, and its coefficients
+	 */
+	private String backgroundSummary() {
+		String s = "<h2>BACKGROUND</h2>";
+		s += "<p>Gray values at the lane's top, middle and bottom; average " +
+			"slope in gray values per px; the polynomial, with <i>x</i> in px " +
+			"from the top of the image.</p>";
+		s += "<table><tr><th>Lane</th><th></th><th>Top</th><th>Middle</th>" +
+			"<th>Bottom</th><th>Slope</th><th>Background</th></tr>";
+		for (final DataSeries d : inputData) {
+			final double[][] bg = backgrounds.get(d.getLane());
+			if (bg == null) continue;
+			final double top = d.getMinX();
+			final double bottom = d.getMaxX();
+			for (int k = 0; k < 2; k++) {
+				final PolynomialFunction p = new PolynomialFunction(bg[k].length > 0
+					? bg[k] : new double[] { 0 });
+				s += String.format(Locale.ROOT,
+					"<tr><td>%s</td><td>%s</td><td>%.1f</td><td>%.1f</td>" +
+						"<td>%.1f</td><td>%.4f</td><td>%s</td></tr>", k == 0 ? "Lane " + d
+							.getLane() : "", k == 0 ? "start" : "fitted", p.value(top), p
+								.value((top + bottom) / 2), p.value(bottom), (p.value(bottom) -
+									p.value(top)) / (bottom - top), polynomialHtml(bg[k]));
+			}
+		}
+		return s + "</table>";
 	}
 
 	/**
@@ -887,6 +981,7 @@ class Fitter {
 
 	/** Forgets a lane's guessed and fitted peaks; its custom peaks are kept. */
 	public void resetFit(final int lane) {
+		backgrounds.remove(lane);
 		final Iterator<Peak> itFitted = allFittedList.iterator();
 		while (itFitted.hasNext()) {
 			final Peak f = itFitted.next();

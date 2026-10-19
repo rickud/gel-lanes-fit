@@ -65,12 +65,12 @@ public class BandedFitTest {
 		assertEquals(3, peaks.size());
 		for (int i = 0; i < BANDS.length; i++) {
 			final Peak p = peaks.get(i);
-			assertEquals("position of band " + i, BANDS[i][1], p.getMean(), 1.0);
-			// The narrowest band comes out about 19 % too wide (5.95 for 5)
+			// The background follows the slope, so the bands come out as made
+			assertEquals("position of band " + i, BANDS[i][1], p.getMean(), 0.1);
 			assertEquals("width of band " + i, BANDS[i][2], p.getSigma(),
-				0.25 * BANDS[i][2]);
+				0.02 * BANDS[i][2]);
 			assertEquals("height of band " + i, BANDS[i][0], p.getNorm(),
-				0.15 * BANDS[i][0]);
+				0.02 * BANDS[i][0]);
 		}
 		Reference.check("banded-sloped-background", Reference.peaks(peaks));
 		Reference.check("banded-sloped-background-guess", Reference.peaks(fitter
@@ -94,6 +94,53 @@ public class BandedFitTest {
 		for (final DataSeries d : curves)
 			if (d.getType() == DataSeries.BACKGROUND) assertEquals(
 				"the background is zero", 0, d.getY().getLInfNorm(), 0);
+	}
+
+	@Test
+	public void logComparesTheStartingAndFittedBackground() {
+		// 20 + 0.02 x under the bands, x from 100 to 500
+		final double[] y = TestProfiles.values(100, 500, 20, 0.02, BANDS);
+		final Fitter fitter = bandedFitter(context, TestProfiles.profile(1, 100,
+			y));
+		fitter.doFit(1);
+		final String log = fitter.getSummary();
+		assertTrue(log.contains("<h2>BACKGROUND</h2>"));
+		final int fitted = log.indexOf("<td>fitted</td>");
+		assertTrue(log.indexOf("<td>start</td>") > 0 && fitted > 0);
+		// Fitted row: top 22.0, middle 26.0, bottom 30.0, slope 0.0200
+		final String row = log.substring(fitted, log.indexOf("</tr>", fitted));
+		assertTrue(row, row.contains("<td>22.0</td><td>26.0</td><td>30.0</td>" +
+			"<td>0.0200</td>"));
+	}
+
+	@Test
+	public void backgroundEquationIsTypeset() {
+		assertEquals("<i>b</i>(<i>x</i>) = 19.88 + 0.02109 <i>x</i> &minus; " +
+			"2.460&times;10<sup>&minus;6</sup> <i>x</i><sup>2</sup>", Fitter
+				.polynomialHtml(new double[] { 19.88, 0.02109, -2.46e-6 }));
+		assertEquals("<i>b</i>(<i>x</i>) = &minus;5.000", Fitter.polynomialHtml(
+			new double[] { -5 }));
+		assertEquals("<i>b</i>(<i>x</i>) = 0 (no background)", Fitter
+			.polynomialHtml(new double[0]));
+	}
+
+	@Test
+	public void noiseIsNotTakenForBands() {
+		// A faint lane: noise on a gentle slope, no bands. Peak Tolerance's
+		// fraction of its range is mostly noise; the noise floor keeps the
+		// noise peaks from becoming bands (they made fits take minutes)
+		final java.util.Random random = new java.util.Random(3);
+		final double[] y = TestProfiles.values(100, 700, 1000, 0.1);
+		for (int j = 0; j < y.length; j++)
+			y[j] += 10 * random.nextGaussian();
+		final Fitter fitter = bandedFitter(context, TestProfiles.profile(1, 100,
+			y));
+		fitter.setTolPK(0.05);
+		final long start = System.nanoTime();
+		fitter.doFit(1);
+		assertTrue("few bands: " + fitter.getFittedPeaks(1).size(), fitter
+			.getFittedPeaks(1).size() <= 2);
+		assertTrue("fast", System.nanoTime() - start < 5e9);
 	}
 
 	@Test

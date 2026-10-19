@@ -9,13 +9,7 @@
 
 package gellanesfit;
 
-import java.util.ArrayList;
-import java.util.List;
-
 import org.apache.commons.math3.analysis.function.Gaussian;
-import org.apache.commons.math3.fitting.WeightedObservedPoint;
-import org.apache.commons.math3.linear.ArrayRealVector;
-import org.apache.commons.math3.linear.RealVector;
 
 /**
  * Estimates how long a Continuum fit takes on this computer.
@@ -32,7 +26,7 @@ final class FitTimer {
 	 * The benchmark's time on the computer the estimate was measured on (an
 	 * Apple M-series MacBook, Java 21), in seconds
 	 */
-	static final double REFERENCE_BENCHMARK_SECONDS = 0.195;
+	static final double REFERENCE_BENCHMARK_SECONDS = 0.045;
 
 	/** How much slower this computer is than the reference; NaN until measured */
 	private static double machineFactor = Double.NaN;
@@ -64,9 +58,9 @@ final class FitTimer {
 	}
 
 	/**
-	 * Times a fixed fit: 31 Gaussian bands on a flat background, from a
-	 * slightly offset start. One run warms up the code, then runs are repeated
-	 * for at least a quarter of a second.
+	 * Times a fixed fit: a Continuum fit of a synthetic smear of 50 fragment
+	 * peaks. One run warms up the code, then runs are repeated for at least a
+	 * quarter of a second.
 	 *
 	 * @return the average time of one run, in seconds
 	 */
@@ -83,26 +77,23 @@ final class FitTimer {
 	}
 
 	private static void runBenchmark() {
-		final int bands = 31;
-		final List<WeightedObservedPoint> obs = new ArrayList<>();
-		for (int x = 0; x <= 400; x++) {
-			double y = 10;
-			for (int b = 0; b < bands; b++)
-				y += new Gaussian(50 + b % 5 * 10, 20 + b * 12, 4).value(x);
-			obs.add(new WeightedObservedPoint(1, x, y));
+		final int n = 50;
+		final double[] x = new double[201];
+		final double[] y = new double[x.length];
+		final double[] means = new double[n];
+		final double[] sds = new double[n];
+		final double[] expected = new double[n];
+		for (int i = 0; i < n; i++) {
+			means[i] = 4 * i;
+			sds[i] = 4;
+			expected[i] = 1;
 		}
-		RealVector norm = new ArrayRealVector();
-		RealVector mean = new ArrayRealVector();
-		RealVector sd = new ArrayRealVector();
-		for (int b = 0; b < bands; b++) {
-			norm = norm.append(0.9 * (50 + b % 5 * 10));
-			mean = mean.append(20 + b * 12 + 1.5);
-			sd = sd.append(4.5);
+		for (int j = 0; j < x.length; j++) {
+			x[j] = j;
+			for (int i = 0; i < n; i++)
+				y[j] += new Gaussian(500 * (1.2 + Math.sin(i / 15.0)), means[i], 4)
+					.value(j);
 		}
-		final SortedParameters start = new SortedParameters(new ArrayRealVector(
-			new double[] { 9, 0, 0 }), norm, mean, sd);
-		final GaussianArrayCurveFitter cf = GaussianArrayCurveFitter.create(2, 10,
-			0.98, 5).withStartPoint(start);
-		cf.getOptimizer().optimize(cf.getProblem(obs));
+		new ContinuumFit(x, y, means, sds, expected, 1, 10, () -> false).fit();
 	}
 }
