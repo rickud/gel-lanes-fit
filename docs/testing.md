@@ -17,6 +17,13 @@ The tests are in `src/test/java` and use JUnit 4. They run without opening any w
 | `ContinuumFitTest` | the bundled distributions, a Continuum fit against a ladder, reproducible results, the average fragment size |
 | `SavedStateTest` | `saved-state.bak` files from current and older versions still load |
 | `SampleImageFitTest` | lane profiles and a Banded fit of four lanes of the sample image `Long_5s.tif` |
+| `BandFitTest` | the band fitter on its own: the lower envelope, bands on a sloped or curved background, a background that never bends upward, bands near the lane ends |
+| `ContinuumFitSolverTest` | the smear fitter on its own: non-negative areas, the noise level, smooth smears recovered within the noise, Smoothness |
+| `GaussianArrayTest` | the fitted curve (peaks on a polynomial background) and its derivatives, also with no background |
+| `FragmentDistributionTest` | reading distribution files, the Uniform and Log Spaced lengths, the fit-time estimate |
+| `AutoLanesTest` | automatic lanes stay on the image whatever the sliders or a saved state ask for |
+| `FitTimerTest` | durations, calibration and the time-left estimate in the status bar |
+| `StopFitTest` | a slow fit in another thread stops when asked to, and the next fit runs normally |
 
 ### Reference files
 
@@ -45,6 +52,7 @@ Run **Build + Fiji** with the sample image `src/main/resources/sample-images/tag
 
 - [ ] **Ladder:** pick the ladder lane (its plot turns light blue), a ladder type, and a range in the Ladder Range dialog, also with the bands picked in reverse order.
 - [ ] **Banded fit:** click **Fit**. The ladder bands are labelled in every plot, the curves appear, and the Results Display, LOG and data folder files are created.
+- [ ] **Band background:** in each Banded lane's plot, the background stays under the profile and is straight or bends downward, never upward, also at Polynomial Degree 5 and 8. The LOG's BACKGROUND table lists each lane's starting and fitted background with its equation.
 - [ ] **Band count mismatch:** narrow the ladder range so it doesn't match and fit again. A warning shows both counts and nothing else is fitted.
 - [ ] **Continuum fit:** choose **Continuum**, then each distribution in turn (the AciI-Lambda ones, Ladder, Uniform and Log Spaced), and fit. The results table has Frequency, BP and MW columns, and the LOG shows Average Fragment Size and a tab per lane.
 - [ ] **Fit type controls:** with **Banded**, Smoothness and SD Drift (labels and fields) and the distribution list are greyed out; **Continuum** enables them, the distribution list only once a ladder lane is chosen. Restarting the plugin keeps this right for the saved fit type.
