@@ -45,7 +45,7 @@ Everything else the plugin uses (JFreeChart, iText, JFreeSVG and the Apache Comm
 ## Checking the installation
 
 1. Open a gel image with **File › Open…**. Grayscale images (8- or 16-bit) work best; convert a color image with **Image › Type › 8-bit** first.
-2. Choose **Plugins › Gel Tools › Gel Lanes Fit**. The main window's title shows the version, for example `[1.0.8] Gel Lanes Fit - my gel.tif`, so you can confirm Fiji is running the version you installed.
+2. Choose **Plugins › Gel Tools › Gel Lanes Fit**. The main window's title shows the version, for example `[1.1.0] Gel Lanes Fit - my gel.tif`, so you can confirm Fiji is running the version you installed.
 3. The plugin opens its main window and a **Profiles** window with one plot per lane.
 
 Fiji's **Console** (**Window › Console**) shows the plugin's messages, such as the data folder it uses. It's the first place to look when something doesn't work.
@@ -240,7 +240,7 @@ The folder is created when you start the plugin on the image. `saved-state.bak` 
 - Click **Open Data Folder** in the main window to open this folder in Finder or Explorer. Hovering over the button shows the full path.
 - The next time you open the same image, the plugin restores the lanes, ladder, settings and custom peaks from `saved-state.bak` and repeats the last fit. A fit that never finished isn't repeated: see [The last fit isn't repeated at startup](#the-last-fit-isnt-repeated-at-startup).
 - A saved state from a newer version of the plugin opens in an older one too; a fragment distribution the older version doesn't have is left unselected, and the Console says so.
-- Results from versions before 1.0.8 were saved in `gel-lanes-fit/<image name without spaces>/` next to the image. The plugin moves that folder to the new name the first time you open the image, so your saved state carries over.
+- Results from versions before 1.1.0 were saved in `gel-lanes-fit/<image name without spaces>/` next to the image. The plugin moves that folder to the new name the first time you open the image, so your saved state carries over.
 - If the image has never been saved to disk, the folder is created in the Fiji installation folder instead.
 
 ## Ladders and fragment distributions
